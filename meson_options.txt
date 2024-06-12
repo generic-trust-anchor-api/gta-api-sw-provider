@@ -1,0 +1,13 @@
+#;**********************************************************************;
+# SPDX-License-Identifier: MPL-2.0
+#
+# Copyright (c) 2024, Siemens AG
+#
+#;**********************************************************************;
+
+option('build', type : 'combo', choices : ['debug', 'release' ], value : 'debug', description : 'Select build type with associated tool configuration')
+option('build-dependencies', type : 'boolean', value : true, yield: true, description : 'Select whether to build dependencies locally rather than use system installed libraries.')
+option('disable-deprecated-warnings', type : 'boolean', value : true, description : 'Select whether or not warnings for deprecated functions are displayed.')
+option('enable-post-quantum-crypto', type : 'boolean', value : false, description : 'This switch enables post quantum crypto algorithms.')
+option('enable-test-log', type : 'boolean', value : false, description : 'This switch enables log messages for the provider tests.')
+option('build-examples', type : 'boolean', value : false, description : 'This switch enables the build of examples.')

@@ -1,0 +1,27 @@
+#;**********************************************************************;
+# SPDX-License-Identifier: MPL-2.0
+#
+# Copyright (c) 2024, Siemens AG
+#
+#;**********************************************************************;
+
+[binaries]
+c = 'aarch64-linux-gnu-gcc'
+cpp = 'aarch64-linux-gnu--c++'
+ar = 'aarch64-linux-gnu-ar'
+strip = 'aarch64-linux-gnu-strip'
+
+[built-in options]
+c_args = []
+c_link_args = []
+
+[properties]
+# Keep this set, or the sanity check won't pass
+needs_exe_wrapper = true
+
+[host_machine]
+system = 'linux'
+cpu_family = 'aarch64'
+cpu = 'none'
+endian = 'little'
+

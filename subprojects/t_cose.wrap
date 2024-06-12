@@ -1,0 +1,14 @@
+#;**********************************************************************;
+# SPDX-License-Identifier: MPL-2.0
+#
+# Copyright (c) 2024, Siemens AG
+#
+#;**********************************************************************;
+
+[wrap-git]
+url = https://github.com/laurencelundblade/t_cose.git
+revision = v2.0-alpha-2
+patch_directory = t_cose
+
+[provide]
+t_cose = t_cose_dep

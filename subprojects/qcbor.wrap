@@ -1,0 +1,14 @@
+#;**********************************************************************;
+# SPDX-License-Identifier: MPL-2.0
+#
+# Copyright (c) 2024, Siemens AG
+#
+#;**********************************************************************;
+
+[wrap-git]
+url = https://github.com/laurencelundblade/QCBOR.git
+revision = v1.2
+patch_directory = qcbor
+
+[provide]
+qcbor = qcbor_dep
