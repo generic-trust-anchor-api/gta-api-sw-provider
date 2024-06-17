@@ -2308,11 +2308,64 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_remove,
     ))
 {
     bool ret = false;
+    struct gta_sw_provider_params_t * p_provider_params = NULL;
+    struct gta_sw_provider_context_params_t * p_context_params = NULL;
+    struct personality_name_list_item_t * p_personality_item = NULL;
+    struct devicestate_stack_item_t * p_devicestate_stack_item = NULL;
+    gta_errinfo_t errinfo_tmp = GTA_ERROR_INTERNAL_ERROR;
 
-    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    p_context_params = gta_context_get_params(h_ctx, p_errinfo);
+    if (!check_context_params(p_context_params, p_errinfo)) {
+        goto err;
+    }
 
-    /* ... */
+    p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
+        goto err;
+    }
 
+    /*
+     * todo: Check access policy and further conditions. Is it allowed to remove
+     * a personality from different device states?
+     */
+
+    /* Check whether profile defines support for this function */
+    if (PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION == p_context_params->profile) {
+        /* Remove the personality from device states personality list */
+        p_devicestate_stack_item = p_provider_params->p_devicestate_stack;
+        while (NULL != p_devicestate_stack_item) {
+            /* Instead of searching by name, we could search by pointer... */
+            p_personality_item = list_remove((struct list_t **)(&p_devicestate_stack_item->p_personality_name_list),
+                p_context_params->p_personality_item->personality_name, personality_list_item_cmp_name);
+            if (NULL == p_personality_item ) {
+                p_devicestate_stack_item = p_devicestate_stack_item->p_next;
+            } else {
+                /* Personality found and unlinked from list; free memory now */
+                personality_name_list_item_free(p_provider_params->h_ctx, p_personality_item, &errinfo_tmp);
+                /* Remove the reference to the personality from current context */
+                p_context_params->p_personality_item = NULL;
+                break;
+            }
+        }
+
+        /* Double-check whether we found and removed the personality */
+        if (NULL == p_personality_item) {
+            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+            goto err;
+        }
+
+        /* Serialize the new device state */
+        if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
+            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+            goto err;
+        }
+        ret = true;
+    } else {
+        DEBUG_PRINT(("gta_sw_provider_gta_personality_remove: Profile not supported\n"));
+        *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        goto err;
+    }
+err:
     return ret;
 }
 
