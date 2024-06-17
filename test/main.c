@@ -631,14 +631,55 @@ static void profile_local_data_protection(void ** state)
     assert_non_null(h_ctx);
     assert_int_equal(0, errinfo);
 
-    pers_get_attribute(h_ctx, "ch.iec.30168.fingerprint", 1);
     pers_get_attribute(h_ctx, "ch.iec.30168.identifier_value", 0);
-    DEBUG_PRINT(("\n"));
+    pers_get_attribute(h_ctx, "ch.iec.30168.fingerprint", 1);
 
     assert_true(myio_open_ifilestream(&istream_data_to_seal, TEST_DATA_PAYLOAD, &errinfo));
     assert_int_equal(0, errinfo);
     ostream_to_buf_init(&ostream, protected_data, protected_data_size);
     assert_int_equal(0, errinfo);
+
+    /* Remove personality */
+    assert_true(gta_personality_remove(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+    assert_false(gta_personality_remove(h_ctx, &errinfo));
+    assert_int_equal(GTA_ERROR_INTERNAL_ERROR, errinfo);
+    errinfo = 0;
+
+    /* Try to use same context */
+    assert_false(gta_seal_data(h_ctx,
+        (gtaio_istream_t*)&istream_data_to_seal,
+        (gtaio_ostream_t*)&ostream,
+        &errinfo));
+    assert_int_equal(GTA_ERROR_INTERNAL_ERROR, errinfo);
+    errinfo = 0;
+
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Create same personality again */
+    assert_true(gta_personality_create(test_params->h_inst,
+                                       IDENTIFIER1_VALUE,
+                                       "pers_local_data_protection",
+                                       "local_data_protection",
+                                       "ch.iec.30168.basic.local_data_protection",
+                                       h_auth_use,
+                                       h_auth_admin,
+                                       protection_properties,
+                                       &errinfo));
+    assert_int_equal(0, errinfo);
+
+    h_ctx = gta_context_open(test_params->h_inst,
+                             "pers_local_data_protection",
+                             "ch.iec.30168.basic.local_data_protection",
+                             &errinfo);
+
+    assert_non_null(h_ctx);
+    assert_int_equal(0, errinfo);
+
+    /* check whether fingerprint is different */
+    pers_get_attribute(h_ctx, "ch.iec.30168.fingerprint", 1);
+    DEBUG_PRINT(("\n"));
 
     assert_true(gta_seal_data(h_ctx,
         (gtaio_istream_t*)&istream_data_to_seal,
