@@ -309,6 +309,34 @@ static bool check_provider_params
     return ret;
 }
 
+
+/*
+ * Helper function to check whether all context params are valid.
+ * - returns true, if context params are valid (personality is available and activated)
+ * - returns false, if context params are NULL or personality is missing (e.g.,
+ *   because it has been removed) or personality is deactivated
+ */
+static bool check_context_params
+(
+    struct gta_sw_provider_context_params_t * p_context_params,
+    gta_errinfo_t * p_errinfo
+)
+{
+    bool ret = false;
+
+    if ((NULL == p_context_params) || (NULL == p_context_params->p_personality_item)) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    }
+    else if(!p_context_params->p_personality_item->activated) {
+        *p_errinfo = GTA_ERROR_ITEM_NOT_FOUND;
+    }
+    else {
+        ret = true;
+    }
+
+    return ret;
+}
+
 GTA_DECLARE_FUNCTION(const struct gta_function_list_t *, gta_sw_provider_init, ());
 GTA_DEFINE_FUNCTION(const struct gta_function_list_t *, gta_sw_provider_init,
 (
@@ -537,7 +565,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_pers_derived,
     }
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (NULL == p_context_params) {
+    if (!check_context_params(p_context_params, p_errinfo)) {
         goto err;
     }
 
@@ -638,7 +666,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_context_auth_set_access_token,
     *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (NULL == p_context_params) {
+    if (!check_context_params(p_context_params, p_errinfo)) {
         goto err;
     }
 
@@ -2070,7 +2098,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_enroll,
     struct personality_t * p_personality_content = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (NULL == p_context_params) {
+    if (!check_context_params(p_context_params, p_errinfo)) {
         goto err;
     }
 
@@ -2340,8 +2368,7 @@ bool personality_add_attribute(
     bool ret = false;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (NULL == p_context_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_context_params(p_context_params, p_errinfo)) {
         goto err;
     }
     p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
@@ -2441,8 +2468,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_get_attribute, (
     const struct personality_attribute_t * p_attribute = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (NULL == p_context_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_context_params(p_context_params, p_errinfo)) {
         goto err;
     }
 
@@ -2491,8 +2517,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_remove_attribute,
     gta_errinfo_t errinfo_tmp = GTA_ERROR_INTERNAL_ERROR;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (NULL == p_context_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_context_params(p_context_params, p_errinfo)) {
         goto err;
     }
 
@@ -2560,8 +2585,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_deactivate_attribute,
     struct personality_attribute_t * p_attribute = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (NULL == p_context_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_context_params(p_context_params, p_errinfo)) {
         goto err;
     }
 
@@ -2619,8 +2643,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_activate_attribute,
     struct personality_attribute_t * p_attribute = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (NULL == p_context_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_context_params(p_context_params, p_errinfo)) {
         goto err;
     }
 
@@ -2862,9 +2885,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_seal_data,
     unsigned char *key = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (!p_context_params)
-    {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_context_params(p_context_params, p_errinfo)) {
         goto err;
     }
 
@@ -3193,9 +3214,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_unseal_data,
     unsigned char *key = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (!p_context_params)
-    {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_context_params(p_context_params, p_errinfo)) {
         goto err;
     }
 
@@ -3402,8 +3421,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_authenticate_data_detached,
     struct personality_t * p_personality_content = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (NULL == p_context_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_context_params(p_context_params, p_errinfo)) {
         goto err;
     }
 
