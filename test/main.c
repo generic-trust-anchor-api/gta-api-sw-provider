@@ -37,6 +37,7 @@ static char profiles_to_register[][MAXLEN_PROFILE] = {
     "com.github.generic-trust-anchor-api.basic.ec",
     "com.github.generic-trust-anchor-api.basic.jwt",
     "com.github.generic-trust-anchor-api.basic.tls",
+    "com.github.generic-trust-anchor-api.basic.enroll",
 #ifdef ENABLE_PQC
     "com.github.generic-trust-anchor-api.basic.dilithium",
 #endif
@@ -52,7 +53,7 @@ static char profiles_to_register[][MAXLEN_PROFILE] = {
 #define IDENTIFIER1_TYPE "ch.iec.30168.identifier.mac_addr"
 #define IDENTIFIER1_VALUE "DE-AD-BE-EF-FE-ED"
 
-#define IDENTIFIER2_TYPE "ch.iec.30168.identifier.serial_number"
+#define IDENTIFIER2_TYPE "com.github.generic-trust-anchor-api.basic.serial_number"
 #define IDENTIFIER2_VALUE "0123456789"
 
 #define TESTFILE_TXT "../test/testdata/testfile.txt"
@@ -742,7 +743,7 @@ static void profile_create_ec_default(void ** state)
     assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
 
     assert_true(gta_personality_create(test_params->h_inst,
-                                       IDENTIFIER1_VALUE,
+                                       IDENTIFIER2_VALUE,
                                        "pers_basic_ec",
                                        "provider_test",
                                        "com.github.generic-trust-anchor-api.basic.ec",
@@ -779,6 +780,97 @@ static void profile_create_dilithium_default(void ** state)
     assert_int_equal(0, errinfo);
 }
 #endif
+
+static void profile_enroll(void ** state)
+{
+    DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
+    struct test_params_t * test_params = (struct test_params_t *)(*state);
+    gta_errinfo_t errinfo = 0;
+    gta_context_handle_t h_ctx = GTA_HANDLE_INVALID;
+
+    /* Create a personality */
+    gta_access_policy_handle_t h_auth_use = GTA_HANDLE_INVALID;
+    gta_access_policy_handle_t h_auth_admin = GTA_HANDLE_INVALID;
+    struct gta_protection_properties_t protection_properties = { 0 };
+
+    h_auth_use = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_BASIC_TOKEN, &errinfo);
+    assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
+    h_auth_admin = h_auth_use;
+
+    assert_true(gta_personality_create(test_params->h_inst,
+                                       IDENTIFIER2_VALUE,
+                                       "pers_basic_enroll",
+                                       "provider_test",
+                                       "com.github.generic-trust-anchor-api.basic.enroll",
+                                       h_auth_use,
+                                       h_auth_admin,
+                                       protection_properties,
+                                       &errinfo));
+    assert_int_equal(0, errinfo);
+
+    h_ctx = gta_context_open(test_params->h_inst,
+                             "pers_basic_enroll",
+                             "com.github.generic-trust-anchor-api.basic.enroll",
+                             &errinfo);
+
+    assert_non_null(h_ctx);
+
+    const char *subj_rdn = "CN=Dummy Product Name,O=Dummy Organization,OU=Dummy Organizational Unit";
+    const char too_long_value[2001] = { 0 };
+
+    istream_from_buf_t istream;
+    gtaio_ostream_t * ostream;
+
+#ifdef LOG_TEST_OUTPUT
+    myio_ofilestream_t ofilestream = { 0 };
+    ofilestream.write = (gtaio_stream_write_t)myio_ofilestream_write;
+    ofilestream.finish = (gtaio_stream_finish_t)myio_ofilestream_finish;
+    ofilestream.file = stdout;
+    ostream = (gtaio_ostream_t *)&ofilestream;
+#else
+    gtaio_ostream_t ostream_null = { 0 };
+    ostream_null.write = (gtaio_stream_write_t)ostream_null_write;
+    ostream_null.finish = (gtaio_stream_finish_t)ostream_finish;
+    ostream = &ostream_null;
+#endif
+
+    /* call enroll without additional attributes */
+    DEBUG_PRINT(("\nPKCS#10 without additional attributes:\n"));
+    assert_true(gta_personality_enroll(h_ctx, ostream, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* try to set an attribute which is too long */
+    istream_from_buf_init(&istream, too_long_value, sizeof(too_long_value));
+    assert_false(gta_context_set_attribute(h_ctx, "com.github.generic-trust-anchor-api.enroll.subject_rdn", (gtaio_istream_t*)&istream, &errinfo));
+    assert_int_equal(errinfo, GTA_ERROR_INVALID_ATTRIBUTE);
+
+    istream_from_buf_init(&istream, subj_rdn, strlen(subj_rdn));
+    assert_true(gta_context_set_attribute(h_ctx, "com.github.generic-trust-anchor-api.enroll.subject_rdn", (gtaio_istream_t*)&istream, &errinfo));
+    /* try to set the same attribute for a second time */
+    assert_false(gta_context_set_attribute(h_ctx, "com.github.generic-trust-anchor-api.enroll.subject_rdn", (gtaio_istream_t*)&istream, &errinfo));
+    assert_int_equal(errinfo, GTA_ERROR_INVALID_ATTRIBUTE);
+    errinfo = 0;
+
+    DEBUG_PRINT(("\nPKCS#10 with additional attributes:\n"));
+    assert_true(gta_personality_enroll(h_ctx, ostream, &errinfo));
+    assert_int_equal(0, errinfo);
+    DEBUG_PRINT(("\n\n"));
+
+    /* Add a new attribute */
+    const char * dummy_ee_cert = "Dummy EE Certificate";
+
+    pers_add_attribute_negative_tests(h_ctx);
+    istream_from_buf_init(&istream, dummy_ee_cert, strlen(dummy_ee_cert));
+    assert_true(gta_personality_add_attribute(h_ctx, "ch.iec.30168.trustlist.certificate.self.x509", "Dummy EE Cert", (gtaio_istream_t *)&istream, &errinfo));
+    assert_int_equal(0, errinfo);
+    istream_from_buf_init(&istream, dummy_ee_cert, strlen(dummy_ee_cert));
+    assert_false(gta_personality_add_attribute(h_ctx, "ch.iec.30168.trustlist.certificate.self.x509", "Dummy EE Cert", (gtaio_istream_t *)&istream, &errinfo));
+    assert_int_equal(GTA_ERROR_NAME_ALREADY_EXISTS, errinfo);
+    errinfo = 0;
+
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+}
 
 static void profile_jwt(void ** state)
 {
@@ -1317,6 +1409,7 @@ int ts_gta_sw_provider(void)
         cmocka_unit_test(profile_create_dilithium_default),
 #endif
         /* Tests for creation / deployment / enrollment / usage profiles */
+        cmocka_unit_test(profile_enroll),
         /* Tests for usage profiles only */
         cmocka_unit_test(profile_jwt),
         cmocka_unit_test(profile_tls),
