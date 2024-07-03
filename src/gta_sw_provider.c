@@ -150,8 +150,9 @@ enum profile_t {
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS,
+    PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL,
 };
-#define NUM_PROFILES 9
+#define NUM_PROFILES 10
 static char supported_profiles[NUM_PROFILES][MAXLEN_PROFILE] = {
     [PROF_INVALID] = "INVALID",
     [PROF_CH_IEC_30168_BASIC_PASSCODE] = "ch.iec.30168.basic.passcode",
@@ -162,6 +163,7 @@ static char supported_profiles[NUM_PROFILES][MAXLEN_PROFILE] = {
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM] = "com.github.generic-trust-anchor-api.basic.dilithium",
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT] = "com.github.generic-trust-anchor-api.basic.jwt",
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = "com.github.generic-trust-anchor-api.basic.tls",
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL] = "com.github.generic-trust-anchor-api.basic.enroll",
 };
 
 /*
@@ -183,7 +185,13 @@ struct gta_sw_provider_context_params_t {
     struct personality_name_list_item_t * p_personality_item;
     gta_access_token_t access_token;
     enum profile_t profile;
+    void * context_attributes;
+};
 
+
+/* context attributes for PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL */
+struct pers_enroll_attributes_t {
+    unsigned char * subject_rdn;
 };
 
 /*
@@ -225,6 +233,8 @@ static char pers_attr_type_strings[NUM_PERSONALITY_ATTRIBUTE_TYPE][MAXLEN_PERSON
 #define PERS_ATTR_NAME_KEYTYPE          "com.github.generic-trust-anchor-api.keytype.openssl"
 #define PERS_ATTR_KEYTYPE_EC            "EC"
 #define PERS_ATTR_KEYTYPE_DILITHIUM2    "dilithium2"
+
+#define CTX_ATTR_TYPE_SUBJECT_RDN       "com.github.generic-trust-anchor-api.enroll.subject_rdn"
 
 /*
  * Helper function to get enum value of personality attribute type string. In
@@ -307,6 +317,81 @@ static bool check_provider_params
     }
 
     return ret;
+}
+
+/*
+ * Helper function to parse a Subject RDN as described in RFC4514 and construct
+ * a OpenSSL x509_name. Todo: May not be fully compliant to RFC yet!
+ */
+X509_NAME * parse_rdn(const char * subject_rdn)
+{
+    char * work = NULL;
+    X509_NAME * name = NULL;
+
+    name = X509_NAME_new();
+    if (name == NULL) {
+        return NULL;
+    }
+    work = OPENSSL_strdup(subject_rdn);
+    if (work == NULL) {
+        goto err;
+    }
+
+    while (*subject_rdn != '\0') {
+        char * bp = work;
+        char * typestr = bp;
+        unsigned char * valstr = NULL;
+        int nid = 0;
+
+        /* Collect the type */
+        while (*subject_rdn != '\0' && *subject_rdn != '=') {
+            *bp++ = *subject_rdn++;
+        }
+
+        *bp++ = '\0';
+        if (*subject_rdn == '\0') {
+            /* parsing error */
+            goto err;
+        }
+        ++subject_rdn;
+
+        /* Collect the value. */
+        valstr = (unsigned char *)bp;
+        for (; *subject_rdn != '\0' && *subject_rdn != ','; *bp++ = *subject_rdn++) {
+            if (*subject_rdn == '\\' && *++subject_rdn == '\0') {
+                /* parsing error */
+                goto err;
+            }
+        }
+        *bp++ = '\0';
+
+        /* Check whether we are at the end of the string */
+        if (*subject_rdn != '\0') {
+            ++subject_rdn;
+        }
+
+        /* parse type */
+        nid = OBJ_txt2nid(typestr);
+        if (nid == NID_undef) {
+            /* skipping */
+            continue;
+        }
+        if (*valstr == '\0') {
+            /* skipping */
+            continue;
+        }
+        if (!X509_NAME_add_entry_by_NID(name, nid, MBSTRING_UTF8, valstr, strlen((char *)valstr), -1, 0)) {
+            goto err;
+        }
+    }
+
+    OPENSSL_free(work);
+    return name;
+
+err:
+    X509_NAME_free(name);
+    OPENSSL_free(work);
+    return NULL;
 }
 
 GTA_DECLARE_FUNCTION(const struct gta_function_list_t *, gta_sw_provider_init, ());
@@ -713,11 +798,63 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_context_set_attribute,
     ))
 {
     bool ret = false;
+    struct gta_sw_provider_context_params_t * p_context_params = NULL;
 
-    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    p_context_params = gta_context_get_params(h_ctx, p_errinfo);
+    if (NULL == p_context_params) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        goto err;
+    }
 
-    /* ... */
+    /* Check Profile */
+    if (PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL == p_context_params->profile) {
+        struct pers_enroll_attributes_t * pers_enroll_attributes = (struct pers_enroll_attributes_t *) p_context_params->context_attributes;
+        unsigned char attrval[MAXLEN_CTX_ATTRIBUTE_VALUE] = { 0 };
+        unsigned char * p_context_attribute_value = NULL;
+        size_t read = 0;
 
+        /* check whether attribute type is supported by profile and not already set */
+        if (!((0 == strcmp(attrtype, CTX_ATTR_TYPE_SUBJECT_RDN)) && (NULL == pers_enroll_attributes->subject_rdn))) {
+
+            /* attribute not supported by profile or already set */
+            *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
+            goto err;
+        }
+
+        /* read context attribute value into buffer */
+        read = p_attrvalue->read(p_attrvalue, (char *)attrval, MAXLEN_CTX_ATTRIBUTE_VALUE, p_errinfo);
+        if (MAXLEN_CTX_ATTRIBUTE_VALUE == read) {
+            /* attribute too long */
+            *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
+            goto err;
+        }
+        /* allocate memory for attribute (and additional null-terminator) */
+        p_context_attribute_value = gta_secmem_calloc(h_ctx, read + 1, sizeof(unsigned char), p_errinfo);
+        if (NULL == p_context_attribute_value) {
+            *p_errinfo = GTA_ERROR_MEMORY;
+            goto err;
+        }
+        /* copy attribute value */
+        memcpy(p_context_attribute_value, attrval, read);
+        /* add null-terminator explicitly */
+        p_context_attribute_value[read] = '\0';
+
+        /* assign value to context struct */
+        if (0 == strcmp(attrtype, CTX_ATTR_TYPE_SUBJECT_RDN)) {
+            pers_enroll_attributes->subject_rdn = p_context_attribute_value;
+            p_context_attribute_value = NULL;
+        }
+        else {
+            gta_secmem_free(h_ctx, p_context_attribute_value, p_errinfo);
+            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+            goto err;
+        }
+        ret = true;
+    }
+    else {
+        *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+    }
+err:
     return ret;
 }
 
@@ -803,6 +940,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_provider_context_open,
         goto err;
     }
     p_context_params->p_personality_item = p_personality_item;
+    p_context_params->context_attributes = NULL;
 
     p_context_params->profile = get_profile_enum(profile);
 
@@ -880,7 +1018,23 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_provider_context_open,
             goto err;
         }
         ret = true;
+    } else if (PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL == p_context_params->profile) {
+        if (SECRET_TYPE_DER != p_personality_item->p_personality_content->secret_type)
+        {
+            DEBUG_PRINT(("gta_sw_provider_gta_context_open: Personality type not as expected\n"));
+            *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+            goto err;
+        }
+        /* Allocate memory for context attributes */
+        p_context_params->context_attributes = gta_secmem_calloc(h_ctx, 1, sizeof(struct pers_enroll_attributes_t), p_errinfo);
+        if (NULL == p_context_params->context_attributes) {
+            *p_errinfo = GTA_ERROR_MEMORY;
+            goto err;
+        }
+        struct pers_enroll_attributes_t * pers_enroll_attributes = (struct pers_enroll_attributes_t *) p_context_params->context_attributes;
+        pers_enroll_attributes->subject_rdn = NULL;
 
+        ret = true;
     } else {
         DEBUG_PRINT(("gta_sw_provider_gta_context_open: Profile not supported\n"));
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
@@ -1814,6 +1968,14 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_create,
         /* Calculate personality fingerprint */
         SHA512(p_secret_buffer, (size_t)len, (unsigned char *)personality_fingerprint);
     }
+    else if (PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL == prof) {
+        p_key = EVP_EC_gen("secp521r1");
+        len = i2d_PrivateKey(p_key, &p_secret_buffer);
+        EVP_PKEY_free(p_key);
+        personality_secret_type = SECRET_TYPE_DER;
+        /* Calculate personality fingerprint */
+        SHA512(p_secret_buffer, (size_t)len, (unsigned char *)personality_fingerprint);
+    }
     else if (PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION == prof) {
         len = LOCAL_DATA_PROTECTION_SECRET_LEN;
         p_secret_buffer = OPENSSL_zalloc(len);
@@ -1994,7 +2156,8 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_create,
     }
 
     /* Add additional / profile dependent attributes */
-    if (PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC == prof) {
+    if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC == prof)
+        || (PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL == prof)) {
         if (!add_personality_attribute_list_item(p_provider_params,
             p_personality_name_list_item, PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL,
             (unsigned char *)PERS_ATTR_NAME_KEYTYPE, sizeof(PERS_ATTR_NAME_KEYTYPE),
@@ -2055,6 +2218,8 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_enroll,
     long len = 0;
     char* pem_data = NULL;
     EVP_PKEY *p_key = NULL;
+    X509_REQ * x509_req = NULL;
+    X509_NAME * x509_name = NULL;
 #ifdef ENABLE_PQC
     OQS_SIG *signer = NULL;
     char *base64EncodedKey = NULL;
@@ -2074,10 +2239,11 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_enroll,
         goto err;
     }
 
+    /* get personality of the context */
+    p_personality_content = p_context_params->p_personality_item->p_personality_content;
+
     if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT == p_context_params->profile)
         || (PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile)) {
-        /* get personality of the context */
-        p_personality_content = p_context_params->p_personality_item->p_personality_content;
 
         if (SECRET_TYPE_DER == p_personality_content->secret_type) {
             /* range check on p_personality_content->content_data_size */
@@ -2195,6 +2361,74 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_enroll,
         p_personality_enrollment_info->finish(p_personality_enrollment_info, 0, p_errinfo);
         ret = true;
     }
+    else if (PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL == p_context_params->profile) {
+        struct pers_enroll_attributes_t * pers_enroll_attributes = (struct pers_enroll_attributes_t *) p_context_params->context_attributes;
+
+        if (SECRET_TYPE_DER != p_personality_content->secret_type) {
+            /* not supported */
+            *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+            goto err;
+        }
+        /* range check on p_personality_content->content_data_size */
+        if (p_personality_content->secret_data_size > LONG_MAX) {
+            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+            goto err;
+        }
+        /* get the key from the personality */
+        unsigned char * p_secret_buffer  = p_personality_content->secret_data;
+        p_key = d2i_AutoPrivateKey(NULL,
+            (const unsigned char **) &p_secret_buffer,
+            (long)p_personality_content->secret_data_size);
+
+        p_secret_buffer = NULL;
+        if (!p_key) {
+            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+            goto err;
+        }
+
+        int ret_val = 0;
+        x509_req = X509_REQ_new();
+        ret_val = X509_REQ_set_version(x509_req, 0);
+        if (1 != ret_val){
+            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+            goto err;
+        }
+
+        /* This is optional */
+        if (NULL != pers_enroll_attributes->subject_rdn) {
+            x509_name = parse_rdn((char *)pers_enroll_attributes->subject_rdn);
+
+            if (!X509_REQ_set_subject_name(x509_req, x509_name)) {
+                *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+                goto err;
+            }
+        }
+
+        ret_val = X509_REQ_set_pubkey(x509_req, p_key);
+        if (1 != ret_val) {
+            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+            goto err;
+        }
+
+        // set sign key of x509 req
+        ret_val = X509_REQ_sign(x509_req, p_key, EVP_sha256());
+        if (0 >= ret_val) {
+            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+            goto err;
+        }
+
+        size_t length = 0;
+
+        bio = BIO_new(BIO_s_mem());
+        ret_val = PEM_write_bio_X509_REQ(bio, x509_req);
+        length = BIO_get_mem_data(bio, &pem_data);
+
+        if (length != p_personality_enrollment_info->write(p_personality_enrollment_info, (char*)pem_data, length, p_errinfo)) {
+            goto err;
+        }
+        p_personality_enrollment_info->finish(p_personality_enrollment_info, 0, p_errinfo);
+        ret = true;
+    }
     else {
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
     }
@@ -2207,6 +2441,12 @@ err:
     if (NULL != bio) {
         BIO_free_all(bio);
         pem_data = NULL;
+    }
+    if (NULL != x509_req) {
+        X509_REQ_free(x509_req);
+    }
+    if (NULL != x509_name) {
+        X509_NAME_free(x509_name);
     }
 
 #ifdef ENABLE_PQC
@@ -2366,7 +2606,8 @@ bool personality_add_attribute(
     }
 
     /* Check whether profile defines support for the requested attribute type */
-    if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) && (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == pers_attr_type)) {
+    if (((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) && (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == pers_attr_type))
+        || ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL == p_context_params->profile) && (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == pers_attr_type))) {
         /* read personality attribute value into buffer */
         attrval_len = p_attrvalue->read(p_attrvalue, (char *)attrval, MAXLEN_PERSONALITY_ATTRIBUTE_VALUE, p_errinfo);
         if ((MAXLEN_PERSONALITY_ATTRIBUTE_VALUE <= attrval_len) || (0 == attrval_len)) {

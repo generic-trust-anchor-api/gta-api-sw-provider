@@ -15,6 +15,7 @@
 #define MAXLEN_PERSONALITY_ATTRIBUTE_NAME 160
 #define MAXLEN_PERSONALITY_ATTRIBUTE_VALUE 2000
 #define MAXLEN_APPLICATION_NAME 160
+#define MAXLEN_CTX_ATTRIBUTE_VALUE 2000
 
 /* internal representation of a device state */
 struct devicestate_stack_item_t {
