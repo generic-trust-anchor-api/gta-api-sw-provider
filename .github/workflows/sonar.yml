@@ -1,0 +1,56 @@
+#;**********************************************************************;
+# SPDX-License-Identifier: MPL-2.0
+#
+# Copyright (c) 2025, Siemens AG
+#
+#;**********************************************************************;
+
+name: SonarQube
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+jobs:
+  build:
+    name: Build and analyze
+    runs-on: ubuntu-latest
+    env:
+      BUILD_WRAPPER_OUT_DIR: build_wrapper_output_directory # Directory where build-wrapper output will be placed
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y libcmocka-dev meson ninja-build build-essential libssl-dev cmake pkg-config git gcovr lcov
+      - name: Checkout gta-api-core
+        uses: actions/checkout@v4
+        with:
+          repository: 'generic-trust-anchor-api/gta-api-core'
+          ref: 'main'
+      - name: Build and install gta-api-core
+        run: |
+          meson setup build
+          sudo ninja -C build install
+      - name: Checkout gta-api-sw-provider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+      - name: Install Build Wrapper
+        uses: SonarSource/sonarqube-scan-action/install-build-wrapper@v4
+      - name: Run Build Wrapper
+        run: |
+          meson setup build
+          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} ninja -C build
+      - name: Create coverage report
+        run: |
+          meson setup coverage -Db_coverage=true
+          ninja -C coverage test
+          ninja -C coverage coverage-sonarqube
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v4
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            --define sonar.cfamily.compile-commands="${{ env.BUILD_WRAPPER_OUT_DIR }}/compile_commands.json"
+            --define sonar.coverageReportPaths=coverage/meson-logs/sonarqube.xml
