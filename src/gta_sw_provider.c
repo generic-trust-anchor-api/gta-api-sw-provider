@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /**********************************************************************
- * Copyright (c) 2024, Siemens AG
+ * Copyright (c) 2024-2025, Siemens AG
  **********************************************************************/
 
 #include <stdlib.h>
@@ -217,6 +217,19 @@ static char pers_attr_type_strings[NUM_PERSONALITY_ATTRIBUTE_TYPE][MAXLEN_PERSON
     [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_AUXILIARY_X509] = "ch.iec.30168.trustlist.certificate.auxiliary.x509",
     [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_LIST_RFC8446] = "ch.iec.30168.trustlist.certificate_list.rfc8446",
     [PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL] = "com.github.generic-trust-anchor-api.keytype.openssl",
+};
+
+static bool pers_attr_type_trusted[NUM_PERSONALITY_ATTRIBUTE_TYPE] = {
+    [PAT_INVALID] = false,
+    [PAT_CH_IEC_30168_IDENTIFIER] = true, /* it is an internal attribute, anyway not allowed to be changed */
+    [PAT_CH_IEC_30168_FINGERPRINT] = true, /* it is an internal attribute, anyway not allowed to be changed */
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509] = false,
+    [PAT_CH_IEC_30168_TRUSTLIST_CRL_X509V3] = false,
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3] = true,
+    // TODO: check the implications of: "are only trusted if additional evidence is provided"
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_AUXILIARY_X509] = true,
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_LIST_RFC8446] = false,
+    [PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL] = true, /* it is an internal attribute, anyway not allowed to be changed */
 };
 
 /* attribute related defines */
@@ -2412,6 +2425,14 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_add_trusted_attribute,
     ))
 {
     /* todo: check access condition */
+
+    enum pers_attr_type_t pers_attr_type = get_pers_attr_type_enum(attrtype);
+    /* Generic attribute types are not allowed */
+    if (false == pers_attr_type_trusted[pers_attr_type]) {
+        *p_errinfo = GTA_ERROR_INVALID_PARAMETER;
+        return false;
+    }
+
     return personality_add_attribute(h_ctx, attrtype, attrname, p_attrvalue, p_errinfo);
 }
 
@@ -2425,6 +2446,13 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_add_attribute,
     gta_errinfo_t * p_errinfo
     ))
 {
+    enum pers_attr_type_t pers_attr_type = get_pers_attr_type_enum(attrtype);
+    /* Trusted attribute types are not allowed */
+    if (true == pers_attr_type_trusted[pers_attr_type]) {
+        *p_errinfo = GTA_ERROR_INVALID_PARAMETER;
+        return false;
+    }
+
     return personality_add_attribute(h_ctx, attrtype, attrname, p_attrvalue, p_errinfo);
 }
 
