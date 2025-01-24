@@ -925,6 +925,17 @@ static void profile_tls(void ** state)
     assert_true(gta_personality_add_attribute(h_ctx, "ch.iec.30168.trustlist.certificate.self.x509", "Dummy EE Cert 2", (gtaio_istream_t *)&istream, &errinfo));
     assert_int_equal(0, errinfo);
 
+    /* Add generic attribute as trusted */
+    istream_from_buf_init(&istream, dummy_ee_cert, strlen(dummy_ee_cert));
+    assert_false(gta_personality_add_trusted_attribute(h_ctx, "ch.iec.30168.trustlist.certificate.self.x509", "Dummy EE Cert not trusted", (gtaio_istream_t *)&istream, &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_PARAMETER, errinfo);
+    errinfo = 0;
+
+    /* Add trusted attribute as trusted */
+    istream_from_buf_init(&istream, dummy_ee_cert, strlen(dummy_ee_cert));
+    assert_true(gta_personality_add_trusted_attribute(h_ctx, "ch.iec.30168.trustlist.certificate.trusted.x509v3", "Dummy EE Cert trusted", (gtaio_istream_t *)&istream, &errinfo));
+    assert_int_equal(0, errinfo);
+
     /* Deactivate attribute */
     assert_false(gta_personality_deactivate_attribute(h_ctx, "ch.iec.30168.identifier_value", &errinfo));
     assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
