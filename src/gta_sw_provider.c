@@ -2379,7 +2379,8 @@ bool personality_add_attribute(
     }
 
     /* Check whether profile defines support for the requested attribute type */
-    if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) && (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == pers_attr_type)) {
+    if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) &&
+        ((PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == pers_attr_type) || (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3 == pers_attr_type))) {
         /* read personality attribute value into buffer */
         attrval_len = p_attrvalue->read(p_attrvalue, (char *)attrval, MAXLEN_PERSONALITY_ATTRIBUTE_VALUE, p_errinfo);
         if ((MAXLEN_PERSONALITY_ATTRIBUTE_VALUE <= attrval_len) || (0 == attrval_len)) {
@@ -2487,7 +2488,8 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_get_attribute, (
      * Default attributes need to be supported by all profiles.
      */
     if ((PAT_CH_IEC_30168_FINGERPRINT == p_attribute->type) || (PAT_CH_IEC_30168_IDENTIFIER == p_attribute->type)
-        || ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) && ((PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == p_attribute->type) || (PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL == p_attribute->type)))) {
+        || ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) &&
+            ((PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == p_attribute->type) || (PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL == p_attribute->type) || (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3 == p_attribute->type)))) {
 
         if (p_attribute->data_size != p_attrvalue->write(p_attrvalue, p_attribute->p_data, p_attribute->data_size, p_errinfo)) {
             *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
@@ -2544,7 +2546,8 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_remove_attribute,
     }
 
     /* Check whether profile defines support for this attribute type */
-    if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) && (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == p_attribute->type)) {
+    if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) &&
+        ((PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == p_attribute->type) || (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3 == p_attribute->type))) {
         /*
          * Remove the attribute from attribute list. Note that this function
          * searches again for the attribute in the list. This is not necessary
@@ -2613,7 +2616,8 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_deactivate_attribute,
     }
 
     /* Check whether profile defines support for this attribute type */
-    if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) && (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == p_attribute->type)) {
+    if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) &&
+        ((PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == p_attribute->type) || (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3 == p_attribute->type))) {
 
         /* todo: check access condition */
         p_attribute->activated = false;
@@ -2672,7 +2676,8 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_activate_attribute,
     }
 
     /* Check whether profile defines support for this attribute type */
-    if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) && (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == p_attribute->type)) {
+    if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) &&
+        ((PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == p_attribute->type) || (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3 == p_attribute->type))) {
 
         /* todo: check access condition */
         p_attribute->activated = true;
