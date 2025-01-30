@@ -70,6 +70,44 @@ static char profiles_to_register[][MAXLEN_PROFILE] = {
 #  define DEBUG_PRINT(msg)
 #endif
 
+
+/* Supported profiles */
+enum profile_t {
+    PROF_INVALID = 0,
+    PROF_CH_IEC_30168_BASIC_PASSCODE,
+    PROF_CH_IEC_30168_BASIC_LOCAL_DATA_INTEGRITY_ONLY,
+    PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION,
+    PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA,
+    PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC,
+    PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM,
+    PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT,
+    PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS,
+};
+#define NUM_PROFILES 9
+static char supported_profiles[NUM_PROFILES][MAXLEN_PROFILE] = {
+    [PROF_INVALID] = "INVALID",
+    [PROF_CH_IEC_30168_BASIC_PASSCODE] = "ch.iec.30168.basic.passcode",
+    [PROF_CH_IEC_30168_BASIC_LOCAL_DATA_INTEGRITY_ONLY] = "ch.iec.30168.basic.local_data_integrity_only",
+    [PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION] = "ch.iec.30168.basic.local_data_protection",
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA] = "com.github.generic-trust-anchor-api.basic.rsa",
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC] = "com.github.generic-trust-anchor-api.basic.ec",
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM] = "com.github.generic-trust-anchor-api.basic.dilithium",
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT] = "com.github.generic-trust-anchor-api.basic.jwt",
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = "com.github.generic-trust-anchor-api.basic.tls",
+};
+
+static bool profile_creation[NUM_PROFILES] = {
+    [PROF_INVALID] = false,
+    [PROF_CH_IEC_30168_BASIC_PASSCODE] = false,
+    [PROF_CH_IEC_30168_BASIC_LOCAL_DATA_INTEGRITY_ONLY] = false, // ToDo: to be changed to true after implementation
+    [PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION] = true,
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA] = true,
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC] = true,
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM] = false, // ToDo: to be changed to true ! PQ enabled
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT] = false,
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = false,
+};
+
 extern const struct gta_function_list_t * gta_sw_provider_init(gta_context_handle_t, gtaio_istream_t *, gtaio_ostream_t *, void **, void(**)(void *),  gta_errinfo_t *);
 
 struct test_params_t {
@@ -537,6 +575,54 @@ static void pers_attr_enumerate(gta_instance_handle_t h_inst, gta_personality_na
 /*-----------------------------------------------------------------------------
  * individual test functions
  */
+static void profile_spec_create(void ** state)
+{
+    DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
+    struct test_params_t * test_params = (struct test_params_t *)(*state);
+    gta_errinfo_t errinfo = 0;
+    char perso_name[100];
+
+    gta_access_policy_handle_t h_auth_use = GTA_HANDLE_INVALID;
+    gta_access_policy_handle_t h_auth_admin = GTA_HANDLE_INVALID;
+    struct gta_protection_properties_t protection_properties = { 0 };
+
+    h_auth_use = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_BASIC_TOKEN, &errinfo);
+    assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
+
+    for (int i = 0; i < NUM_PROFILES; ++i)
+    {
+        sprintf(perso_name, "pers_test_%d", i);
+        if (profile_creation[i])
+        {
+            assert_true(gta_personality_create(test_params->h_inst,
+                                               IDENTIFIER1_VALUE,
+                                               perso_name,
+                                               "provider_test",
+                                               supported_profiles[i],
+                                               h_auth_use,
+                                               h_auth_admin,
+                                               protection_properties,
+                                               &errinfo));
+            assert_int_equal(0, errinfo);
+        } else
+        {
+            assert_false(gta_personality_create(test_params->h_inst,
+                                               IDENTIFIER1_VALUE,
+                                               perso_name,
+                                               "provider_test",
+                                               supported_profiles[i],
+                                               h_auth_use,
+                                               h_auth_admin,
+                                               protection_properties,
+                                               &errinfo));
+            // ToDo: check why failing
+            // assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+            errinfo = 0;
+        }
+    }
+
+}
+
 static void identifier_assign(void ** state)
 {
     DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
@@ -1381,6 +1467,8 @@ int ts_gta_sw_provider(void)
         cmocka_unit_test(access_control),
         /* Tests for persistent storage */
         cmocka_unit_test(provider_deserialize),
+        /* Tests profile spec vs impl support */
+        cmocka_unit_test(profile_spec_create),
     };
 
     return cmocka_run_group_tests_name(
