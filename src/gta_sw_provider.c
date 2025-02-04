@@ -2505,6 +2505,34 @@ err:
     return ret;
 }
 
+/*
+ * Helper function for gta_sw_provider_gta_personality_remove_attribute
+ * and gta_sw_provider_gta_personality_deactivate_attribute to find a
+ * personality attribute by name with two additional conditions: it has to be
+ * activated and a non default attribute.
+ */
+bool find_activated_nondefault_attribute(
+    struct gta_sw_provider_context_params_t * p_context_params,
+    struct personality_attribute_t ** p_attribute,
+    const gta_personality_attribute_name_t attrname,
+    gta_errinfo_t * p_errinfo
+)
+{
+    /* Default attributes are ignored */
+    if ((0 == strcmp(attrname, PERS_ATTR_NAME_FINGERPRINT)) || (0 == strcmp(attrname, PERS_ATTR_NAME_IDENTIFIER))) {
+        *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
+        return false;
+    }
+
+    /* Find attribute_list_item with requested name and check whether it is activated */
+    *p_attribute = list_find((struct list_t *)(p_context_params->p_personality_item->p_personality_content->p_attribute_list),
+                            attrname, attribute_list_item_cmp_name);
+    if ((NULL == *p_attribute) || (!(*p_attribute)->activated)) {
+        *p_errinfo = GTA_ERROR_ITEM_NOT_FOUND;
+        return false;
+    }
+    return true;
+}
 
 GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_remove_attribute,
 (
@@ -2531,17 +2559,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_remove_attribute,
         goto err;
     }
 
-    /* Default attributes must not be removed */
-    if ((0 == strcmp(attrname, PERS_ATTR_NAME_FINGERPRINT)) || (0 == strcmp(attrname, PERS_ATTR_NAME_IDENTIFIER))) {
-        *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
-        goto err;
-    }
-
-    /* Find attribute_list_item with requested name and check whether it is activated */
-    p_attribute = list_find((struct list_t *)(p_context_params->p_personality_item->p_personality_content->p_attribute_list),
-                            attrname, attribute_list_item_cmp_name);
-    if ((NULL == p_attribute) || (!p_attribute->activated)) {
-        *p_errinfo = GTA_ERROR_ITEM_NOT_FOUND;
+    if (!find_activated_nondefault_attribute(p_context_params, &p_attribute, attrname, p_errinfo)) {
         goto err;
     }
 
@@ -2601,17 +2619,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_deactivate_attribute,
         goto err;
     }
 
-    /* Default attributes must not be deactivated */
-    if ((0 == strcmp(attrname, PERS_ATTR_NAME_FINGERPRINT)) || (0 == strcmp(attrname, PERS_ATTR_NAME_IDENTIFIER))) {
-        *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
-        goto err;
-    }
-
-    /* Find attribute_list_item with requested name and check whether it is activated */
-    p_attribute = list_find((struct list_t *)(p_context_params->p_personality_item->p_personality_content->p_attribute_list),
-                            attrname, attribute_list_item_cmp_name);
-    if ((NULL == p_attribute) || (!p_attribute->activated)) {
-        *p_errinfo = GTA_ERROR_ITEM_NOT_FOUND;
+    if (!find_activated_nondefault_attribute(p_context_params, &p_attribute, attrname, p_errinfo)) {
         goto err;
     }
 
