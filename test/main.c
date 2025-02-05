@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /**********************************************************************
- * Copyright (c) 2024, Siemens AG
+ * Copyright (c) 2024-2025, Siemens AG
  **********************************************************************/
 
 #include <stdlib.h>
@@ -812,6 +812,14 @@ static void profile_jwt(void ** state)
     assert_non_null(h_ctx);
     assert_int_equal(0, errinfo);
 
+    /* Negative test for gta_personality_add_attribute() */
+    const char * dummy_ee_cert = "Dummy EE Certificate";
+    istream_from_buf_t istream = { 0 };
+    istream_from_buf_init(&istream, dummy_ee_cert, strlen(dummy_ee_cert));
+    assert_false(gta_personality_add_attribute(h_ctx, "ch.iec.30168.trustlist.certificate.self.x509", "Dummy EE Cert", (gtaio_istream_t *)&istream, &errinfo));
+    /* assert_int_equal(0, errinfo); */
+    errinfo = 0;
+
     pers_get_attribute(h_ctx, "ch.iec.30168.fingerprint", 1);
     pers_get_attribute(h_ctx, "ch.iec.30168.identifier_value", 0);
     DEBUG_PRINT(("\n"));
@@ -841,6 +849,16 @@ static void profile_jwt(void ** state)
 
     assert_non_null(h_ctx);
     assert_int_equal(0, errinfo);
+
+    /* Negative test for gta_personality_deactivate_attribute */
+    assert_false(gta_personality_deactivate_attribute(h_ctx, "com.github.generic-trust-anchor-api.keytype.openssl", &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
+    errinfo = 0;
+
+    /* Negative test for gta_personality_remove_attribute */
+    assert_false(gta_personality_remove_attribute(h_ctx, "com.github.generic-trust-anchor-api.keytype.openssl", &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
+    errinfo = 0;
 
     pers_get_attribute_negative_tests(h_ctx);
     pers_get_attribute(h_ctx, "ch.iec.30168.fingerprint", 1);
@@ -925,6 +943,23 @@ static void profile_tls(void ** state)
     assert_true(gta_personality_add_attribute(h_ctx, "ch.iec.30168.trustlist.certificate.self.x509", "Dummy EE Cert 2", (gtaio_istream_t *)&istream, &errinfo));
     assert_int_equal(0, errinfo);
 
+    /* Add generic attribute as trusted */
+    istream_from_buf_init(&istream, dummy_ee_cert, strlen(dummy_ee_cert));
+    assert_false(gta_personality_add_trusted_attribute(h_ctx, "ch.iec.30168.trustlist.certificate.self.x509", "Dummy EE Cert not trusted", (gtaio_istream_t *)&istream, &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_PARAMETER, errinfo);
+    errinfo = 0;
+
+    /* Add trusted attribute as trusted */
+    istream_from_buf_init(&istream, dummy_ee_cert, strlen(dummy_ee_cert));
+    assert_true(gta_personality_add_trusted_attribute(h_ctx, "ch.iec.30168.trustlist.certificate.trusted.x509v3", "Dummy EE Cert trusted", (gtaio_istream_t *)&istream, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Get generic attribute */
+    assert_true(gta_personality_get_attribute(h_ctx, "Dummy EE Cert", ostream, &errinfo));
+
+    /* Get trusted attribute */
+    assert_true(gta_personality_get_attribute(h_ctx, "Dummy EE Cert trusted", ostream, &errinfo));
+
     /* Deactivate attribute */
     assert_false(gta_personality_deactivate_attribute(h_ctx, "ch.iec.30168.identifier_value", &errinfo));
     assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
@@ -937,6 +972,8 @@ static void profile_tls(void ** state)
     errinfo = 0;
     assert_true(gta_personality_deactivate_attribute(h_ctx, "Dummy EE Cert 2", &errinfo));
     assert_int_equal(0, errinfo);
+    assert_true(gta_personality_deactivate_attribute(h_ctx, "Dummy EE Cert trusted", &errinfo));
+    assert_int_equal(0, errinfo);
 
     /* Enumerate attributes */
     pers_attr_enumerate(test_params->h_inst, "pers_basic_rsa");
@@ -944,6 +981,12 @@ static void profile_tls(void ** state)
     /* Get attribute */
     pers_get_attribute(h_ctx, "Dummy EE Cert", 0);
     assert_false(gta_personality_get_attribute(h_ctx, "Dummy EE Cert 2", ostream, &errinfo));
+    assert_int_equal(GTA_ERROR_ITEM_NOT_FOUND, errinfo);
+    errinfo = 0;
+
+    /* Get attribute */
+    pers_get_attribute(h_ctx, "Dummy EE Cert", 0);
+    assert_false(gta_personality_get_attribute(h_ctx, "Dummy EE Cert trusted", ostream, &errinfo));
     assert_int_equal(GTA_ERROR_ITEM_NOT_FOUND, errinfo);
     errinfo = 0;
 
@@ -972,6 +1015,12 @@ static void profile_tls(void ** state)
     assert_false(gta_personality_activate_attribute(h_ctx, "inexistent attribute", &errinfo));
     assert_int_equal(GTA_ERROR_ITEM_NOT_FOUND, errinfo);
     errinfo = 0;
+    assert_true(gta_personality_activate_attribute(h_ctx, "Dummy EE Cert trusted", &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Remove attribute */
+    assert_true(gta_personality_remove_attribute(h_ctx, "Dummy EE Cert trusted", &errinfo));
+    assert_int_equal(0, errinfo);
 
     assert_true(myio_open_ifilestream(&istream_data_to_seal, TEST_DATA_PAYLOAD , &errinfo));
 
@@ -993,6 +1042,9 @@ static void profile_tls(void ** state)
                              &errinfo);
 
     assert_non_null(h_ctx);
+
+    /* Get openssl keytype attribute attribute */
+    assert_true(gta_personality_get_attribute(h_ctx, "com.github.generic-trust-anchor-api.keytype.openssl", ostream, &errinfo));
 
     assert_true(myio_open_ifilestream(&istream_data_to_seal, TEST_DATA_PAYLOAD , &errinfo));
 

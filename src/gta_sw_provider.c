@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /**********************************************************************
- * Copyright (c) 2024, Siemens AG
+ * Copyright (c) 2024-2025, Siemens AG
  **********************************************************************/
 
 #include <stdlib.h>
@@ -217,6 +217,19 @@ static char pers_attr_type_strings[NUM_PERSONALITY_ATTRIBUTE_TYPE][MAXLEN_PERSON
     [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_AUXILIARY_X509] = "ch.iec.30168.trustlist.certificate.auxiliary.x509",
     [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_LIST_RFC8446] = "ch.iec.30168.trustlist.certificate_list.rfc8446",
     [PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL] = "com.github.generic-trust-anchor-api.keytype.openssl",
+};
+
+static bool pers_attr_type_trusted[NUM_PERSONALITY_ATTRIBUTE_TYPE] = {
+    [PAT_INVALID] = false,
+    [PAT_CH_IEC_30168_IDENTIFIER] = true, /* it is an internal attribute, anyway not allowed to be changed */
+    [PAT_CH_IEC_30168_FINGERPRINT] = true, /* it is an internal attribute, anyway not allowed to be changed */
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509] = false,
+    [PAT_CH_IEC_30168_TRUSTLIST_CRL_X509V3] = false,
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3] = true,
+    // TODO: check the implications of: "are only trusted if additional evidence is provided"
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_AUXILIARY_X509] = true,
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_LIST_RFC8446] = false,
+    [PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL] = true, /* it is an internal attribute, anyway not allowed to be changed */
 };
 
 /* attribute related defines */
@@ -2366,7 +2379,8 @@ bool personality_add_attribute(
     }
 
     /* Check whether profile defines support for the requested attribute type */
-    if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) && (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == pers_attr_type)) {
+    if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) &&
+        ((PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == pers_attr_type) || (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3 == pers_attr_type))) {
         /* read personality attribute value into buffer */
         attrval_len = p_attrvalue->read(p_attrvalue, (char *)attrval, MAXLEN_PERSONALITY_ATTRIBUTE_VALUE, p_errinfo);
         if ((MAXLEN_PERSONALITY_ATTRIBUTE_VALUE <= attrval_len) || (0 == attrval_len)) {
@@ -2412,6 +2426,14 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_add_trusted_attribute,
     ))
 {
     /* todo: check access condition */
+
+    enum pers_attr_type_t pers_attr_type = get_pers_attr_type_enum(attrtype);
+    /* Generic attribute types are not allowed */
+    if (false == pers_attr_type_trusted[pers_attr_type]) {
+        *p_errinfo = GTA_ERROR_INVALID_PARAMETER;
+        return false;
+    }
+
     return personality_add_attribute(h_ctx, attrtype, attrname, p_attrvalue, p_errinfo);
 }
 
@@ -2425,6 +2447,13 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_add_attribute,
     gta_errinfo_t * p_errinfo
     ))
 {
+    enum pers_attr_type_t pers_attr_type = get_pers_attr_type_enum(attrtype);
+    /* Trusted attribute types are not allowed */
+    if (true == pers_attr_type_trusted[pers_attr_type]) {
+        *p_errinfo = GTA_ERROR_INVALID_PARAMETER;
+        return false;
+    }
+
     return personality_add_attribute(h_ctx, attrtype, attrname, p_attrvalue, p_errinfo);
 }
 
@@ -2459,7 +2488,8 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_get_attribute, (
      * Default attributes need to be supported by all profiles.
      */
     if ((PAT_CH_IEC_30168_FINGERPRINT == p_attribute->type) || (PAT_CH_IEC_30168_IDENTIFIER == p_attribute->type)
-        || ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) && ((PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == p_attribute->type) || (PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL == p_attribute->type)))) {
+        || ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) &&
+            ((PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == p_attribute->type) || (PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL == p_attribute->type) || (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3 == p_attribute->type)))) {
 
         if (p_attribute->data_size != p_attrvalue->write(p_attrvalue, p_attribute->p_data, p_attribute->data_size, p_errinfo)) {
             *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
@@ -2475,6 +2505,34 @@ err:
     return ret;
 }
 
+/*
+ * Helper function for gta_sw_provider_gta_personality_remove_attribute
+ * and gta_sw_provider_gta_personality_deactivate_attribute to find a
+ * personality attribute by name with two additional conditions: it has to be
+ * activated and a non default attribute.
+ */
+bool find_activated_nondefault_attribute(
+    struct gta_sw_provider_context_params_t * p_context_params,
+    struct personality_attribute_t ** p_attribute,
+    const gta_personality_attribute_name_t attrname,
+    gta_errinfo_t * p_errinfo
+)
+{
+    /* Default attributes are ignored */
+    if ((0 == strcmp(attrname, PERS_ATTR_NAME_FINGERPRINT)) || (0 == strcmp(attrname, PERS_ATTR_NAME_IDENTIFIER))) {
+        *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
+        return false;
+    }
+
+    /* Find attribute_list_item with requested name and check whether it is activated */
+    *p_attribute = list_find((struct list_t *)(p_context_params->p_personality_item->p_personality_content->p_attribute_list),
+                            attrname, attribute_list_item_cmp_name);
+    if ((NULL == *p_attribute) || (!(*p_attribute)->activated)) {
+        *p_errinfo = GTA_ERROR_ITEM_NOT_FOUND;
+        return false;
+    }
+    return true;
+}
 
 GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_remove_attribute,
 (
@@ -2501,22 +2559,13 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_remove_attribute,
         goto err;
     }
 
-    /* Default attributes must not be removed */
-    if ((0 == strcmp(attrname, PERS_ATTR_NAME_FINGERPRINT)) || (0 == strcmp(attrname, PERS_ATTR_NAME_IDENTIFIER))) {
-        *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
-        goto err;
-    }
-
-    /* Find attribute_list_item with requested name and check whether it is activated */
-    p_attribute = list_find((struct list_t *)(p_context_params->p_personality_item->p_personality_content->p_attribute_list),
-                            attrname, attribute_list_item_cmp_name);
-    if ((NULL == p_attribute) || (!p_attribute->activated)) {
-        *p_errinfo = GTA_ERROR_ITEM_NOT_FOUND;
+    if (!find_activated_nondefault_attribute(p_context_params, &p_attribute, attrname, p_errinfo)) {
         goto err;
     }
 
     /* Check whether profile defines support for this attribute type */
-    if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) && (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == p_attribute->type)) {
+    if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) &&
+        ((PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == p_attribute->type) || (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3 == p_attribute->type))) {
         /*
          * Remove the attribute from attribute list. Note that this function
          * searches again for the attribute in the list. This is not necessary
@@ -2570,22 +2619,13 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_deactivate_attribute,
         goto err;
     }
 
-    /* Default attributes must not be deactivated */
-    if ((0 == strcmp(attrname, PERS_ATTR_NAME_FINGERPRINT)) || (0 == strcmp(attrname, PERS_ATTR_NAME_IDENTIFIER))) {
-        *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
-        goto err;
-    }
-
-    /* Find attribute_list_item with requested name and check whether it is activated */
-    p_attribute = list_find((struct list_t *)(p_context_params->p_personality_item->p_personality_content->p_attribute_list),
-                            attrname, attribute_list_item_cmp_name);
-    if ((NULL == p_attribute) || (!p_attribute->activated)) {
-        *p_errinfo = GTA_ERROR_ITEM_NOT_FOUND;
+    if (!find_activated_nondefault_attribute(p_context_params, &p_attribute, attrname, p_errinfo)) {
         goto err;
     }
 
     /* Check whether profile defines support for this attribute type */
-    if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) && (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == p_attribute->type)) {
+    if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) &&
+        ((PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == p_attribute->type) || (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3 == p_attribute->type))) {
 
         /* todo: check access condition */
         p_attribute->activated = false;
@@ -2644,7 +2684,8 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_activate_attribute,
     }
 
     /* Check whether profile defines support for this attribute type */
-    if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) && (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == p_attribute->type)) {
+    if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) &&
+        ((PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == p_attribute->type) || (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3 == p_attribute->type))) {
 
         /* todo: check access condition */
         p_attribute->activated = true;
