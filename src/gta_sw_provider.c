@@ -352,7 +352,7 @@ X509_NAME * parse_rdn(const char * subject_rdn)
 
     while (*subject_rdn != '\0') {
         char * bp = work;
-        char * typestr = bp;
+        const char * typestr = bp;
         unsigned char * valstr = NULL;
         int nid = 0;
 
@@ -371,10 +371,11 @@ X509_NAME * parse_rdn(const char * subject_rdn)
         /* Collect the value. */
         valstr = (unsigned char *)bp;
         for (; *subject_rdn != '\0' && *subject_rdn != ','; *bp++ = *subject_rdn++) {
-            if (*subject_rdn == '\\' && *++subject_rdn == '\0') {
+            if (*subject_rdn == '\\' && *(subject_rdn + 1) == '\0') {
                 /* parsing error */
                 goto err;
             }
+            ++subject_rdn;
         }
         *bp++ = '\0';
 
@@ -385,14 +386,12 @@ X509_NAME * parse_rdn(const char * subject_rdn)
 
         /* parse type */
         nid = OBJ_txt2nid(typestr);
-        if (nid == NID_undef) {
+        /* ignore unknown type and empty value and continue */
+        if ((nid == NID_undef) || (*valstr == '\0')) {
             /* skipping */
             continue;
         }
-        if (*valstr == '\0') {
-            /* skipping */
-            continue;
-        }
+
         /* Max length of valstr is MAXLEN_CTX_ATTRIBUTE_VALUE */
         if (!X509_NAME_add_entry_by_NID(name, nid, MBSTRING_UTF8, valstr, (int)strlen((char *)valstr), -1, 0)) {
             goto err;
