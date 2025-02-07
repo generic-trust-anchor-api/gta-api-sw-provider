@@ -96,7 +96,7 @@ static char supported_profiles[NUM_PROFILES][MAXLEN_PROFILE] = {
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = "com.github.generic-trust-anchor-api.basic.tls",
 };
 
-static bool profile_creation[NUM_PROFILES] = {
+static bool profile_creation_supported[NUM_PROFILES] = {
     [PROF_INVALID] = false,
     [PROF_CH_IEC_30168_BASIC_PASSCODE] = false,
     [PROF_CH_IEC_30168_BASIC_LOCAL_DATA_INTEGRITY_ONLY] = false, // ToDo: to be changed to true after implementation
@@ -572,6 +572,14 @@ static void pers_attr_enumerate(gta_instance_handle_t h_inst, gta_personality_na
     }
 }
 
+
+char* get_personality_name(int i) {
+    static char perso_name[100];
+
+    sprintf(perso_name, "pers_test_%d", i);
+    return perso_name;
+}
+
 /*-----------------------------------------------------------------------------
  * individual test functions
  */
@@ -580,7 +588,6 @@ static void profile_spec_create(void ** state)
     DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
     struct test_params_t * test_params = (struct test_params_t *)(*state);
     gta_errinfo_t errinfo = 0;
-    char perso_name[100];
 
     gta_access_policy_handle_t h_auth_use = GTA_HANDLE_INVALID;
     gta_access_policy_handle_t h_auth_admin = GTA_HANDLE_INVALID;
@@ -589,16 +596,15 @@ static void profile_spec_create(void ** state)
     h_auth_use = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_BASIC_TOKEN, &errinfo);
     assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
 
-    for (int i = 0; i < NUM_PROFILES; ++i)
+    for (int profile_index = 0; profile_index < NUM_PROFILES; ++profile_index)
     {
-        sprintf(perso_name, "pers_test_%d", i);
-        if (profile_creation[i])
+        if (profile_creation_supported[profile_index])
         {
             assert_true(gta_personality_create(test_params->h_inst,
                                                IDENTIFIER1_VALUE,
-                                               perso_name,
+                                               get_personality_name(profile_index),
                                                "provider_test",
-                                               supported_profiles[i],
+                                               supported_profiles[profile_index],
                                                h_auth_use,
                                                h_auth_admin,
                                                protection_properties,
@@ -608,9 +614,9 @@ static void profile_spec_create(void ** state)
         {
             assert_false(gta_personality_create(test_params->h_inst,
                                                IDENTIFIER1_VALUE,
-                                               perso_name,
+                                                get_personality_name(profile_index),
                                                "provider_test",
-                                               supported_profiles[i],
+                                               supported_profiles[profile_index],
                                                h_auth_use,
                                                h_auth_admin,
                                                protection_properties,
