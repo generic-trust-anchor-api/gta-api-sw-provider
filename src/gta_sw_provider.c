@@ -393,7 +393,7 @@ X509_NAME * parse_rdn(const char * subject_rdn)
         }
 
         /* Max length of valstr is MAXLEN_CTX_ATTRIBUTE_VALUE */
-        if (!X509_NAME_add_entry_by_NID(name, nid, MBSTRING_UTF8, valstr, (int)strlen((char *)valstr), -1, 0)) {
+        if (!X509_NAME_add_entry_by_NID(name, nid, MBSTRING_UTF8, valstr, (int)strnlen((char *)valstr, MAXLEN_CTX_ATTRIBUTE_VALUE), -1, 0)) {
             goto err;
         }
     }
