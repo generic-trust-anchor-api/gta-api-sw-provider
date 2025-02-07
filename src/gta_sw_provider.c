@@ -367,13 +367,12 @@ X509_NAME * parse_rdn(const char * subject_rdn)
 
         /* Collect the value. */
         valstr = (unsigned char *)bp;
-        for (; *subject_rdn != '\0' && *subject_rdn != ','; *bp++ = *subject_rdn++) {
-        //while (*subject_rdn != '\0' && *subject_rdn != ',') {
+        while (*subject_rdn != '\0' && *subject_rdn != ',') {
             if ((*subject_rdn == '\\') && (*(++subject_rdn) == '\0')) {
                 /* parsing error */
                 goto err;
             }
-            //*bp++ = *subject_rdn++;
+            *bp++ = *subject_rdn++;
         }
         *bp++ = '\0';
 
