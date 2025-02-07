@@ -50,7 +50,7 @@ this namespace may be modified and improved.
 | :x: (WIP) | [ch.iec.30168.basic.passcode](doc/profile_ch.iec.30168.basic.passcode.md) | Simple authentication method for personality derived access tokens |
 | :white_check_mark: | [com.github.generic-trust-anchor-api.basic.dilithium](doc/profile_com.github.generic-trust-anchor-api.basic.dilithium.md) | Creation of a Dilithium based personality |
 | :white_check_mark:| [com.github.generic-trust-anchor-api.basic.ec](doc/profile_com.github.generic-trust-anchor-api.basic.ec.md) | Creation of an Elliptic Curve based personality |
-| :x: (WIP)| [com.github.generic-trust-anchor-api.basic.enroll](doc/profile_com.github.generic-trust-anchor-api.basic.enroll.md) | Creation of a Certificate Signing Request (CSR) |
+| :white_check_mark: | [com.github.generic-trust-anchor-api.basic.enroll](doc/profile_com.github.generic-trust-anchor-api.basic.enroll.md) | Creation of a Certificate Signing Request (CSR) |
 | :white_check_mark:| [com.github.generic-trust-anchor-api.basic.jwt](doc/profile_com.github.generic-trust-anchor-api.basic.jwt.md) | Creation of signed JWT |
 | :white_check_mark:| [com.github.generic-trust-anchor-api.basic.rsa](doc/profile_com.github.generic-trust-anchor-api.basic.rsa.md) | Creation of a RSA based personality |
 | :white_check_mark:| [com.github.generic-trust-anchor-api.basic.tls](doc/profile_com.github.generic-trust-anchor-api.basic.tls.md) | Signature creation for authentication during TLS handshake |
