@@ -341,14 +341,10 @@ X509_NAME * parse_rdn(const char * subject_rdn)
     char * work = NULL;
     X509_NAME * name = NULL;
 
-    work = OPENSSL_strdup(subject_rdn);
-    if (work == NULL) {
-        return NULL;
-    }
-
     name = X509_NAME_new();
-    if (name == NULL) {
-        return NULL;
+    work = OPENSSL_strdup(subject_rdn);
+    if ((work == NULL) || (name == NULL)) {
+        goto err;
     }
 
     while (*subject_rdn != '\0') {
@@ -371,12 +367,12 @@ X509_NAME * parse_rdn(const char * subject_rdn)
 
         /* Collect the value. */
         valstr = (unsigned char *)bp;
-        for (; *subject_rdn != '\0' && *subject_rdn != ','; *bp++ = *subject_rdn++) {
-            if (*subject_rdn == '\\' && *(subject_rdn + 1) == '\0') {
+        while (*subject_rdn != '\0' && *subject_rdn != ',') {
+            if ((*subject_rdn == '\\') && (*(++subject_rdn) == '\0')) {
                 /* parsing error */
                 goto err;
             }
-            ++subject_rdn;
+            *bp++ = *subject_rdn++;
         }
         *bp++ = '\0';
 
