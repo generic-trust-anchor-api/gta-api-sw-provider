@@ -3,80 +3,12 @@
  * Copyright (c) 2024-2025, Siemens AG
  **********************************************************************/
 
-#include <stdlib.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <string.h>
-#include <openssl/evp.h>
-#include <openssl/pkcs12.h>
-#include <openssl/kdf.h>
-#include <openssl/err.h>
-#include <openssl/pem.h>
-#include <openssl/core_names.h>
-#include <openssl/rand.h>
-#include <openssl/hmac.h>
-#include <openssl/asn1t.h>
-#include <openssl/asn1.h>
-#include <openssl/bio.h>
-#include <openssl/types.h>
-#include <openssl/x509.h>
-
-#include <gta_api/gta_api.h>
-#include <gta_api/util/gta_list.h>
-
-#include "gta_debug.h"
-#include "provider_data_model.h"
+#include "gta_sw_provider.h"
 #include "persistent_storage.h"
 
 #ifdef WINDOWS
 #include <openssl\applink.c>
 #endif /* WINDOWS */
-
-#ifdef ENABLE_PQC
-#include <oqs/oqs.h>
-
-/* TODO this has to be reworked, naming of varaible is confusing */
-typedef struct EncryptionAlgorithm_st {
-      ASN1_OBJECT* algorithm;
-} EncryptionAlgorithm;
-DECLARE_ASN1_FUNCTIONS(EncryptionAlgorithm)
-
-typedef struct PublicKeyInfo_st {
-    EncryptionAlgorithm* encryptionAlgorithm;
-    ASN1_BIT_STRING *public_key_data;
-} PublicKeyInfo;
-DECLARE_ASN1_FUNCTIONS(PublicKeyInfo)
-
-ASN1_SEQUENCE(EncryptionAlgorithm) = {
-    ASN1_SIMPLE(EncryptionAlgorithm, algorithm, ASN1_OBJECT),
-} ASN1_SEQUENCE_END(EncryptionAlgorithm)
-
-IMPLEMENT_ASN1_FUNCTIONS(EncryptionAlgorithm)
-
-ASN1_SEQUENCE(PublicKeyInfo) = {
-    ASN1_SIMPLE(PublicKeyInfo, encryptionAlgorithm, EncryptionAlgorithm),
-    ASN1_SIMPLE(PublicKeyInfo, public_key_data, ASN1_BIT_STRING),
-} ASN1_SEQUENCE_END(PublicKeyInfo)
-
-IMPLEMENT_ASN1_FUNCTIONS(PublicKeyInfo)
-
-#define OQS_SIGN_ALGORITHM OQS_SIG_alg_dilithium_2
-#define OQS_ALG_ID_DILITHIUM_2 "1.3.6.1.4.1.2.267.7.4.4"
-#define OQS_ALG_ID_DILITHIUM_3 "1.3.6.1.4.1.2.267.7.6.5"
-#define OQS_ALG_ID_DEFAULT OQS_ALG_ID_DILITHIUM_2
-#endif
-
-/* Implementation specific boundary of profile name length */
-#define MAXLEN_PROFILE 160
-#define PERSONALITY_NAME_LENGTH_MAX 1024
-#define CHUNK_LEN 512
-#define SERIALIZE_PATH_LEN_MAX 200
-
-/* Define for profile ch.iec.30168.basic.local_data_protection */
-#define LOCAL_DATA_PROTECTION_SECRET_LEN 32
-#define LOCAL_DATA_PROTECTION_KEY_DERIVATION_LEN 32
-#define LOCAL_DATA_PROTECTION_IV_LEN 12
-#define LOCAL_DATA_PROTECTION_TAG_LEN 16
 
 /* TODO: The following conversion functions have some issues and need
  * improvement in future releases. Due to definitions in the ISO/IEC 30168
@@ -93,20 +25,44 @@ IMPLEMENT_ASN1_FUNCTIONS(PublicKeyInfo)
 
 static const struct gta_function_list_t g_my_function_list;
 
-/* provider instance global data */
-struct gta_sw_provider_params_t {
+const struct profile_function_list_t fl_null = {
+    NULL
+};
 
-    gta_context_handle_t h_ctx;
+extern const struct profile_function_list_t fl_prof_ch_iec_30168_basic_passcode;
+extern const struct profile_function_list_t fl_prof_ch_iec_30168_basic_local_data_integrity_only;
+extern const struct profile_function_list_t fl_prof_ch_iec_30168_basic_local_data_protection;
+extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_rsa;
+extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_ec;
+#ifdef ENABLE_PQC
+extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_dilithium;
+#endif
+extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_jwt;
+extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_tls;
 
-    /* This is the entry pointer to the device stack */
-    /* The runtime device stack is initialized or de-serialized during provider init */
-    struct devicestate_stack_item_t * p_devicestate_stack;
+struct profile_list_t {
+    const char name[MAXLEN_PROFILE];
+    const struct profile_function_list_t * pFunction;
+};
 
-    /* This struct stores a list of tokens associated with with this instance */
-    struct provider_instance_auth_token_t * p_auth_token_list;
-
-    /* Path used for Serialization files */
-    char p_serializ_path[SERIALIZE_PATH_LEN_MAX + 2];
+/* Supported profiles */
+#ifdef ENABLE_PQC
+#define NUM_PROFILES 9
+#else
+#define NUM_PROFILES 8
+#endif
+static struct profile_list_t supported_profiles[NUM_PROFILES] = {
+    [PROF_INVALID] = {"INVALID", &fl_null},
+    [PROF_CH_IEC_30168_BASIC_PASSCODE] = {"ch.iec.30168.basic.passcode", &fl_prof_ch_iec_30168_basic_passcode},
+    [PROF_CH_IEC_30168_BASIC_LOCAL_DATA_INTEGRITY_ONLY] = {"ch.iec.30168.basic.local_integrity_only", &fl_prof_ch_iec_30168_basic_local_data_integrity_only},
+    [PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION] = {"ch.iec.30168.basic.local_data_protection", &fl_prof_ch_iec_30168_basic_local_data_protection},
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA] = {"com.github.generic-trust-anchor-api.basic.rsa", &fl_prof_com_github_generic_trust_anchor_api_basic_rsa},
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC] = {"com.github.generic-trust-anchor-api.basic.ec", &fl_prof_com_github_generic_trust_anchor_api_basic_ec},
+#ifdef ENABLE_PQC
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM] = {"com.github.generic-trust-anchor-api.basic.dilithium", &fl_prof_com_github_generic_trust_anchor_api_basic_dilithium},
+#endif
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT] = {"com.github.generic-trust-anchor-api.basic.jwt", &fl_prof_com_github_generic_trust_anchor_api_basic_jwt},
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = {"com.github.generic-trust-anchor-api.basic.tls", &fl_prof_com_github_generic_trust_anchor_api_basic_tls},
 };
 
 struct provider_instance_auth_token_t {
@@ -139,31 +95,6 @@ struct provider_instance_auth_token_t {
 };
 
 
-/* Supported profiles */
-enum profile_t {
-    PROF_INVALID = 0,
-    PROF_CH_IEC_30168_BASIC_PASSCODE,
-    PROF_CH_IEC_30168_BASIC_LOCAL_DATA_INTEGRITY_ONLY,
-    PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION,
-    PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA,
-    PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC,
-    PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM,
-    PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT,
-    PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS,
-};
-#define NUM_PROFILES 9
-static char supported_profiles[NUM_PROFILES][MAXLEN_PROFILE] = {
-    [PROF_INVALID] = "INVALID",
-    [PROF_CH_IEC_30168_BASIC_PASSCODE] = "ch.iec.30168.basic.passcode",
-    [PROF_CH_IEC_30168_BASIC_LOCAL_DATA_INTEGRITY_ONLY] = "ch.iec.30168.basic.local_data_integrity_only",
-    [PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION] = "ch.iec.30168.basic.local_data_protection",
-    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA] = "com.github.generic-trust-anchor-api.basic.rsa",
-    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC] = "com.github.generic-trust-anchor-api.basic.ec",
-    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM] = "com.github.generic-trust-anchor-api.basic.dilithium",
-    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT] = "com.github.generic-trust-anchor-api.basic.jwt",
-    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = "com.github.generic-trust-anchor-api.basic.tls",
-};
-
 /*
  * Helper function to get enum value of a profile string. In case the string is
  * not found, 0 (PROF_INVALID) is returned.
@@ -171,41 +102,13 @@ static char supported_profiles[NUM_PROFILES][MAXLEN_PROFILE] = {
 static enum profile_t get_profile_enum(const char * profile)
 {
     for (uint32_t i=0; i < NUM_PROFILES; ++i) {
-        if (0 == strcmp(profile, supported_profiles[i])) {
+        if (0 == strcmp(profile, supported_profiles[i].name)) {
             return i;
         }
     }
     return PROF_INVALID;
 }
 
-/* provider local context specific data */
-struct gta_sw_provider_context_params_t {
-    struct personality_name_list_item_t * p_personality_item;
-    gta_access_token_t access_token;
-    enum profile_t profile;
-
-};
-
-/*
- * Personality Attribute Types
- * Todo: The list only needs to contain personality attribute types which are
- * defined by at least one profile supported by the provider. As a starting
- * point, some types from TS 30168 are listed here.
- *
- * Note: Changing the order / numbering of the existing entries breaks the
- * compatibility with previously serialized personalities.
- */
-enum pers_attr_type_t {
-    PAT_INVALID = 0,
-    PAT_CH_IEC_30168_IDENTIFIER,
-    PAT_CH_IEC_30168_FINGERPRINT,
-    PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509,
-    PAT_CH_IEC_30168_TRUSTLIST_CRL_X509V3,
-    PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3,
-    PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_AUXILIARY_X509,
-    PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_LIST_RFC8446,
-    PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL,
-};
 #define NUM_PERSONALITY_ATTRIBUTE_TYPE 9
 static char pers_attr_type_strings[NUM_PERSONALITY_ATTRIBUTE_TYPE][MAXLEN_PERSONALITY_ATTRIBUTE_TYPE] = {
     [PAT_INVALID] = "INVALID",
@@ -226,18 +129,31 @@ static bool pers_attr_type_trusted[NUM_PERSONALITY_ATTRIBUTE_TYPE] = {
     [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509] = false,
     [PAT_CH_IEC_30168_TRUSTLIST_CRL_X509V3] = false,
     [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3] = true,
-    // TODO: check the implications of: "are only trusted if additional evidence is provided"
-    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_AUXILIARY_X509] = true,
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_AUXILIARY_X509] = false,
     [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_LIST_RFC8446] = false,
     [PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL] = true, /* it is an internal attribute, anyway not allowed to be changed */
+};
+
+/*
+ * This table defines which personality attribute types are not allowed
+ * (restricted) to be added, deactivated and deleted by the respective GTA API
+ * functions.
+ */
+static bool pers_attr_type_restricted[NUM_PERSONALITY_ATTRIBUTE_TYPE] = {
+    [PAT_INVALID] = false,
+    [PAT_CH_IEC_30168_IDENTIFIER] = true,
+    [PAT_CH_IEC_30168_FINGERPRINT] = true,
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509] = false,
+    [PAT_CH_IEC_30168_TRUSTLIST_CRL_X509V3] = false,
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3] = false,
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_AUXILIARY_X509] = false,
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_LIST_RFC8446] = false,
+    [PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL] = true,
 };
 
 /* attribute related defines */
 #define PERS_ATTR_NAME_IDENTIFIER       "ch.iec.30168.identifier_value"
 #define PERS_ATTR_NAME_FINGERPRINT      "ch.iec.30168.fingerprint"
-#define PERS_ATTR_NAME_KEYTYPE          "com.github.generic-trust-anchor-api.keytype.openssl"
-#define PERS_ATTR_KEYTYPE_EC            "EC"
-#define PERS_ATTR_KEYTYPE_DILITHIUM2    "dilithium2"
 
 /*
  * Helper function to get enum value of personality attribute type string. In
@@ -735,34 +651,6 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_context_set_attribute,
 }
 
 
-/*
- * Helper function, returning the number of bits of a private key.
- * It is intended to be used in order to check if the properties
- * of a personality matches the expectations of a profile.
- */
-static int pkey_bits(const EVP_PKEY *evp_private_key) {
-    return EVP_PKEY_bits(evp_private_key);
-}
-
-
-/*
- * Helper function, returning the OpenSSL curve NID of an EC private key.
- * It is intended to be used in order to check if the properties
- * of a personality matches the expectations of a profile.
- * Returns 0 in case of error.
- */
-
-static int pkey_ec_name(const EVP_PKEY *evp_private_key) {
-    const EC_KEY *ec_key = EVP_PKEY_get0_EC_KEY(evp_private_key);
-    if (NULL == ec_key) {
-        return 0;
-    }
-    const EC_GROUP *ec_group = EC_KEY_get0_group(ec_key);
-
-    return EC_GROUP_get_curve_name(ec_group);
-}
-
-
 GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_provider_context_open,
 (
     gta_context_handle_t h_ctx,
@@ -778,9 +666,6 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_provider_context_open,
     struct gta_sw_provider_context_params_t * p_context_params = NULL;
     struct devicestate_stack_item_t * p_devicestate_stack_item = NULL;
     struct personality_name_list_item_t * p_personality_item = NULL;
-
-    struct personality_t * p_personality_content = NULL;
-    EVP_PKEY *evp_private_key = NULL;
 
     p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
     if (!check_provider_params(p_provider_params, p_errinfo)) {
@@ -815,91 +700,22 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_provider_context_open,
         *p_errinfo = GTA_ERROR_MEMORY;
         goto err;
     }
+    p_context_params->h_ctx = h_ctx;
     p_context_params->p_personality_item = p_personality_item;
 
     p_context_params->profile = get_profile_enum(profile);
 
-    /* check whether provider and personality support requested profile */
-    if (PROF_CH_IEC_30168_BASIC_PASSCODE == p_context_params->profile) {
-        ret = true;
-    } else if (PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT == p_context_params->profile) {
-
-        if (SECRET_TYPE_DER != p_personality_item->p_personality_content->secret_type)
-        {
-            DEBUG_PRINT(("gta_sw_provider_gta_context_open: Personality type not as expected\n"));
-            *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
-            goto err;
-        }
-        /* further checks required by profile: such as algorithms and minimum key length */
-
-        /* get the Private Key from the Personality */
-        p_personality_content = p_context_params->p_personality_item->p_personality_content;
-        unsigned char * p_secret_buffer  = p_personality_content->secret_data;
-        /* Range check on p_personality_content->content_data_size */
-        if (p_personality_content->secret_data_size > LONG_MAX) {
-            goto err;
-        }
-        evp_private_key = d2i_AutoPrivateKey(NULL,
-                                             (const unsigned char **) &p_secret_buffer,
-                                             (long)p_personality_content->secret_data_size);
-        /* clear pointer */
-        p_secret_buffer = NULL;
-        if (!evp_private_key)
-        {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        int key_id = EVP_PKEY_base_id(evp_private_key);
-
-        if ((EVP_PKEY_RSA == key_id) && (2048 <= pkey_bits(evp_private_key))) {
-            ret = true;
-        } else if ((EVP_PKEY_EC == key_id) && (NID_X9_62_prime256v1 == pkey_ec_name(evp_private_key))) {
-            ret = true;
-        } else {
-            DEBUG_PRINT(("gta_sw_provider_gta_context_open: Profile requirements not fulfilled \n"));
-            *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
-            goto err;
-        }
-
-    } else if (PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) {
-        if (SECRET_TYPE_DER == p_personality_item->p_personality_content->secret_type)
-        {
-            /* here add further checks if required by profile: such as algorithms and minimum key length */
-            ret = true;
-        }
-#ifdef ENABLE_PQC
-        else if (SECRET_TYPE_DILITHIUM2 == p_personality_item->p_personality_content->secret_type) {
-            /* here add further checks if required by profile: such as algorithms and minimum key length */
-            ret = true;
-        }
-#endif
-        else {
-            DEBUG_PRINT(("gta_sw_provider_gta_context_open: Personality type not as expected\n"));
-            *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
-            goto err;
-        }
-    } else if (PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION == p_context_params->profile) {
-        if (SECRET_TYPE_RAW_BYTES != p_personality_item->p_personality_content->secret_type)
-        {
-            DEBUG_PRINT(("gta_sw_provider_gta_context_open: Personality type not as expected\n"));
-            *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
-            goto err;
-        }
-        /* Check secret length */
-        if (LOCAL_DATA_PROTECTION_SECRET_LEN != p_personality_item->p_personality_content->secret_data_size) {
-            DEBUG_PRINT(("gta_sw_provider_gta_context_open: Profile requirements not fulfilled \n"));
-            *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
-            goto err;
-        }
-        ret = true;
-
-    } else {
+    /* check whether function is supported by profile */
+    if (NULL == supported_profiles[p_context_params->profile].pFunction->context_open) {
         DEBUG_PRINT(("gta_sw_provider_gta_context_open: Profile not supported\n"));
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
         goto err;
     }
 
+    /* call profile specific implementation */
+    if (!supported_profiles[p_context_params->profile].pFunction->context_open(p_context_params, p_errinfo)) {
+        goto err;
+    }
 
 #if 0 /* internal test */
     if (gta_context_get_params(h_ctx, p_errinfo) != p_context_params)
@@ -910,22 +726,12 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_provider_context_open,
     }
 #endif
 
-    if (NULL != evp_private_key) {
-        EVP_PKEY_free(evp_private_key);
-        evp_private_key = NULL;
-    }
-
-    return ret;
+    return true;
 
 err:
     if (NULL != p_context_params) {
         gta_secmem_free(h_ctx, p_context_params, p_errinfo);
         p_context_params = NULL;
-    }
-
-    if (NULL != evp_private_key) {
-        EVP_PKEY_free(evp_private_key);
-        evp_private_key = NULL;
     }
 
     return ret;
@@ -936,11 +742,13 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_provider_context_close,
 (
     gta_context_handle_t h_ctx,
     gta_errinfo_t * p_errinfo
-    ))
+))
 {
-    bool ret = true;
-
-    return ret;
+    /*
+     * Memory allocated with gta_secmem will be automatically freed. There
+     * is currently nothing else to do.
+     */
+    return true;
 }
 
 
@@ -1367,12 +1175,13 @@ err:
  */
 bool add_personality_attribute_list_item(
     struct gta_sw_provider_params_t * p_provider_params,
-    struct personality_name_list_item_t * p_personality_name_list_item,
+    struct personality_attribute_t ** p_pers_attribute_list,
     const enum pers_attr_type_t attrtype,
     const unsigned char * attrname,
     const size_t attrname_len,
     const unsigned char * attrval,
     const size_t attrval_len,
+    const bool b_trusted,
     gta_errinfo_t * p_errinfo
     )
 {
@@ -1389,6 +1198,7 @@ bool add_personality_attribute_list_item(
     p_personality_attribute->p_next = NULL;
     p_personality_attribute->type = attrtype;
     p_personality_attribute->activated = true;
+    p_personality_attribute->trusted = b_trusted;
 
     /* allocate memory for attribute value (and additional null-terminator) */
     p_personality_attribute->data_size = attrval_len;
@@ -1411,9 +1221,7 @@ bool add_personality_attribute_list_item(
     p_personality_attribute->p_name[attrname_len] = '\0';
 
     /* add the attribute */
-    list_append_front(
-            (struct list_t **)(&(p_personality_name_list_item->p_personality_content->p_attribute_list)),
-            p_personality_attribute);
+    list_append_front((struct list_t **)(p_pers_attribute_list),p_personality_attribute);
 
     return true;
 err:
@@ -1690,18 +1498,18 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_deploy,
 
     /* add default attributes to personality */
     if (!add_personality_attribute_list_item(p_provider_params,
-        p_personality_name_list_item, PAT_CH_IEC_30168_IDENTIFIER,
+        &p_personality_name_list_item->p_personality_content->p_attribute_list, PAT_CH_IEC_30168_IDENTIFIER,
         (unsigned char *)PERS_ATTR_NAME_IDENTIFIER, sizeof(PERS_ATTR_NAME_IDENTIFIER),
         (unsigned char *)identifier_value, strnlen(identifier_value, IDENTIFIER_VALUE_MAXLEN),
-        p_errinfo)) {
+        true, p_errinfo)) {
 
         goto err;
     }
     if (!add_personality_attribute_list_item(p_provider_params,
-        p_personality_name_list_item, PAT_CH_IEC_30168_FINGERPRINT,
+        &p_personality_name_list_item->p_personality_content->p_attribute_list, PAT_CH_IEC_30168_FINGERPRINT,
         (unsigned char *)PERS_ATTR_NAME_FINGERPRINT, sizeof(PERS_ATTR_NAME_FINGERPRINT),
         (unsigned char *)personality_fingerprint, sizeof(personality_fingerprint),
-        p_errinfo)) {
+        true, p_errinfo)) {
 
         goto err;
     }
@@ -1764,14 +1572,10 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_create,
     size_t application_name_length = 0;
     gta_personality_fingerprint_t personality_fingerprint = { 0 };
     gta_errinfo_t errinfo_tmp = GTA_ERROR_INTERNAL_ERROR;
+    struct personality_attribute_t * p_pers_specific_attributes = NULL;
 
-    EVP_PKEY *p_key = NULL;
     unsigned char * p_secret_buffer = NULL;
     long len = 0;
-
-#ifdef ENABLE_PQC
-    OQS_SIG *signer = NULL;
-#endif
 
     p_provider_params = gta_provider_get_params(h_inst, p_errinfo);
     if (!check_provider_params(p_provider_params, p_errinfo)) {
@@ -1809,73 +1613,20 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_create,
      *   OPENSSL_clear_free.
      * - long len with the length of the data in p_secret_buffer
      * - gta_personality_fingerprint_t personality_fingerprint
+     * - p_pers_specific_attributes optional list of profile specific
+     *   personality attributes
      */
     enum profile_t prof = get_profile_enum(profile);
-    if (PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA == prof) {
-        p_key = EVP_RSA_gen(2048);
-        len = i2d_PrivateKey(p_key, &p_secret_buffer);
-        EVP_PKEY_free(p_key);
-        personality_secret_type = SECRET_TYPE_DER;
-        /* Calculate personality fingerprint */
-        SHA512(p_secret_buffer, (size_t)len, (unsigned char *)personality_fingerprint);
-    }
-    else if (PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC == prof) {
-        p_key = EVP_EC_gen("P-256");
-        len = i2d_PrivateKey(p_key, &p_secret_buffer);
-        EVP_PKEY_free(p_key);
-        personality_secret_type = SECRET_TYPE_DER;
-        /* Calculate personality fingerprint */
-        SHA512(p_secret_buffer, (size_t)len, (unsigned char *)personality_fingerprint);
-    }
-    else if (PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION == prof) {
-        len = LOCAL_DATA_PROTECTION_SECRET_LEN;
-        p_secret_buffer = OPENSSL_zalloc(len);
-        if ((NULL == p_secret_buffer) || (1 != RAND_bytes(p_secret_buffer, (int)len))) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        personality_secret_type = SECRET_TYPE_RAW_BYTES;
-        /* Calculate personality fingerprint */
-        SHA512(p_secret_buffer, (size_t)len, (unsigned char *)personality_fingerprint);
-    }
-#ifdef ENABLE_PQC
-    else if (PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM == prof) {
-        OQS_STATUS rc;
 
-        OQS_init();
-
-        signer = OQS_SIG_new(OQS_SIGN_ALGORITHM);
-
-        if (signer == NULL) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        /*
-         * SECRET_TYPE_DILITHIUM2 is a concatenation of the private key and
-         * the public key.
-         */
-        len = signer->length_secret_key + signer->length_public_key;
-        p_secret_buffer = OPENSSL_zalloc(len);
-        if (NULL == p_secret_buffer) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        rc = OQS_SIG_keypair(signer, (p_secret_buffer + signer->length_secret_key), p_secret_buffer);
-        if (rc != OQS_SUCCESS) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        OQS_SIG_free(signer);
-
-        personality_secret_type = SECRET_TYPE_DILITHIUM2;
-        /* Calculate personality fingerprint */
-        SHA512(p_secret_buffer, (size_t)len, (unsigned char *)personality_fingerprint);
-    }
-#endif
-    else {
+    /* check whether function is supported by profile */
+    if (NULL == supported_profiles[prof].pFunction->personality_create) {
+        DEBUG_PRINT(("gta_sw_provider_gta_personality_create: Profile not supported\n"));
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        goto err;
+    }
+
+    /* call profile specific implementation */
+    if (!supported_profiles[prof].pFunction->personality_create(p_provider_params, &personality_secret_type, &p_secret_buffer, &len, personality_fingerprint, &p_pers_specific_attributes, p_errinfo)) {
         goto err;
     }
 
@@ -1990,45 +1741,42 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_create,
 
     /* add default attributes to personality */
     if (!add_personality_attribute_list_item(p_provider_params,
-        p_personality_name_list_item, PAT_CH_IEC_30168_IDENTIFIER,
+        &p_personality_name_list_item->p_personality_content->p_attribute_list, PAT_CH_IEC_30168_IDENTIFIER,
         (unsigned char *)PERS_ATTR_NAME_IDENTIFIER, sizeof(PERS_ATTR_NAME_IDENTIFIER),
         (unsigned char *)identifier_value, strnlen(identifier_value, IDENTIFIER_VALUE_MAXLEN),
-        p_errinfo)) {
+        true, p_errinfo)) {
 
         goto err;
     }
     if (!add_personality_attribute_list_item(p_provider_params,
-        p_personality_name_list_item, PAT_CH_IEC_30168_FINGERPRINT,
+        &p_personality_name_list_item->p_personality_content->p_attribute_list, PAT_CH_IEC_30168_FINGERPRINT,
         (unsigned char *)PERS_ATTR_NAME_FINGERPRINT, sizeof(PERS_ATTR_NAME_FINGERPRINT),
         (unsigned char *)personality_fingerprint, sizeof(personality_fingerprint),
-        p_errinfo)) {
+        true, p_errinfo)) {
 
         goto err;
     }
 
-    /* Add additional / profile dependent attributes */
-    if (PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC == prof) {
-        if (!add_personality_attribute_list_item(p_provider_params,
-            p_personality_name_list_item, PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL,
-            (unsigned char *)PERS_ATTR_NAME_KEYTYPE, sizeof(PERS_ATTR_NAME_KEYTYPE),
-            (unsigned char *)PERS_ATTR_KEYTYPE_EC, sizeof(PERS_ATTR_KEYTYPE_EC),
-            p_errinfo)) {
-
-            goto err;
+    /*
+     * Add additional / profile dependent attributes. We do the "append front"
+     * manually, as p_pers_specific_attributes can be a list with multiple
+     * elements
+     */
+    if (p_pers_specific_attributes != NULL) {
+        /* Go to the last element of p_pers_specific_attributes */
+        struct personality_attribute_t * p_attr = p_pers_specific_attributes;
+        while (p_attr->p_next != NULL) {
+            p_attr = p_attr->p_next;
         }
-    }
-#ifdef ENABLE_PQC
-    else if (PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM == prof) {
-        if (!add_personality_attribute_list_item(p_provider_params,
-            p_personality_name_list_item, PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL,
-            (unsigned char *)PERS_ATTR_NAME_KEYTYPE, sizeof(PERS_ATTR_NAME_KEYTYPE),
-            (unsigned char *)PERS_ATTR_KEYTYPE_DILITHIUM2, sizeof(PERS_ATTR_KEYTYPE_DILITHIUM2),
-            p_errinfo)) {
+        /*
+         * Change the p_next of the last p_pers_specific_attributes to first
+         * element of existing list
+         */
+        p_attr->p_next = p_personality_name_list_item->p_personality_content->p_attribute_list;
 
-            goto err;
-        }
+        /* p_pers_specific_attributes is new start of the whole list */
+        p_personality_name_list_item->p_personality_content->p_attribute_list = p_pers_specific_attributes;
     }
-#endif
 
     /* add the personality */
     list_append_front(
@@ -2045,12 +1793,6 @@ err:
         p_secret_buffer = NULL;
     }
 
-#ifdef ENABLE_PQC
-    if (NULL != signer) {
-        OQS_SIG_free(signer);
-    }
-#endif
-
     /* cleanup personality */
     personality_name_list_item_free(p_provider_params->h_ctx, p_personality_name_list_item, &errinfo_tmp);
     return false;
@@ -2063,189 +1805,22 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_enroll,
     gta_errinfo_t * p_errinfo
     ))
 {
-    bool ret = false;
-    BIO* bio = NULL;
-    long len = 0;
-    char* pem_data = NULL;
-    EVP_PKEY *p_key = NULL;
-#ifdef ENABLE_PQC
-    OQS_SIG *signer = NULL;
-    char *base64EncodedKey = NULL;
-    PublicKeyInfo *pub_key = NULL;
-    unsigned char *publicKeyInfoString = NULL;
-    BIO *bio_sink = NULL;
-    BIO *bio_base64_converter = NULL;
-    FILE* stream = NULL;
-    gta_errinfo_t errinfo_tmp = GTA_ERROR_INTERNAL_ERROR;
-#endif
-
     struct gta_sw_provider_context_params_t * p_context_params = NULL;
-    struct personality_t * p_personality_content = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
     if (NULL == p_context_params) {
-        goto err;
+        return false;
     }
 
-    if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT == p_context_params->profile)
-        || (PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile)) {
-        /* get personality of the context */
-        p_personality_content = p_context_params->p_personality_item->p_personality_content;
-
-        if (SECRET_TYPE_DER == p_personality_content->secret_type) {
-            /* range check on p_personality_content->content_data_size */
-            if (p_personality_content->secret_data_size > LONG_MAX) {
-                goto err;
-            }
-            /* get the key from the personality */
-            unsigned char * p_secret_buffer  = p_personality_content->secret_data;
-            p_key = d2i_AutoPrivateKey(NULL,
-                (const unsigned char **) &p_secret_buffer,
-                (long)p_personality_content->secret_data_size);
-
-            p_secret_buffer = NULL;
-            if (!p_key) {
-                goto err;
-            }
-            /* get public key in PEM */
-            bio = BIO_new(BIO_s_mem());
-            PEM_write_bio_PUBKEY(bio, p_key);
-            len = BIO_get_mem_data(bio, &pem_data);
-        }
-#ifdef ENABLE_PQC
-        else if (SECRET_TYPE_DILITHIUM2 == p_personality_content->secret_type) {
-            OQS_init();
-            signer = OQS_SIG_new(OQS_SIGN_ALGORITHM);
-
-            pub_key = PublicKeyInfo_new();
-            if (NULL == pub_key) {
-                *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-                goto err;
-            }
-
-            /* Step 1: Create ASN.1 data structures containing the key */
-            /*
-            enc_alg = EncryptionAlgorithm_new();
-            if (NULL == enc_alg) {
-                *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-                goto err;
-            }
-            */
-            pub_key->encryptionAlgorithm->algorithm = OBJ_txt2obj(OQS_ALG_ID_DEFAULT, 1);
-            if (NULL == pub_key->encryptionAlgorithm->algorithm) {
-                *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-                goto err;
-            }
-            if (0 == ASN1_BIT_STRING_set(pub_key->public_key_data, (p_personality_content->secret_data + signer->length_secret_key), signer->length_public_key)) {
-                *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-                goto err;
-            }
-            int publicKeyInfoStringLen = i2d_PublicKeyInfo(pub_key, &publicKeyInfoString);
-            /* Step 2: Initialize BIO based base64 converter */
-            /* TODO: double check length calculations */
-            int encodedSize = (4 * ((publicKeyInfoStringLen + 2) / 3)) + 2;
-            base64EncodedKey = gta_secmem_calloc(h_ctx, 1, encodedSize, p_errinfo);
-            if (NULL == base64EncodedKey) {
-                *p_errinfo = GTA_ERROR_MEMORY;
-                goto err;
-            }
-            stream = fmemopen(base64EncodedKey, encodedSize, "w");
-            if (NULL == stream) {
-                *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-                goto err;
-            }
-            bio_base64_converter = BIO_new(BIO_f_base64());
-            if (NULL == bio_base64_converter) {
-                *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-                goto err;
-            }
-            bio_sink = BIO_new_fp(stream, BIO_NOCLOSE);
-            if (NULL == bio_sink) {
-                *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-                goto err;
-            }
-            bio_sink = BIO_push(bio_base64_converter, bio_sink);
-            BIO_set_flags(bio_sink, BIO_FLAGS_BASE64_NO_NL);
-
-            /* Step 3: Perform base64 encoding of key data */
-            if (BIO_write(bio_sink, publicKeyInfoString, publicKeyInfoStringLen) <= 0) {
-                *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-                goto err;
-            }
-            if (1 != BIO_flush(bio_sink)) {
-                *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-                goto err;
-            }
-
-            /* Step 4: Add PEM header and footer and write the result to pem_data */
-            char* pub_key_begin = "-----BEGIN PUBLIC KEY-----";
-            char* pub_key_end = "-----END PUBLIC KEY-----";
-
-            /* Note: Size is incremented by 4 as we add 3 '\n' and the 0-termination */
-            size_t pem_size_calculated = strlen(pub_key_begin) + strlen(base64EncodedKey) + strlen(pub_key_end) + 4 ;
-
-            pem_data = OPENSSL_zalloc(pem_size_calculated);
-            if (NULL == pem_data) {
-                *p_errinfo = GTA_ERROR_MEMORY;
-                goto err;
-            }
-            if ((pem_size_calculated-1) != (size_t)snprintf(pem_data, pem_size_calculated,
-                        "%s\n%s\n%s\n", pub_key_begin, base64EncodedKey, pub_key_end)) {
-                *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-                goto err;
-            }
-            len = strlen(pem_data);
-        }
-#endif
-        else {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        /* len always >= 0 */
-        if ((size_t)len != p_personality_enrollment_info->write(p_personality_enrollment_info, pem_data, (size_t)len, p_errinfo)) {
-            goto err;
-        }
-        p_personality_enrollment_info->finish(p_personality_enrollment_info, 0, p_errinfo);
-        ret = true;
-    }
-    else {
+    /* check whether function is supported by profile */
+    if (NULL == supported_profiles[p_context_params->profile].pFunction->personality_enroll) {
+        DEBUG_PRINT(("gta_sw_provider_gta_personality_enroll: Profile not supported\n"));
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        return false;
     }
 
-err:
-    if (NULL != p_key) {
-        EVP_PKEY_free(p_key);
-        p_key = NULL;
-    }
-    if (NULL != bio) {
-        BIO_free_all(bio);
-        pem_data = NULL;
-    }
-
-#ifdef ENABLE_PQC
-    if (NULL != base64EncodedKey) {
-        gta_secmem_free(h_ctx, base64EncodedKey, &errinfo_tmp);
-    }
-    if (NULL != signer) {
-        OQS_SIG_free(signer);
-    }
-    if (NULL != bio_sink) {
-        BIO_free_all(bio_sink);
-    }
-    if (NULL != stream) {
-        fclose(stream);
-    }
-    if (NULL != pub_key) {
-        PublicKeyInfo_free(pub_key); /* Note enc_alg is also freed here */
-    }
-    if (NULL != publicKeyInfoString) {
-        OPENSSL_free(publicKeyInfoString);
-    }
-    if (NULL != pem_data) {
-        OPENSSL_free(pem_data);
-    }
-#endif
-    return ret;
+    /* call profile specific implementation */
+    return supported_profiles[p_context_params->profile].pFunction->personality_enroll(p_context_params, p_personality_enrollment_info, p_errinfo);
 }
 
 
@@ -2338,34 +1913,24 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_activate,
  * and gta_sw_provider_gta_personality_add_attribute
  */
 bool personality_add_attribute(
-    gta_context_handle_t h_ctx,
+    struct gta_sw_provider_context_params_t * p_context_params,
+    struct gta_sw_provider_params_t * p_provider_params,
     const gta_personality_attribute_type_t attrtype,
     const gta_personality_attribute_name_t attrname,
     gtaio_istream_t * p_attrvalue,
+    const bool b_trusted,
     gta_errinfo_t * p_errinfo
     )
 {
-    struct gta_sw_provider_params_t * p_provider_params = NULL;
-    struct gta_sw_provider_context_params_t * p_context_params = NULL;
     unsigned char attrval[MAXLEN_PERSONALITY_ATTRIBUTE_VALUE] = { 0 };
     size_t attrval_len = 0;
     size_t attrname_len = 0;
     bool ret = false;
 
-    p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (NULL == p_context_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
-    }
-    p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
-    if (!check_provider_params(p_provider_params, p_errinfo)) {
-        goto err;
-    }
-
     enum pers_attr_type_t pers_attr_type = get_pers_attr_type_enum(attrtype);
 
-    /* Default attribute types are not allowed */
-    if ((PAT_CH_IEC_30168_FINGERPRINT == pers_attr_type) || (PAT_CH_IEC_30168_IDENTIFIER == pers_attr_type)) {
+    /* Restricted attribute types (default and internal) are not allowed */
+    if (pers_attr_type_restricted[pers_attr_type]) {
         *p_errinfo = GTA_ERROR_INVALID_PARAMETER;
         goto err;
     }
@@ -2378,40 +1943,34 @@ bool personality_add_attribute(
         goto err;
     }
 
-    /* Check whether profile defines support for the requested attribute type */
-    if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) &&
-        ((PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == pers_attr_type) || (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3 == pers_attr_type))) {
-        /* read personality attribute value into buffer */
-        attrval_len = p_attrvalue->read(p_attrvalue, (char *)attrval, MAXLEN_PERSONALITY_ATTRIBUTE_VALUE, p_errinfo);
-        if ((MAXLEN_PERSONALITY_ATTRIBUTE_VALUE <= attrval_len) || (0 == attrval_len)) {
-            /* attribute too long */
-            *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
-            goto err;
-        }
-        /* basic input validation for attrname */
-        attrname_len = strnlen(attrname, MAXLEN_PERSONALITY_ATTRIBUTE_NAME);
-        if ((MAXLEN_PERSONALITY_ATTRIBUTE_NAME <= attrname_len) || (0 == attrname_len)) {
-            /* attribute name too long */
-            *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
-            goto err;
-        }
-        /* add attribute to personality specific attribute list */
-        if (add_personality_attribute_list_item(p_provider_params,
-            p_context_params->p_personality_item, pers_attr_type,
-            (unsigned char *)attrname, attrname_len, attrval, attrval_len,
-            p_errinfo)) {
-
-            /* Serialize the new device state */
-            if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
-                *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-                goto err;
-            }
-            ret = true;
-        }
-    }
-    else {
+    /* read personality attribute value into buffer */
+    attrval_len = p_attrvalue->read(p_attrvalue, (char *)attrval, MAXLEN_PERSONALITY_ATTRIBUTE_VALUE, p_errinfo);
+    if ((MAXLEN_PERSONALITY_ATTRIBUTE_VALUE <= attrval_len) || (0 == attrval_len)) {
+        /* attribute too long */
         *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
+        goto err;
     }
+    /* basic input validation for attrname */
+    attrname_len = strnlen(attrname, MAXLEN_PERSONALITY_ATTRIBUTE_NAME);
+    if ((MAXLEN_PERSONALITY_ATTRIBUTE_NAME <= attrname_len) || (0 == attrname_len)) {
+        /* attribute name too long */
+        *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
+        goto err;
+    }
+    /* add attribute to personality specific attribute list */
+    if (add_personality_attribute_list_item(p_provider_params,
+        &p_context_params->p_personality_item->p_personality_content->p_attribute_list,
+        pers_attr_type, (unsigned char *)attrname, attrname_len, attrval, attrval_len,
+        b_trusted, p_errinfo)) {
+
+        /* Serialize the new device state */
+        if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
+            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+            goto err;
+        }
+        ret = true;
+    }
+
 err:
     return ret;
 }
@@ -2425,16 +1984,36 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_add_trusted_attribute,
     gta_errinfo_t * p_errinfo
     ))
 {
+    struct gta_sw_provider_params_t * p_provider_params = NULL;
+    struct gta_sw_provider_context_params_t * p_context_params = NULL;
+
+    p_context_params = gta_context_get_params(h_ctx, p_errinfo);
+    if (NULL == p_context_params) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        return false;
+    }
+    p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
+        return false;
+    }
+
+    /* check whether function is supported by profile */
+    if (!supported_profiles[p_context_params->profile].pFunction->personality_attribute_functions_supported) {
+        DEBUG_PRINT(("gta_sw_provider_gta_personality_add_trusted_attribute: Profile not supported\n"));
+        *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        return false;
+    }
+
     /* todo: check access condition */
 
     enum pers_attr_type_t pers_attr_type = get_pers_attr_type_enum(attrtype);
     /* Generic attribute types are not allowed */
-    if (false == pers_attr_type_trusted[pers_attr_type]) {
-        *p_errinfo = GTA_ERROR_INVALID_PARAMETER;
+    if ((PAT_INVALID == pers_attr_type) || (false == pers_attr_type_trusted[pers_attr_type])) {
+        *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
         return false;
     }
 
-    return personality_add_attribute(h_ctx, attrtype, attrname, p_attrvalue, p_errinfo);
+    return personality_add_attribute(p_context_params, p_provider_params, attrtype, attrname, p_attrvalue, true, p_errinfo);
 }
 
 
@@ -2447,14 +2026,34 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_add_attribute,
     gta_errinfo_t * p_errinfo
     ))
 {
-    enum pers_attr_type_t pers_attr_type = get_pers_attr_type_enum(attrtype);
-    /* Trusted attribute types are not allowed */
-    if (true == pers_attr_type_trusted[pers_attr_type]) {
-        *p_errinfo = GTA_ERROR_INVALID_PARAMETER;
+    struct gta_sw_provider_params_t * p_provider_params = NULL;
+    struct gta_sw_provider_context_params_t * p_context_params = NULL;
+
+    p_context_params = gta_context_get_params(h_ctx, p_errinfo);
+    if (NULL == p_context_params) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        return false;
+    }
+    p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
         return false;
     }
 
-    return personality_add_attribute(h_ctx, attrtype, attrname, p_attrvalue, p_errinfo);
+    /* check whether function is supported by profile */
+    if (!supported_profiles[p_context_params->profile].pFunction->personality_attribute_functions_supported) {
+        DEBUG_PRINT(("gta_sw_provider_gta_personality_add_attribute: Profile not supported\n"));
+        *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        return false;
+    }
+
+    enum pers_attr_type_t pers_attr_type = get_pers_attr_type_enum(attrtype);
+    /* Trusted attribute types are not allowed */
+    if ((PAT_INVALID == pers_attr_type) || (true == pers_attr_type_trusted[pers_attr_type])) {
+        *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
+        return false;
+    }
+
+    return personality_add_attribute(p_context_params, p_provider_params, attrtype, attrname, p_attrvalue, false, p_errinfo);
 }
 
 
@@ -2475,6 +2074,13 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_get_attribute, (
         goto err;
     }
 
+    /* check whether function is supported by profile */
+    if (!supported_profiles[p_context_params->profile].pFunction->personality_attribute_functions_supported) {
+        DEBUG_PRINT(("gta_sw_provider_gta_personality_get_attribute: Profile not supported\n"));
+        *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        goto err;
+    }
+
     /* Find attribute_list_item with requested name and check whether it is activated */
     p_attribute = list_find((struct list_t *)(p_context_params->p_personality_item->p_personality_content->p_attribute_list),
                             attrname, attribute_list_item_cmp_name);
@@ -2484,23 +2090,15 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_get_attribute, (
     }
 
     /*
-     * Check whether profile defines support for the requested attribute type.
-     * Default attributes need to be supported by all profiles.
+     * For the time being we don't restrict attribute types for this function.
+     * Open question: Is it ok that each profiles supports this function?
      */
-    if ((PAT_CH_IEC_30168_FINGERPRINT == p_attribute->type) || (PAT_CH_IEC_30168_IDENTIFIER == p_attribute->type)
-        || ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) &&
-            ((PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == p_attribute->type) || (PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL == p_attribute->type) || (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3 == p_attribute->type)))) {
-
-        if (p_attribute->data_size != p_attrvalue->write(p_attrvalue, p_attribute->p_data, p_attribute->data_size, p_errinfo)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        p_attrvalue->finish(p_attrvalue, 0, p_errinfo);
-        ret = true;
+    if (p_attribute->data_size != p_attrvalue->write(p_attrvalue, p_attribute->p_data, p_attribute->data_size, p_errinfo)) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        goto err;
     }
-    else {
-        *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
-    }
+    p_attrvalue->finish(p_attrvalue, 0, p_errinfo);
+    ret = true;
 err:
     return ret;
 }
@@ -2518,12 +2116,6 @@ bool find_activated_nondefault_attribute(
     gta_errinfo_t * p_errinfo
 )
 {
-    /* Default attributes are ignored */
-    if ((0 == strcmp(attrname, PERS_ATTR_NAME_FINGERPRINT)) || (0 == strcmp(attrname, PERS_ATTR_NAME_IDENTIFIER))) {
-        *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
-        return false;
-    }
-
     /* Find attribute_list_item with requested name and check whether it is activated */
     *p_attribute = list_find((struct list_t *)(p_context_params->p_personality_item->p_personality_content->p_attribute_list),
                             attrname, attribute_list_item_cmp_name);
@@ -2531,6 +2123,14 @@ bool find_activated_nondefault_attribute(
         *p_errinfo = GTA_ERROR_ITEM_NOT_FOUND;
         return false;
     }
+
+    /* Restricted attributes (default and internal) are ignored */
+    if (pers_attr_type_restricted[(*p_attribute)->type]) {
+        *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
+        *p_attribute = NULL;
+        return false;
+    }
+
     return true;
 }
 
@@ -2559,37 +2159,38 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_remove_attribute,
         goto err;
     }
 
+    /* check whether function is supported by profile */
+    if (!supported_profiles[p_context_params->profile].pFunction->personality_attribute_functions_supported) {
+        DEBUG_PRINT(("gta_sw_provider_gta_personality_remove_attribute: Profile not supported\n"));
+        *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        goto err;
+    }
+
     if (!find_activated_nondefault_attribute(p_context_params, &p_attribute, attrname, p_errinfo)) {
         goto err;
     }
 
-    /* Check whether profile defines support for this attribute type */
-    if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) &&
-        ((PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == p_attribute->type) || (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3 == p_attribute->type))) {
-        /*
-         * Remove the attribute from attribute list. Note that this function
-         * searches again for the attribute in the list. This is not necessary
-         * and could be optimized in the future.
-         */
-        p_attribute = list_remove((struct list_t **)(&p_context_params->p_personality_item->p_personality_content->p_attribute_list),
-                                attrname, attribute_list_item_cmp_name);
-        if (NULL == p_attribute) {
-            *p_errinfo = GTA_ERROR_ITEM_NOT_FOUND;
-            goto err;
-        }
-        /* Remove attribute (this function cannot fail) */
-        personality_attribute_list_item_free(p_provider_params->h_ctx, p_attribute, &errinfo_tmp);
+    /*
+    * Remove the attribute from attribute list. Note that this function
+    * searches again for the attribute in the list. This is not necessary
+    * and could be optimized in the future.
+    */
+    p_attribute = list_remove((struct list_t **)(&p_context_params->p_personality_item->p_personality_content->p_attribute_list),
+                            attrname, attribute_list_item_cmp_name);
+    if (NULL == p_attribute) {
+        *p_errinfo = GTA_ERROR_ITEM_NOT_FOUND;
+        goto err;
+    }
+    /* Remove attribute (this function cannot fail) */
+    personality_attribute_list_item_free(p_provider_params->h_ctx, p_attribute, &errinfo_tmp);
 
-        /* Serialize the new device state */
-        if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        ret = true;
+    /* Serialize the new device state */
+    if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        goto err;
     }
-    else {
-        *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
-    }
+    ret = true;
+
 err:
     return ret;
 }
@@ -2619,27 +2220,27 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_deactivate_attribute,
         goto err;
     }
 
+    /* check whether function is supported by profile */
+    if (!supported_profiles[p_context_params->profile].pFunction->personality_attribute_functions_supported) {
+        DEBUG_PRINT(("gta_sw_provider_gta_personality_deactivate_attribute: Profile not supported\n"));
+        *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        goto err;
+    }
+
     if (!find_activated_nondefault_attribute(p_context_params, &p_attribute, attrname, p_errinfo)) {
         goto err;
     }
 
-    /* Check whether profile defines support for this attribute type */
-    if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) &&
-        ((PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == p_attribute->type) || (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3 == p_attribute->type))) {
+    /* todo: check access condition */
+    p_attribute->activated = false;
 
-        /* todo: check access condition */
-        p_attribute->activated = false;
+    /* Serialize the new device state */
+    if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        goto err;
+    }
+    ret = true;
 
-        /* Serialize the new device state */
-        if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        ret = true;
-    }
-    else {
-        *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
-    }
 err:
     return ret;
 }
@@ -2669,6 +2270,13 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_activate_attribute,
         goto err;
     }
 
+    /* check whether function is supported by profile */
+    if (!supported_profiles[p_context_params->profile].pFunction->personality_attribute_functions_supported) {
+        DEBUG_PRINT(("gta_sw_provider_gta_personality_activate_attribute: Profile not supported\n"));
+        *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        goto err;
+    }
+
     /* Find attribute_list_item with requested name */
     p_attribute = list_find((struct list_t *)(p_context_params->p_personality_item->p_personality_content->p_attribute_list),
                             attrname, attribute_list_item_cmp_name);
@@ -2683,23 +2291,16 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_activate_attribute,
         goto err;
     }
 
-    /* Check whether profile defines support for this attribute type */
-    if ((PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS == p_context_params->profile) &&
-        ((PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509 == p_attribute->type) || (PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3 == p_attribute->type))) {
+    /* todo: check access condition */
+    p_attribute->activated = true;
 
-        /* todo: check access condition */
-        p_attribute->activated = true;
+    /* Serialize the new device state */
+    if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        goto err;
+    }
+    ret = true;
 
-        /* Serialize the new device state */
-        if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        ret = true;
-    }
-    else {
-        *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
-    }
 err:
     return ret;
 }
@@ -2793,70 +2394,46 @@ err:
     return ret;
 }
 
-/**
- * @brief Encodes binary data into base64_url (memory has to be freed by the caller)
- *
- */
-char* base64url_encode(gta_context_handle_t h_ctx, const unsigned char* data, size_t data_len) {
-    const size_t trail_len = 2;
-    gta_errinfo_t errinfo;
+/* Helper function to read the whole input from gtaio_istream_t into a buffer */
+bool read_input_buffer
+(
+    gtaio_istream_t * data,
+    unsigned char ** pp_data,
+    size_t * p_data_size,
+    gta_errinfo_t * p_errinfo
+)
+{
+    *pp_data = NULL;
+    *p_data_size = 0;
 
-    if ((0 == data_len) || (data_len>INT_MAX)) {
-        return NULL;
-    }
+    unsigned char * p_buffer = NULL;
+    size_t buffer_idx = 0;
 
-    size_t encoded_size = (4 * ((data_len +2) / 3)) + 1;
-    char* encoded_data = gta_secmem_calloc(h_ctx, 1, encoded_size, &errinfo);
-    if (NULL == encoded_data) {
-        return NULL;
-    }
-
-    /* Range checks on data_len already done */
-    int32_t result = EVP_EncodeBlock((unsigned char*)encoded_data, data, (int) data_len);
-
-    if (0 == result)
-    {
-        gta_secmem_free(h_ctx, encoded_data, &errinfo);
-        encoded_data = NULL;
-        return NULL;
-    }
-
-    /* Replace '+' and '/' characters */
-    for (size_t i = 0; i < encoded_size; i++) {
-        if ('+' == encoded_data[i]) {
-            encoded_data[i] = '-';
-        } else if ('/' == encoded_data[i]) {
-            encoded_data[i] = '_';
-        } else {
-            /* nothing to do */
+    p_buffer = OPENSSL_zalloc(CHUNK_LEN);
+    if(NULL != p_buffer) {
+        size_t chunk_len = CHUNK_LEN;
+        while (!data->eof(data, p_errinfo)) {
+            chunk_len = data->read(data, (char *)p_buffer + buffer_idx, chunk_len, p_errinfo);
+            buffer_idx += chunk_len;
+            if (!data->eof(data, p_errinfo)) {
+                chunk_len = CHUNK_LEN;
+                p_buffer = OPENSSL_clear_realloc(p_buffer, buffer_idx, buffer_idx + CHUNK_LEN);
+                if (NULL == p_buffer) {
+                    *p_errinfo = GTA_ERROR_MEMORY;
+                    return false;
+                }
+            }
         }
     }
-
-    /* Remove any trailing '=' */
-    while ((trail_len <= encoded_size) && ('=' == encoded_data[encoded_size - trail_len])) {
-        --encoded_size;
+    else {
+        *p_errinfo = GTA_ERROR_MEMORY;
+        return false;
     }
-    encoded_data[encoded_size-1] = '\0';
 
-    return encoded_data;
+    *pp_data = p_buffer;
+    *p_data_size = buffer_idx;
+    return true;
 }
-
-typedef struct {
-    ASN1_OCTET_STRING *key;
-    ASN1_OCTET_STRING *iv;
-    ASN1_OCTET_STRING *tag;
-    ASN1_OCTET_STRING *data;
-} ProtectedData;
-
-ASN1_SEQUENCE(ProtectedData) = {
-    ASN1_SIMPLE(ProtectedData, key, ASN1_OCTET_STRING),
-    ASN1_SIMPLE(ProtectedData, iv, ASN1_OCTET_STRING),
-    ASN1_SIMPLE(ProtectedData, tag, ASN1_OCTET_STRING),
-    ASN1_SIMPLE(ProtectedData, data, ASN1_OCTET_STRING),
-} ASN1_SEQUENCE_END(ProtectedData)
-
-IMPLEMENT_ASN1_FUNCTIONS(ProtectedData)
-
 
 GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_seal_data,
 (
@@ -2866,345 +2443,24 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_seal_data,
     gta_errinfo_t * p_errinfo
     ))
 {
-    bool ret = false;
-    gta_errinfo_t errinfo_tmp;
-
-    /* Currently only static JWT headers, hardcoded for algs RS256 & ES256 */
-    const char *jwt_header_rs256 = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9";
-    const char *jwt_header_es256 = "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9";
-
     struct gta_sw_provider_context_params_t * p_context_params = NULL;
-    struct personality_t * p_personality_content = NULL;
-
-    char payload_chunk[CHUNK_LEN];
-    const char* header_base64url = NULL;
-    char* signature_base64url = NULL;
-    unsigned char* signature = NULL;
-    size_t signature_len = 0;
-
-    EVP_MD_CTX *mdctx = NULL;
-    EVP_PKEY *evp_private_key = NULL;
-    int32_t key_type = EVP_PKEY_NONE;
-
-    /* Variables for profile local_data_protection */
-    ProtectedData p_data = { NULL };
-    unsigned int size = 0;
-    int len = 0;
-    unsigned char * p_buffer_in = NULL;
-    size_t buffer_idx_in = 0;
-    unsigned char * p_buffer_out = NULL;
-    size_t buffer_idx_out = 0;
-    unsigned char *encoded_data = NULL;
-    int encoded_len = 0;
-    EVP_CIPHER_CTX *gcmctx = NULL;
-    unsigned char key_derivation[LOCAL_DATA_PROTECTION_KEY_DERIVATION_LEN] = { 0 };
-    unsigned char iv[LOCAL_DATA_PROTECTION_IV_LEN] = { 0 };
-    unsigned char tag[LOCAL_DATA_PROTECTION_TAG_LEN] = { 0 };
-    unsigned char *key = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
     if (!p_context_params)
     {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        return false;
     }
 
-    /* Check Profile */
-    if (PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT == p_context_params->profile)
-    {
-        /* get Personality of the Context */
-        p_personality_content = p_context_params->p_personality_item->p_personality_content;
-
-        /* get the Private Key from the Personality */
-        unsigned char * p_secret_buffer  = p_personality_content->secret_data;
-        evp_private_key = d2i_AutoPrivateKey(NULL,
-                                            (const unsigned char **) &p_secret_buffer,
-                                            p_personality_content->secret_data_size);
-        /* clear pointer */
-        p_secret_buffer = NULL;
-        if (!evp_private_key)
-        {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        /* get key type & config accordingly */
-        key_type = EVP_PKEY_base_id(evp_private_key);
-        if (EVP_PKEY_RSA == key_type) {
-            header_base64url = jwt_header_rs256;
-        } else if (EVP_PKEY_EC == key_type) {
-            header_base64url = jwt_header_es256;
-        } else {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        /* Create the Message Digest Context */
-        if (!(mdctx = EVP_MD_CTX_new()))
-        {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        /* Initialise the DigestSign operation - SHA-256 has been selected as the message digest function in this example */
-        if (1 != EVP_DigestSignInit(mdctx, NULL, EVP_sha256(), NULL, evp_private_key))
-        {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        /* add JWT Header */
-        if (1 != EVP_DigestSignUpdate(mdctx, header_base64url, strlen(header_base64url)))
-        {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        protected_data->write(protected_data, header_base64url, strlen(header_base64url), p_errinfo);
-
-        /* add "." JWT separator */
-        if (1 != EVP_DigestSignUpdate(mdctx, ".", 1))
-        {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        protected_data->write(protected_data, ".", 1, p_errinfo);
-
-        /* add JWT Payload */
-        while (!data->eof(data, p_errinfo)) {
-            size_t read_len = data->read(data, payload_chunk, CHUNK_LEN, p_errinfo);
-            /* Update with the data chunck */
-            if(1 != EVP_DigestSignUpdate(mdctx, payload_chunk, read_len))
-            {
-                *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-                goto err;
-            }
-            /* Add data chunck as JWT paylod */
-            protected_data->write(protected_data, payload_chunk, read_len, p_errinfo);
-        }
-
-        /* Obtain the length of the signature before being calculated */
-        if (1 != EVP_DigestSignFinal(mdctx, NULL, &signature_len))
-        {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        /* Allocate memory for the signature based on size in signature_len */
-        if (!(signature = OPENSSL_malloc(sizeof(unsigned char) * (signature_len))))
-        {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        /* Obtain the signature */
-        if (1 != EVP_DigestSignFinal(mdctx, signature, &signature_len))
-        {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        signature_base64url = base64url_encode(h_ctx, signature, signature_len);
-        if (!signature_base64url)
-        {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        /* add "." JWT separator & Signature */
-        protected_data->write(protected_data, ".", 1, p_errinfo);
-        protected_data->write(protected_data, signature_base64url, strlen(signature_base64url), p_errinfo);
-        protected_data->finish(protected_data, 0, p_errinfo);
-    }
-    else if (PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION == p_context_params->profile) {
-        /* get personality of the context */
-        p_personality_content = p_context_params->p_personality_item->p_personality_content;
-
-        /* Read whole input into buffer */
-        p_buffer_in = OPENSSL_zalloc(CHUNK_LEN);
-        if(NULL != p_buffer_in) {
-            size_t chunk_len = CHUNK_LEN;
-            while (!data->eof(data, p_errinfo)) {
-                chunk_len = data->read(data, (char *)p_buffer_in + buffer_idx_in, chunk_len, p_errinfo);
-                buffer_idx_in += chunk_len;
-                if (!data->eof(data, p_errinfo)) {
-                    chunk_len = CHUNK_LEN;
-                    p_buffer_in = OPENSSL_clear_realloc(p_buffer_in, buffer_idx_in, buffer_idx_in + CHUNK_LEN);
-                    if(NULL == p_buffer_in) {
-                        *p_errinfo = GTA_ERROR_MEMORY;
-                        goto err;
-                    }
-                }
-            }
-        }
-        else {
-            *p_errinfo = GTA_ERROR_MEMORY;
-            goto err;
-        }
-
-        /* Initialize data structure */
-        p_data.key = ASN1_OCTET_STRING_new();
-        p_data.iv = ASN1_OCTET_STRING_new();
-        p_data.tag = ASN1_OCTET_STRING_new();
-        p_data.data = ASN1_OCTET_STRING_new();
-
-        /* Generate a random input for the key derivation */
-        if (1 != RAND_bytes(key_derivation, LOCAL_DATA_PROTECTION_KEY_DERIVATION_LEN)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        ASN1_OCTET_STRING_set(p_data.key, key_derivation, LOCAL_DATA_PROTECTION_KEY_DERIVATION_LEN);
-
-        /* Allocate memory for the key to be derived (return value of
-         * EVP_CIPHER_get_key_length always >= 0) */
-        key = gta_secmem_calloc(h_ctx, (size_t)EVP_CIPHER_get_key_length(EVP_aes_256_gcm()), sizeof(unsigned char), p_errinfo);
-        if (NULL == key) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        /* Range check on p_personality_content->content_data_size */
-        if (p_personality_content->secret_data_size > INT_MAX) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        /* Derive a key from the personality secret */
-        HMAC(EVP_sha256(), p_personality_content->secret_data,
-            (int)p_personality_content->secret_data_size, key_derivation,
-            LOCAL_DATA_PROTECTION_KEY_DERIVATION_LEN, key, &size);
-
-        /* EVP_CIPHER_get_key_length always >= 0 */
-        if (size < (unsigned int)EVP_CIPHER_get_key_length(EVP_aes_256_gcm())) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        /* Generate a random IV */
-        if (1 != RAND_bytes(iv, LOCAL_DATA_PROTECTION_IV_LEN)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        ASN1_OCTET_STRING_set(p_data.iv, iv, LOCAL_DATA_PROTECTION_IV_LEN);
-
-        /* Initialize the cipher context */
-        gcmctx = EVP_CIPHER_CTX_new();
-        if (1 != EVP_EncryptInit_ex2(gcmctx, EVP_aes_256_gcm(), key, iv, NULL)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        EVP_CIPHER_CTX_ctrl(gcmctx, EVP_CTRL_AEAD_SET_IVLEN, LOCAL_DATA_PROTECTION_IV_LEN, NULL);
-
-        /* Allocate memory for the encrypted data */
-        p_buffer_out = gta_secmem_calloc(h_ctx, buffer_idx_in, sizeof(unsigned char), p_errinfo);
-        if (NULL == p_buffer_out) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        /* Range check on buffer_idx_in */
-        if (buffer_idx_in > INT_MAX) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        /* Encrypt input data */
-        if(1 != EVP_EncryptUpdate(gcmctx, p_buffer_out, &len, p_buffer_in, (int)buffer_idx_in))
-        {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        /* len is always >= 0 */
-        buffer_idx_out = (size_t)len;
-
-        if (1 != EVP_EncryptFinal_ex(gcmctx, p_buffer_out + buffer_idx_out, &len)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        /* len is always >= 0 */
-        buffer_idx_out += (size_t)len;
-
-        /* Check length */
-        if (buffer_idx_out != buffer_idx_in) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        /* Range check on buffer_idx_out */
-        if (buffer_idx_out > INT_MAX) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        /* Encode payload */
-        ASN1_OCTET_STRING_set(p_data.data, p_buffer_out, (int)buffer_idx_out);
-
-        /* Get and encode cipher tag */
-        EVP_CIPHER_CTX_ctrl(gcmctx, EVP_CTRL_AEAD_GET_TAG, LOCAL_DATA_PROTECTION_TAG_LEN, tag);
-        ASN1_OCTET_STRING_set(p_data.tag, tag, LOCAL_DATA_PROTECTION_TAG_LEN);
-
-        /* Encode the ProtectedData */
-        encoded_len = i2d_ProtectedData(&p_data, &encoded_data);
-        if (encoded_len <= 0) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        /* Write output stream (encoded_len > 0 already checked) */
-        protected_data->write(protected_data, (char *)encoded_data, (size_t)encoded_len, p_errinfo);
-        protected_data->finish(protected_data, 0, p_errinfo);
-    }
-    else {
+    /* check whether function is supported by profile */
+    if (NULL == supported_profiles[p_context_params->profile].pFunction->seal_data) {
+        DEBUG_PRINT(("gta_sw_provider_gta_seal_data: Profile not supported\n"));
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
-        goto err;
+        return false;
     }
 
-    ret = true;
-
-err:
-    if (NULL != signature_base64url) {
-        gta_secmem_free(h_ctx, signature_base64url, &errinfo_tmp);
-        signature_base64url = NULL;
-    }
-    if (NULL != signature) {
-        OPENSSL_free(signature);
-        signature = NULL;
-    }
-    if (NULL != mdctx) {
-        EVP_MD_CTX_free(mdctx);
-        mdctx = NULL;
-    }
-    if (NULL != evp_private_key) {
-        EVP_PKEY_free(evp_private_key);
-        evp_private_key = NULL;
-    }
-    if (NULL != gcmctx) {
-        EVP_CIPHER_CTX_free(gcmctx);
-    }
-    if (NULL != p_buffer_in) {
-        OPENSSL_clear_free(p_buffer_in, buffer_idx_in);
-    }
-    if (NULL != p_buffer_out) {
-        gta_secmem_free(h_ctx, p_buffer_out, &errinfo_tmp);
-        p_buffer_out = NULL;
-    }
-    if (NULL != key) {
-        gta_secmem_free(h_ctx, key, &errinfo_tmp);
-        key = NULL;
-    }
-    if (NULL != p_data.key) {
-        ASN1_OCTET_STRING_free(p_data.key);
-    }
-    if (NULL != p_data.iv) {
-        ASN1_OCTET_STRING_free(p_data.iv);
-    }
-    if (NULL != p_data.tag) {
-        ASN1_OCTET_STRING_free(p_data.tag);
-    }
-    if (NULL != p_data.data) {
-        ASN1_OCTET_STRING_free(p_data.data);
-    }
-    if (NULL != encoded_data) {
-        OPENSSL_free(encoded_data);
-    }
-
-    return ret;
+    /* call profile specific implementation */
+    return supported_profiles[p_context_params->profile].pFunction->seal_data(p_context_params, data, protected_data, p_errinfo);
 }
 
 
@@ -3216,187 +2472,24 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_unseal_data,
     gta_errinfo_t * p_errinfo
     ))
 {
-    bool ret = false;
-    gta_errinfo_t errinfo_tmp;
-
     struct gta_sw_provider_context_params_t * p_context_params = NULL;
-    struct personality_t * p_personality_content = NULL;
-
-    /* Variables for profile local_data_protection */
-    ProtectedData *p_data = NULL;
-    unsigned int size = 0;
-    int len = 0;
-    unsigned char * p_buffer_in = NULL;
-    size_t buffer_idx_in = 0;
-    unsigned char * p_buffer_out = NULL;
-    size_t buffer_idx_out = 0;
-    EVP_CIPHER_CTX *gcmctx = NULL;
-    unsigned char *key = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
     if (!p_context_params)
     {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        return false;
     }
 
-    /* Check Profile */
-    if (PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION == p_context_params->profile) {
-        /* get personality of the context */
-        p_personality_content = p_context_params->p_personality_item->p_personality_content;
-
-        /* Read whole input into buffer */
-        p_buffer_in = OPENSSL_zalloc(CHUNK_LEN);
-        if(NULL != p_buffer_in) {
-            size_t chunk_len = CHUNK_LEN;
-            while (!protected_data->eof(protected_data, p_errinfo)) {
-                chunk_len = protected_data->read(protected_data, (char *)p_buffer_in + buffer_idx_in, chunk_len, p_errinfo);
-                buffer_idx_in += chunk_len;
-                if (!protected_data->eof(protected_data, p_errinfo)) {
-                    chunk_len = CHUNK_LEN;
-                    p_buffer_in = OPENSSL_clear_realloc(p_buffer_in, buffer_idx_in, buffer_idx_in + CHUNK_LEN);
-                    if(NULL == p_buffer_in) {
-                        *p_errinfo = GTA_ERROR_MEMORY;
-                        goto err;
-                    }
-                }
-            }
-        }
-        else {
-            *p_errinfo = GTA_ERROR_MEMORY;
-            goto err;
-        }
-
-        /* Range check on buffer_idx_in */
-        if (buffer_idx_in > LONG_MAX) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        /* Decode ProtectedData */
-        const unsigned char *p = p_buffer_in;
-        p_data = d2i_ProtectedData(NULL, &p, (long)buffer_idx_in);
-        if (NULL == p_data) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        /* Check if sizes are supported */
-        if ((LOCAL_DATA_PROTECTION_KEY_DERIVATION_LEN != p_data->key->length) ||
-            (LOCAL_DATA_PROTECTION_IV_LEN != p_data->iv->length) ||
-            (LOCAL_DATA_PROTECTION_TAG_LEN != p_data->tag->length)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        /* Allocate memory for the key to be derived (return value of
-         * EVP_CIPHER_get_key_length always >= 0) */
-        key = gta_secmem_calloc(h_ctx, (size_t)EVP_CIPHER_get_key_length(EVP_aes_256_gcm()), sizeof(unsigned char), p_errinfo);
-        if (NULL == key) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        /* Range check on p_personality_content->content_data_size */
-        if (p_personality_content->secret_data_size > INT_MAX) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        /* Derive a key from the personality secret */
-        HMAC(EVP_sha256(), p_personality_content->secret_data,
-            (int)p_personality_content->secret_data_size, p_data->key->data,
-            LOCAL_DATA_PROTECTION_KEY_DERIVATION_LEN, key, &size);
-
-        /* EVP_CIPHER_get_key_length always >= 0 */
-        if (size < (unsigned int)EVP_CIPHER_get_key_length(EVP_aes_256_gcm())) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        /* Initialize the cipher context */
-        gcmctx = EVP_CIPHER_CTX_new();
-        if (1 != EVP_DecryptInit_ex2(gcmctx, EVP_aes_256_gcm(), key, p_data->iv->data, NULL)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        EVP_CIPHER_CTX_ctrl(gcmctx, EVP_CTRL_AEAD_SET_IVLEN, LOCAL_DATA_PROTECTION_IV_LEN, NULL);
-        EVP_CIPHER_CTX_ctrl(gcmctx, EVP_CTRL_AEAD_SET_TAG, LOCAL_DATA_PROTECTION_TAG_LEN, p_data->tag->data);
-
-        /* Allocate memory for the decrypted data */
-        p_buffer_out = gta_secmem_calloc(h_ctx, buffer_idx_in, sizeof(unsigned char), p_errinfo);
-        if (NULL == p_buffer_out) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        /* Decrypt input data */
-        if(1 != EVP_DecryptUpdate(gcmctx, p_buffer_out, &len, p_data->data->data, p_data->data->length))
-        {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        /* len is always >= 0 */
-        buffer_idx_out = (size_t)len;
-
-        if (1 != EVP_DecryptFinal_ex(gcmctx, p_buffer_out + buffer_idx_out, &len)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        /* len is always >= 0 */
-        buffer_idx_out += (size_t)len;
-
-        /* Check length */
-        if ((p_data->data->length < 0) ||
-            (buffer_idx_out != (size_t)p_data->data->length)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        /* Write output stream */
-        if (buffer_idx_out != data->write(data, (char *)p_buffer_out, buffer_idx_out, p_errinfo)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        data->finish(data, 0, p_errinfo);
-    }
-    else {
+    /* check whether function is supported by profile */
+    if (NULL == supported_profiles[p_context_params->profile].pFunction->unseal_data) {
+        DEBUG_PRINT(("gta_sw_provider_gta_unseal_data: Profile not supported\n"));
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
-        goto err;
+        return false;
     }
 
-    ret = true;
-
-err:
-    if (NULL != gcmctx) {
-        EVP_CIPHER_CTX_free(gcmctx);
-    }
-    if (NULL != p_buffer_in) {
-        OPENSSL_clear_free(p_buffer_in, buffer_idx_in);
-    }
-    if (NULL != p_buffer_out) {
-        gta_secmem_free(h_ctx, p_buffer_out, &errinfo_tmp);
-        p_buffer_out = NULL;
-    }
-    if (NULL != key) {
-        gta_secmem_free(h_ctx, key, &errinfo_tmp);
-        key = NULL;
-    }
-    if (NULL != p_data) {
-        if (NULL != p_data->key) {
-            ASN1_OCTET_STRING_free(p_data->key);
-        }
-        if (NULL != p_data->iv) {
-            ASN1_OCTET_STRING_free(p_data->iv);
-        }
-        if (NULL != p_data->tag) {
-            ASN1_OCTET_STRING_free(p_data->tag);
-        }
-        if (NULL != p_data->data) {
-            ASN1_OCTET_STRING_free(p_data->data);
-        }
-        OPENSSL_free(p_data);
-    }
-
-    return ret;
+    /* call profile specific implementation */
+    return supported_profiles[p_context_params->profile].pFunction->unseal_data(p_context_params, protected_data, data, p_errinfo);
 }
 
 
@@ -3425,189 +2518,24 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_authenticate_data_detached,
     gta_errinfo_t * p_errinfo
     ))
 {
-    bool ret = false;
-    char payload_chunk[CHUNK_LEN];
-    unsigned char* signature = NULL;
-    size_t signature_len = 0;
-
-#ifdef ENABLE_PQC
-    OQS_SIG *signer = NULL;
-    unsigned char * p_buffer_in = NULL;
-    size_t buffer_idx_in = 0;
-#endif
-
-    EVP_MD_CTX *mdctx = NULL;
-    EVP_PKEY *evp_private_key = NULL;
-
     struct gta_sw_provider_context_params_t * p_context_params = NULL;
-    struct personality_t * p_personality_content = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (NULL == p_context_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
-    }
-
-    /* Check Profile */
-    if (PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS != p_context_params->profile) {
-
-        *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
-        goto err;
-    }
-
-    /* all that follows is the same for both supported profiles */
-
-    /* get Personality of the Context */
-    p_personality_content = p_context_params->p_personality_item->p_personality_content;
-
-    /* get the Private Key from the Personality */
-    unsigned char * p_secret_buffer  = p_personality_content->secret_data;
-
-    /* Create the Message Digest Context */
-    if (!(mdctx = EVP_MD_CTX_new()))
+    if (!p_context_params)
     {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        return false;
     }
 
-    if (SECRET_TYPE_DER == p_personality_content->secret_type) {
-        /* Range check on p_personality_content->content_data_size */
-        if (p_personality_content->secret_data_size > LONG_MAX) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        evp_private_key = d2i_AutoPrivateKey(NULL,
-                                            (const unsigned char **) &p_secret_buffer,
-                                            (long)p_personality_content->secret_data_size);
-
-        p_secret_buffer = NULL;
-        if (!evp_private_key) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        /* Initialise the DigestSign operation - SHA-256 */
-        if (1 != EVP_DigestSignInit(mdctx, NULL, EVP_sha256(), NULL, evp_private_key)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        /* get Data to sign */
-        while (!data->eof(data, p_errinfo)) {
-            size_t read_len = data->read(data, payload_chunk, CHUNK_LEN, p_errinfo);
-            /* Update with the data chunck */
-            if(1 != EVP_DigestSignUpdate(mdctx, payload_chunk, read_len)) {
-                *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-                goto err;
-            }
-        }
-
-        /* Obtain the length of the signature before being calculated */
-        if (1 != EVP_DigestSignFinal(mdctx, NULL, &signature_len)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        /* Allocate memory for the signature based on size in signature_len */
-        if (!(signature = OPENSSL_malloc(sizeof(unsigned char) * (signature_len)))) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        /* Obtain the signature */
-        if (1 != EVP_DigestSignFinal(mdctx, signature, &signature_len)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-    }
-#ifdef ENABLE_PQC
-    else if (SECRET_TYPE_DILITHIUM2 == p_personality_content->secret_type){
-        OQS_STATUS rc;
-
-        uint8_t *private_key = (unsigned char*)(p_personality_content->secret_data);
-
-        OQS_init();
-        signer = OQS_SIG_new(OQS_SIGN_ALGORITHM);
-
-        if (NULL == signer) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        /* lengths need to match */
-        if ((signer->length_secret_key + signer->length_public_key) != p_personality_content->secret_data_size) {
-            /* Should this be profile unsupported or invalid parameter instead? */
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        /* Read whole input into buffer */
-        p_buffer_in = OPENSSL_zalloc(CHUNK_LEN);
-        if(NULL != p_buffer_in) {
-            size_t chunk_len = CHUNK_LEN;
-            while (!data->eof(data, p_errinfo)) {
-                chunk_len = data->read(data, (char *)p_buffer_in + buffer_idx_in, chunk_len, p_errinfo);
-                buffer_idx_in += chunk_len;
-                if (!data->eof(data, p_errinfo)) {
-                    chunk_len = CHUNK_LEN;
-                    p_buffer_in = OPENSSL_clear_realloc(p_buffer_in, buffer_idx_in, buffer_idx_in + CHUNK_LEN);
-                    if(NULL == p_buffer_in) {
-                        *p_errinfo = GTA_ERROR_MEMORY;
-                        goto err;
-                    }
-                }
-            }
-        }
-        else {
-            *p_errinfo = GTA_ERROR_MEMORY;
-            goto err;
-        }
-
-        signature = OPENSSL_zalloc(signer->length_signature);
-
-        if ((NULL == private_key) || (NULL == signature)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-
-        rc = OQS_SIG_sign(signer, signature, &signature_len, p_buffer_in, buffer_idx_in, private_key);
-        if (OQS_SUCCESS != rc) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-    }
-#endif
-    else {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+    /* check whether function is supported by profile */
+    if (NULL == supported_profiles[p_context_params->profile].pFunction->authenticate_data_detached) {
+        DEBUG_PRINT(("gta_sw_provider_gta_authenticate_data_detached: Profile not supported\n"));
+        *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        return false;
     }
 
-    seal->write(seal, (const char*)signature, signature_len, p_errinfo);
-
-    ret = true;
-
-err:
-    if (NULL != signature) {
-        OPENSSL_free(signature);
-        signature = NULL;
-    }
-    if (NULL != mdctx) {
-        EVP_MD_CTX_free(mdctx);
-        mdctx = NULL;
-    }
-    if (NULL != evp_private_key) {
-        EVP_PKEY_free(evp_private_key);
-        evp_private_key = NULL;
-    }
-
-#ifdef ENABLE_PQC
-    OQS_SIG_free(signer);
-
-    if (NULL != p_buffer_in) {
-        OPENSSL_clear_free(p_buffer_in, buffer_idx_in);
-    }
-#endif
-
-    return ret;
+    /* call profile specific implementation */
+    return supported_profiles[p_context_params->profile].pFunction->authenticate_data_detached(p_context_params, data, seal, p_errinfo);
 }
 
 GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_verify_data_detached,
