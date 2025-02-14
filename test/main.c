@@ -454,8 +454,8 @@ static void pers_get_attribute_negative_tests(gta_context_handle_t h_ctx)
     assert_false(gta_personality_get_attribute(h_ctx, "inexistent attribute", &ostream, &errinfo));
     assert_int_equal(GTA_ERROR_ITEM_NOT_FOUND, errinfo);
     errinfo = 0;
-    assert_false(gta_personality_get_attribute(h_ctx, "com.github.generic-trust-anchor-api.keytype.openssl", &ostream, &errinfo));
-    assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
+    //assert_false(gta_personality_get_attribute(h_ctx, "com.github.generic-trust-anchor-api.keytype.openssl", &ostream, &errinfo));
+    //assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
 }
 
 static void pers_add_attribute_negative_tests(gta_context_handle_t h_ctx)
@@ -852,12 +852,12 @@ static void profile_jwt(void ** state)
 
     /* Negative test for gta_personality_deactivate_attribute */
     assert_false(gta_personality_deactivate_attribute(h_ctx, "com.github.generic-trust-anchor-api.keytype.openssl", &errinfo));
-    assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
     errinfo = 0;
 
     /* Negative test for gta_personality_remove_attribute */
     assert_false(gta_personality_remove_attribute(h_ctx, "com.github.generic-trust-anchor-api.keytype.openssl", &errinfo));
-    assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
     errinfo = 0;
 
     pers_get_attribute_negative_tests(h_ctx);

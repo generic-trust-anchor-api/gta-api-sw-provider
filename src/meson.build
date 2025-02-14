@@ -1,7 +1,7 @@
 #;**********************************************************************;
 # SPDX-License-Identifier: MPL-2.0
 #
-# Copyright (c) 2024, Siemens AG
+# Copyright (c) 2024-2025, Siemens AG
 #
 #;**********************************************************************;
 
@@ -9,7 +9,15 @@ gta_sw_provider_files = files (
   'gta_sw_provider.c',
   'persistent_storage.c',
   'provider_data_model.c',
-  'key_management.c'
+  'key_management.c',
+  'profiles/prof_ch_iec_30168_basic_passcode.c',
+  'profiles/prof_ch_iec_30168_basic_local_data_integrity_only.c',
+  'profiles/prof_ch_iec_30168_basic_local_data_protection.c',
+  'profiles/prof_com_github_generic_trust_anchor_api_basic_rsa.c',
+  'profiles/prof_com_github_generic_trust_anchor_api_basic_ec.c',
+  'profiles/prof_com_github_generic_trust_anchor_api_basic_dilithium.c',
+  'profiles/prof_com_github_generic_trust_anchor_api_basic_jwt.c',
+  'profiles/prof_com_github_generic_trust_anchor_api_basic_tls.c'
   )
 
 build_dep = [ dep_libcrypto,
