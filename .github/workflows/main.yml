@@ -16,6 +16,17 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y libcmocka-dev meson ninja-build build-essential libssl-dev cmake pkg-config git valgrind
+      - name: Checkout liboqs
+        uses: actions/checkout@v4
+        with:
+          repository: 'open-quantum-safe/liboqs'
+          ref: '0.9.1'
+      - name: Build and install liboqs
+        run: |
+          mkdir build
+          cd build
+          cmake -GNinja ..
+          sudo ninja install
       - name: Checkout gta-api-core
         uses: actions/checkout@v4
         with:
@@ -27,13 +38,23 @@ jobs:
           sudo ninja -C build install
       - name: Checkout gta-api-sw-provider
         uses: actions/checkout@v4
-      - name: Build gta-api-sw-provider
+      - name: Build gta-api-sw-provider w/o PQC
         run: |
           meson setup build --werror
           ninja -C build
-      - name: Test gta-api-sw-provider
+      - name: Test gta-api-sw-provider w/o PQC
         run: |
           ninja -C build test
-      - name: Valgrind
+      - name: Valgrind w/o PQC
+        run: |
+          ninja -C build gta_provider_memcheck
+      - name: Build gta-api-sw-provider w/ PQC
+        run: |
+          meson setup build --reconfigure --werror -Denable-post-quantum-crypto=true
+          ninja -C build
+      - name: Test gta-api-sw-provider w/ PQC
+        run: |
+          ninja -C build test
+      - name: Valgrind w/ PQC
         run: |
           ninja -C build gta_provider_memcheck
