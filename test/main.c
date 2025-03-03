@@ -751,6 +751,18 @@ static void profile_create_ec_default(void ** state)
                                        protection_properties,
                                        &errinfo));
     assert_int_equal(0, errinfo);
+
+    /* A simple negative test */
+    assert_false(gta_personality_create(test_params->h_inst,
+        IDENTIFIER1_VALUE,
+        "test",
+        "provider_test",
+        "com.github.generic-trust-anchor-api.basic.tls",
+        h_auth_use,
+        h_auth_admin,
+        protection_properties,
+        &errinfo));
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
 }
 
 #ifdef ENABLE_PQC
@@ -812,6 +824,9 @@ static void profile_jwt(void ** state)
     assert_non_null(h_ctx);
     assert_int_equal(0, errinfo);
 
+    /* Read the public key */
+    get_pubkey(h_ctx);
+
     /* Negative test for gta_personality_add_attribute() */
     const char * dummy_ee_cert = "Dummy EE Certificate";
     istream_from_buf_t istream = { 0 };
@@ -850,6 +865,9 @@ static void profile_jwt(void ** state)
     assert_non_null(h_ctx);
     assert_int_equal(0, errinfo);
 
+    /* Read the public key */
+    get_pubkey(h_ctx);
+
     /* Negative test for gta_personality_deactivate_attribute */
     assert_false(gta_personality_deactivate_attribute(h_ctx, "com.github.generic-trust-anchor-api.keytype.openssl", &errinfo));
     assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
@@ -857,6 +875,20 @@ static void profile_jwt(void ** state)
 
     /* Negative test for gta_personality_remove_attribute */
     assert_false(gta_personality_remove_attribute(h_ctx, "com.github.generic-trust-anchor-api.keytype.openssl", &errinfo));
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+    errinfo = 0;
+
+    /* Negative test for gta_personality_add_(trusted_)attribute */
+    gtaio_istream_t dummy_istream = { 0 };
+    assert_false(gta_personality_add_attribute(h_ctx, "ch.iec.30168.trustlist.certificate.self.x509", "test", &dummy_istream, &errinfo));
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+    errinfo = 0;
+    assert_false(gta_personality_add_trusted_attribute(h_ctx, "ch.iec.30168.trustlist.certificate.trusted.x509v3", "test", &dummy_istream, &errinfo));
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+    errinfo = 0;
+
+    /* Negative test for gta_authenticate_data_detached */
+    assert_false(gta_authenticate_data_detached(h_ctx, (gtaio_istream_t*)&istream_data_to_seal, ostream, &errinfo));
     assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
     errinfo = 0;
 
@@ -921,6 +953,15 @@ static void profile_tls(void ** state)
                              &errinfo);
 
     assert_non_null(h_ctx);
+
+    /* Some generic negative tests to increase code coverage */
+    gtaio_istream_t dummy_istream = { 0 };
+    assert_false(gta_seal_data(h_ctx, &dummy_istream, ostream, &errinfo));
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+    errinfo = 0;
+    assert_false(gta_unseal_data(h_ctx, &dummy_istream, ostream, &errinfo));
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+    errinfo = 0;
 
     /* Read the public key */
     get_pubkey(h_ctx);
