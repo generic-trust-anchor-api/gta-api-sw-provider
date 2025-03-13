@@ -11,11 +11,11 @@ The following table specifies the behaviour of the function **gta_personality_cr
 | **Property** | **Description** |
 | ------------ | ----------------|
 | Security Mechanism | RSA2048 |
-| Fingerprinting* | The fingerprint is the SHA512 value of the DER encoded private key. |
+| Fingerprinting [^1] | The fingerprint is the SHA512 value of the DER encoded private key. |
 | Attributes | N/A |
 | Usage Info | Intended for use with com.github.generic-trust-anchor-api.basic.jwt |
 
-*Fingerprinting: description under discussion; may be changed in the future<br>
+[^1]: Fingerprinting: description under discussion; may be changed in the future
 
 ## FURTHER TODO:
 - Attributes: no attribute vs. RSA?

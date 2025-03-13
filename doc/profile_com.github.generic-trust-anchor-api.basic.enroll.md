@@ -22,10 +22,8 @@ Usage of the profile with any other function than those functions listed in the 
 | **Property** | **Description** |
 | ------------ | ----------------|
 | Profile Dependencies | Shall be usable with any personality that is created with com.github.generic-trust-anchor-api.basic.rsa and com.github.generic-trust-anchor-api.basic.ec |
-| Supported Functions | **gta_personality_add_attribute()**<br>**gta_personality_add_trusted_attribute()**<br><blockquote>Allows personality attributes of the following types to be added to a personality: <ul><li> <u>ch.iec.30168.trustlist.certificate.self.x509</u> - Public key certificate for the personalities end entity in X.509 ASN.1 DER coding. </li><li> <u>ch.iec.30168.trustlist.certificate.trusted.x509v3</u> - Trusted public key certificate in X.509 ASN.1 DER coding; Validation of a public key certificate chain can stop at this certificate. The public key certificate can be a self-signed root certificate or any other certificate that is directly trusted by the personality.</li></ul></blockquote> |
+| Supported Functions | **Personality attribute functions [^1]** |
 | Usage Attributes | N/A |
 | Usage Artifact | N/A |
 
-
-*Fingerprinting: description under discussion; may be changed in the future<br>
-**Attribute type/name: under discussion; may be changed in the future
+[^1]: Personality attribute functions are: gta_personality_add_attribute(), gta_personality_add_trusted_attribute(), gta_personality_get_attribute(), gta_personality_activate_attribute(), gta_personality_deactivate_attribute(), gta_personality_remove_attribute()
