@@ -15,7 +15,7 @@ project('Generic Trust Anchor API SW Provider',
     ],
     license: 'MPL 2.0',
     meson_version: '>=0.56.0',
-    version: '0.1'
+    version: '0.2'
 )
 
 # Specify global compiler options
