@@ -20,6 +20,8 @@ Usage of the profile with any other function than those functions listed in the 
 | **Property** | **Description** |
 | ------------ | ----------------|
 | Profile Dependencies | Shall be usable with any personality that is created with com.github.generic-trust-anchor-api.basic.rsa and com.github.generic-trust-anchor-api.basic.ec |
-| Supported Functions | **gta_seal_data()**<br><blockquote>Gets base64 encoded JWT payload and creates signed JWT (header.payload.signature). </blockquote>|
+| Supported Functions | **Personality attribute functions [^1]**<br>**gta_seal_data()**<br><blockquote>Gets base64 encoded JWT payload and creates signed JWT (header.payload.signature). </blockquote>|
 | Usage Attributes | N/A |
 | Usage Artifact | Encoded JWT |
+
+[^1]: Personality attribute functions are: gta_personality_add_attribute(), gta_personality_add_trusted_attribute(), gta_personality_get_attribute(), gta_personality_activate_attribute(), gta_personality_deactivate_attribute(), gta_personality_remove_attribute()

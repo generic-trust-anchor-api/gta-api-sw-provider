@@ -22,6 +22,8 @@ Usage of the profile with any other function than those functions listed in the 
 | **Property** | **Description** |
 | ------------ | ----------------|
 | Profile Dependencies | Shall be usable with any personality that is created with com.github.generic-trust-anchor-api.basic.ec and com.github.generic-trust-anchor-api.basic.dilithium |
-| Supported Functions | **gta_personality_get_attribute()**<br><blockquote>Allows personality attributes of the following types to be retrieved:<ul><li> <u>ch.iec.30168.trustlist.certificate.self.x509</u> - Public key certificate for the personalities end entity in X.509 ASN.1 DER coding.</li><li> <u>ch.iec.30168.trustlist.certificate.trusted.x509v3</u> - Trusted public key certificate in X.509 ASN.1 DER coding; Validation of a public key certificate chain can stop at this certificate. The public key certificate can be a self-signed root certificate or any other certificate that is directly trusted by the personality.</li><li> <u>com.github.generic-trust-anchor-api.keytype.openssl</u> - A string specifying the type of the secret attribute (e.g., private key) of the personality.</li></ul></blockquote><br>**gta_authenticate_data_detached()**<br><blockquote>computes a digital signature for the data provided as input data.</blockquote> |
+| Supported Functions | **Personality attribute functions [^1]**<br>**gta_authenticate_data_detached()**<br><blockquote>computes a digital signature for the data provided as input data.</blockquote> |
 | Usage Attributes | N/A |
 | Usage Artifact | digital signature as raw bytes. todo: describe details depending on supported algorithms |
+
+[^1]: Personality attribute functions are: gta_personality_add_attribute(), gta_personality_add_trusted_attribute(), gta_personality_get_attribute(), gta_personality_activate_attribute(), gta_personality_deactivate_attribute(), gta_personality_remove_attribute()
