@@ -617,7 +617,8 @@ static void profile_spec_create(void ** state)
     gta_access_policy_handle_t h_auth_admin = GTA_HANDLE_INVALID;
     struct gta_protection_properties_t protection_properties = { 0 };
 
-    h_auth_use = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_BASIC_TOKEN, &errinfo);
+    h_auth_use = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL, &errinfo);
+    h_auth_admin = h_auth_use;
     assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
 
     for (int profile_index = 1; profile_index < NUM_PROFILES; ++profile_index)
@@ -716,9 +717,10 @@ static void profile_local_data_protection(void ** state)
     gta_access_policy_handle_t h_auth_admin = GTA_HANDLE_INVALID;
     struct gta_protection_properties_t protection_properties = { 0 };
 
-    h_auth_use = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_BASIC_TOKEN, &errinfo);
+    h_auth_use = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL, &errinfo);
     assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
     assert_int_equal(0, errinfo);
+    h_auth_admin = h_auth_use;
 
     /* Creating a personality with the same name should fail */
     assert_false(gta_personality_create(test_params->h_inst,
@@ -794,6 +796,7 @@ static void profile_deploy_passcode(void ** state)
 
     h_auth_use = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_BASIC_TOKEN, &errinfo);
     assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
+    h_auth_admin = h_auth_use;
 
     assert_true(myio_open_ifilestream(&istream_personality_content, TESTFILE_TXT , &errinfo));
     assert_int_equal(0, errinfo);
@@ -1334,7 +1337,7 @@ static void access_control(void ** state)
                             &errinfo
                         ));
 
-    assert_true(gta_access_token_get_pers_derived(
+    assert_false(gta_access_token_get_pers_derived(
                     h_ctx,
                     "pers_passcode_with_access_token",
                     GTA_ACCESS_TOKEN_USAGE_USE,
@@ -1350,6 +1353,84 @@ static void access_control(void ** state)
 
     assert_true(myio_close_ifilestream(&istream_personality_content, &errinfo));
     assert_true(gta_context_close(h_ctx, &errinfo));
+}
+
+static void access_policies_and_access_tokens(void ** state)
+{
+    DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
+    struct test_params_t * test_params = (struct test_params_t *)(*state);
+    gta_errinfo_t errinfo = 0;
+    gta_context_handle_t h_ctx = GTA_HANDLE_INVALID;
+    gta_access_policy_handle_t h_auth_use = GTA_HANDLE_INVALID;
+    gta_access_policy_handle_t h_auth_admin = GTA_HANDLE_INVALID;
+    struct gta_protection_properties_t protection_properties = { 0 };
+
+    h_auth_use = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_BASIC_TOKEN, &errinfo);
+    assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
+    assert_int_equal(0, errinfo);
+    h_auth_admin = h_auth_use;
+
+    assert_true(gta_personality_create(test_params->h_inst,
+                                       IDENTIFIER2_VALUE,
+                                       "local_data_prot_access_control",
+                                       "local_data_protection",
+                                       "ch.iec.30168.basic.local_data_protection",
+                                       h_auth_use,
+                                       h_auth_admin,
+                                       protection_properties,
+                                       &errinfo));
+    assert_int_equal(0, errinfo);
+
+    h_ctx = gta_context_open(test_params->h_inst,
+                             "local_data_prot_access_control",
+                             "ch.iec.30168.basic.local_data_protection",
+                             &errinfo);
+
+    assert_non_null(h_ctx);
+    assert_int_equal(0, errinfo);
+
+    const char * test_input = "test";
+    istream_from_buf_t istream = { 0 };
+
+    gtaio_ostream_t ostream_null = { 0 };
+    ostream_null.write = (gtaio_stream_write_t)ostream_null_write;
+    ostream_null.finish = (gtaio_stream_finish_t)ostream_finish;
+
+    istream_from_buf_init(&istream, test_input, strlen(test_input));
+    assert_false(gta_seal_data(h_ctx, (gtaio_istream_t*)&istream, &ostream_null, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+
+    gta_access_token_t granting_token = { 0 };
+    gta_access_token_t access_token = { 0 };
+    assert_false(gta_access_token_get_basic(test_params->h_inst, granting_token, "invalid personality", GTA_ACCESS_TOKEN_USAGE_USE, access_token, &errinfo));
+    assert_int_equal(GTA_ERROR_ITEM_NOT_FOUND, errinfo);
+    errinfo = 0;
+
+    assert_true(gta_access_token_get_basic(test_params->h_inst, granting_token, "local_data_prot_access_control", GTA_ACCESS_TOKEN_USAGE_USE, access_token, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_true(gta_context_auth_set_access_token(h_ctx, access_token, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    istream_from_buf_init(&istream, test_input, strlen(test_input));
+    assert_true(gta_seal_data(h_ctx, (gtaio_istream_t*)&istream, &ostream_null, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_false(gta_access_token_revoke(test_params->h_inst, granting_token, &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_PARAMETER, errinfo);
+    errinfo = 0;
+
+    assert_true(gta_access_token_revoke(test_params->h_inst, access_token, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    istream_from_buf_init(&istream, test_input, strlen(test_input));
+    assert_false(gta_seal_data(h_ctx, (gtaio_istream_t*)&istream, &ostream_null, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
 }
 
 /*
@@ -1414,6 +1495,7 @@ int ts_gta_sw_provider(void)
         cmocka_unit_test(personality_attributes_enumerate),
         /* Tests for access control (may be temporary) */
         cmocka_unit_test(access_control),
+        cmocka_unit_test(access_policies_and_access_tokens),
         /* Tests for persistent storage */
         cmocka_unit_test(provider_deserialize),
     };
