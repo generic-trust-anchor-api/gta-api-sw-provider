@@ -72,23 +72,32 @@ struct provider_instance_auth_token_t {
      * Mandatory token attributes
      */
 
-    /* Object reference scope */
-    gta_personality_name_t personality_name;
+    /*
+     * Object reference scope. For access tokens with
+     * usage == GTA_ACCESS_TOKEN_USAGE_RECEDE this parameter is not used and set
+     * to {0}.
+     */
+    gta_personality_fingerprint_t target_personality_fingerprint;
 
     /* enum: initial, basic, personality derived, physical presence */
     gta_access_descriptor_type_t type;
 
-    /* enum: use, admin, recede */
+    /*
+     * enum:
+     * GTA_ACCESS_TOKEN_USAGE_USE, GTA_ACCESS_TOKEN_USAGE_ADMIN, GTA_ACCESS_TOKEN_USAGE_RECEDE
+     */
     gta_access_token_usage_t usage;
 
     /* Nonce for freshness of token */
-    uint32_t freshness;
+    uint8_t freshness[GTA_ACCESS_TOKEN_LEN];
 
     /*
-     * Optional attributes
+     * Optional attributes required for personality derived tokens
      */
-    gta_personality_fingerprint_t pers_fingerprint;
-    uint32_t profile;  /* Note: stores unnamed enum declared in gta_sw_provider_context_params_t */
+    /* Fingerprint of the personality used to derive this token */
+    gta_personality_fingerprint_t binding_personality_fingerprint;
+    /* Note: Stores unnamed enum declared in gta_sw_provider_context_params_t */
+    uint32_t derivation_profile;
 
     /* Actual token value (binary string) */
     gta_access_token_t access_token;
@@ -238,6 +247,128 @@ static bool check_provider_params
     return ret;
 }
 
+/* Helper function to get the fingerprint of a personality specified by name */
+bool get_personality_fingerprint(
+    struct personality_name_list_item_t * p_personality_name_list,
+    const gta_personality_name_t personality_name,
+    gta_personality_fingerprint_t * target_personality_fingerprint,
+    gta_errinfo_t * p_errinfo
+)
+{
+   struct personality_name_list_item_t * p_personality;
+   const struct personality_attribute_t * p_personality_attribute;
+
+    p_personality = list_find(  (struct list_t *)p_personality_name_list,
+                                personality_name,
+                                personality_list_item_cmp_name);
+    if (NULL != p_personality) {
+        p_personality_attribute = list_find((struct list_t *) p_personality->p_personality_content->p_attribute_list,
+                                            (unsigned char *)PERS_ATTR_NAME_FINGERPRINT,
+                                            attribute_list_item_cmp_name);
+        if(NULL != p_personality_attribute) {
+            memcpy (*target_personality_fingerprint, p_personality_attribute->p_data, p_personality_attribute->data_size);
+
+        } else {
+            *p_errinfo = GTA_ERROR_ATTRIBUTE_MISSING;
+            return false;
+        }
+    } else {
+        *p_errinfo = GTA_ERROR_ITEM_NOT_FOUND;
+        return false;
+    }
+    return true;
+}
+
+bool find_access_token(void *p_item, void *p_item_crit) {
+    /*
+    *  ::: We search in the auth token list for a matching token:
+    *  *p_item      : (struct provider_instance_auth_token_t *)
+    *                 p_auth_token_list->access_token
+    *
+    *  ::: The context is associated with a token and a personality, the personality_item includes the name:
+    *  *p_item_crit : (struct gta_sw_provider_context_params_t *)
+    *                 p_context_params->access_token  (=> current token stored in context)
+    *
+    *   ::: Note: Here we do not test whether the policy allows a certain usage, profile, type, ...
+    */
+
+    if (0 == memcmp(((struct provider_instance_auth_token_t *)p_item)->access_token,
+                    ((struct gta_sw_provider_context_params_t *)p_item_crit)->access_token,
+                    GTA_ACCESS_TOKEN_LEN)) {
+        return true;
+    }
+    else {
+        return false;
+    }
+}
+
+bool find_access_policy(void *p_item, void *p_item_crit) {
+    /*
+    *  ::: We search for an item in the auth_*_info_list where the type matches:
+    *  *p_item      : (struct auth_info_list_item_t *)
+    *                 p_auth_use_info_list->type
+    *
+    *  *p_item_crit : (struct provider_instance_auth_token_t *)
+    *                 p_auth_token->type
+    */
+    if (((struct auth_info_list_item_t *)p_item)->type ==
+         ((struct provider_instance_auth_token_t *)p_item_crit)->type) {
+
+        return true;
+    }
+    else {
+        return false;
+    }
+}
+
+/* Helper function to check whether a valid access token is available and the policy allows access to the personality */
+bool check_access_permission(struct gta_sw_provider_context_params_t * p_context_params, struct gta_sw_provider_params_t * p_provider_params, gta_access_token_usage_t usage) {
+
+    bool personality_access_granted = false;
+    struct provider_instance_auth_token_t * p_auth_token;
+    struct auth_info_list_item_t * p_auth_x_info_list;
+
+    if(GTA_ACCESS_TOKEN_USAGE_USE == usage ) {
+        p_auth_x_info_list = p_context_params->p_personality_item->p_personality_content->p_auth_use_info_list;
+    }
+    else if (GTA_ACCESS_TOKEN_USAGE_ADMIN == usage) {
+        p_auth_x_info_list = p_context_params->p_personality_item->p_personality_content->p_auth_admin_info_list;
+    }
+    else {
+        p_auth_x_info_list = NULL;
+    }
+
+    if (NULL != p_auth_x_info_list) {
+        /* Note: our assumption is, that in case of an initial access policy there is only one element in the list */
+        if(GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL == p_auth_x_info_list->type) {
+            /*
+             * TODO: Infrastructure for initial access tokens to be defined.
+             * Here we have to check a flag whether the condition for this policy is met.
+             */
+            personality_access_granted = true;
+        }
+        else {
+            /* Next, we proceed with the verification of the access token */
+            p_auth_token = list_find((struct list_t *)p_provider_params->p_auth_token_list, p_context_params, find_access_token);
+            if(NULL != p_auth_token) {
+                if (usage == p_auth_token->usage) {
+                    if (NULL != list_find((struct list_t *)p_auth_x_info_list, p_auth_token, find_access_policy)) {
+                        personality_access_granted = true;
+                    }
+                    else {
+                        personality_access_granted = false;
+                    }
+                }
+            }
+            else {
+                personality_access_granted = false;
+            }
+        }
+    }
+
+    return personality_access_granted;
+}
+
 GTA_DECLARE_FUNCTION(const struct gta_function_list_t *, gta_sw_provider_init, ());
 GTA_DEFINE_FUNCTION(const struct gta_function_list_t *, gta_sw_provider_init,
 (
@@ -356,11 +487,65 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_issuing,
 }
 
 
+/*
+ * Helper function the generate an access token based on p_auth_token_list_item.
+ * The caller is responsible to hand over a valid pointer to
+ * p_auth_token_list_item.
+ */
+static bool generate_access_token (struct provider_instance_auth_token_t * p_auth_token_list_item)
+{
+    EVP_MD_CTX * ctx = NULL;
+    bool ret = false;
+
+    /* Compute and set basic_access_token (256 bit value) */
+    ctx = EVP_MD_CTX_new();
+    if (NULL == ctx) {
+        goto err;
+    }
+    if (!EVP_DigestInit_ex(ctx, EVP_sha256(), NULL)) {
+        goto err;
+    }
+
+    /* Note: do not include "p_auth_token_list_item->p_next", as this pointer can change */
+    if (!EVP_DigestUpdate(ctx, &(p_auth_token_list_item->target_personality_fingerprint), sizeof(p_auth_token_list_item->target_personality_fingerprint))) {
+        goto err;
+    }
+    if (!EVP_DigestUpdate(ctx, &(p_auth_token_list_item->type), sizeof(p_auth_token_list_item->type))) {
+        goto err;
+    }
+    if (!EVP_DigestUpdate(ctx, &(p_auth_token_list_item->usage), sizeof(p_auth_token_list_item->usage))) {
+        goto err;
+    }
+    if (!EVP_DigestUpdate(ctx, &(p_auth_token_list_item->freshness), sizeof(p_auth_token_list_item->freshness))) {
+        goto err;
+    }
+    if (!EVP_DigestUpdate(ctx, &(p_auth_token_list_item->binding_personality_fingerprint), sizeof(p_auth_token_list_item->binding_personality_fingerprint))) {
+        goto err;
+    }
+    if (!EVP_DigestUpdate(ctx, &(p_auth_token_list_item->derivation_profile), sizeof(p_auth_token_list_item->derivation_profile))) {
+        goto err;
+    }
+
+#if (GTA_ACCESS_TOKEN_LEN != 32)
+#error Size of access_token does not match used hash function
+#endif
+
+    if (!EVP_DigestFinal_ex(ctx, (unsigned char *)p_auth_token_list_item->access_token, NULL)) {
+        goto err;
+    }
+    ret = true;
+
+err:
+    EVP_MD_CTX_free(ctx);
+    return ret;
+}
+
+
 GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_basic,
 (
     gta_instance_handle_t h_inst,
     const gta_access_token_t granting_token,
-    const gta_personality_name_t personality_name,
+    const gta_personality_name_t target_personality_name,
     gta_access_token_usage_t usage,
     gta_access_token_t basic_access_token,
     gta_errinfo_t * p_errinfo
@@ -368,7 +553,6 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_basic,
 {
     bool ret = false;
     struct gta_sw_provider_params_t * p_provider_params = NULL;
-    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
     struct provider_instance_auth_token_t * p_auth_token_list_item = NULL;
 
     p_provider_params = gta_provider_get_params(h_inst, p_errinfo);
@@ -378,60 +562,45 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_basic,
     }
 
     /* TODO: For now we ignore the granting token (set to NULL) and accept
-     * any request */
+        * any request */
 
     /* Create a new access token object */
     p_auth_token_list_item =
-       gta_secmem_calloc(p_provider_params->h_ctx,
-       1, sizeof(struct provider_instance_auth_token_t ), p_errinfo);
+        gta_secmem_calloc(p_provider_params->h_ctx,
+        1, sizeof(struct provider_instance_auth_token_t ), p_errinfo);
     if (NULL == p_auth_token_list_item) {
         *p_errinfo = GTA_ERROR_MEMORY;
         goto err;
     }
     p_auth_token_list_item->p_next = NULL;
-    p_auth_token_list_item->personality_name =
-       gta_secmem_calloc(p_provider_params->h_ctx, 1,
-       strnlen(personality_name, PERSONALITY_NAME_LENGTH_MAX)+1, p_errinfo);
-    if (NULL == p_auth_token_list_item->personality_name) {
-        *p_errinfo = GTA_ERROR_MEMORY;
-        goto err;
-    }
-    strcpy(p_auth_token_list_item->personality_name, personality_name);
+
+    /* Get the personality fingerprint of the personality specified with "personality_name" */
+    get_personality_fingerprint(
+                p_provider_params->p_devicestate_stack->p_personality_name_list,
+                target_personality_name,
+                &(p_auth_token_list_item->target_personality_fingerprint),
+                p_errinfo
+    );
+
     p_auth_token_list_item->type = GTA_ACCESS_DESCRIPTOR_TYPE_BASIC_TOKEN;
     p_auth_token_list_item->usage = usage;
 
     /* Get random number from OpenSSL for freshness */
     if (1 != RAND_bytes((unsigned char *)&p_auth_token_list_item->freshness,
-             sizeof(p_auth_token_list_item->freshness)))
+                sizeof(p_auth_token_list_item->freshness)))
     {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
 
     /* Set optional attributes to undefined */
-    p_auth_token_list_item->profile = PROF_INVALID;
-    memset(p_auth_token_list_item->pers_fingerprint, 0, PERS_FINGERPRINT_LEN);
+    p_auth_token_list_item->derivation_profile = PROF_INVALID;
+    memset(p_auth_token_list_item->binding_personality_fingerprint, 0, PERS_FINGERPRINT_LEN);
 
     /* Compute and set basic_access_token (256 bit value) */
-    /* TODO SHA256 error handling */
-    SHA256_CTX sha256;
-    SHA256_Init(&sha256);
-    /*
-     * todo: hashing of p_auth_token_list_item needs to be refactored as the
-     * current approach causes valgrind errors. We should hash (sha update) the
-     * content of each struct element independently.
-     */
-    /*
-    SHA256_Update(&sha256, p_auth_token_list_item + sizeof(p_auth_token_list_item->p_next),
-               sizeof(struct provider_instance_auth_token_t ) - sizeof(p_auth_token_list_item->p_next));
-    */
-                /* Note: do not include "p_auth_token_list_item->p_next", as the pointer can change */
-    SHA256_Update(&sha256, p_auth_token_list_item->personality_name,
-                   strnlen(p_auth_token_list_item->personality_name, PERSONALITY_NAME_LENGTH_MAX)+1 );
-#if (GTA_ACCESS_TOKEN_LEN != 32)
-#error Size of access_token does not match used hash function
-#endif
-    SHA256_Final((unsigned char *)p_auth_token_list_item->access_token, &sha256);
+    if (!generate_access_token(p_auth_token_list_item)) {
+        goto err;
+    }
     memcpy(basic_access_token, p_auth_token_list_item->access_token, GTA_ACCESS_TOKEN_LEN);
 
     /* Append item to list */
@@ -453,7 +622,6 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_pers_derived,
     ))
 {
     bool ret = false;
-    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
 
     struct gta_sw_provider_params_t * p_provider_params = NULL;
     struct provider_instance_auth_token_t * p_auth_token_list_item = NULL;
@@ -462,45 +630,50 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_pers_derived,
 
     p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
     if (NULL == p_provider_params) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
     if (NULL == p_context_params) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
 
-    /* TODO: in order to generate a personality derived token we have to check whether
-    * a certain condition is met. But how do we know the what condition has to be met?
-    */
+    /* Check if condition is met allowing issue of pers derived access token */
+    if (!p_context_params->b_pers_derived_access_token_condition_fulfilled) {
+        *p_errinfo = GTA_ERROR_ACCESS;
+        goto err;
+    }
 
     p_auth_token_list_item =
-       gta_secmem_calloc(h_ctx,
-       1, sizeof(struct provider_instance_auth_token_t ), p_errinfo);
+        gta_secmem_calloc(p_provider_params->h_ctx,
+        1, sizeof(struct provider_instance_auth_token_t ), p_errinfo);
     if (NULL == p_auth_token_list_item) {
         *p_errinfo = GTA_ERROR_MEMORY;
         goto err;
     }
     p_auth_token_list_item->p_next = NULL;
-    p_auth_token_list_item->personality_name =
-       gta_secmem_calloc(p_provider_params->h_ctx, 1,
-       strnlen(target_personality_name, PERSONALITY_NAME_LENGTH_MAX)+1, p_errinfo);
-    if (NULL == p_auth_token_list_item->personality_name) {
-        *p_errinfo = GTA_ERROR_MEMORY;
-        goto err;
-    }
-    strcpy(p_auth_token_list_item->personality_name, target_personality_name);
+
+    /* Get the personality fingerprint of the personality specified with "personality_name" */
+    get_personality_fingerprint(
+                p_provider_params->p_devicestate_stack->p_personality_name_list,
+                target_personality_name,
+                &(p_auth_token_list_item->target_personality_fingerprint),
+                p_errinfo
+    );
+
     p_auth_token_list_item->type = GTA_ACCESS_DESCRIPTOR_TYPE_PERS_DERIVED_TOKEN;
     p_auth_token_list_item->usage = usage;
 
     /* Get random number from OpenSSL for freshness */
     if (1 != RAND_bytes((unsigned char *)&p_auth_token_list_item->freshness,
-             sizeof(p_auth_token_list_item->freshness)))
-    {
+                sizeof(p_auth_token_list_item->freshness))) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
 
+    /* Set special attributes for personality derived tokens */
     /* Find attribute_list_item with requested name */
     p_attribute = list_find((struct list_t *)(p_context_params->p_personality_item->p_personality_content->p_attribute_list),
                             PERS_ATTR_NAME_FINGERPRINT, attribute_list_item_cmp_name);
@@ -508,25 +681,15 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_pers_derived,
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
-    memcpy(p_auth_token_list_item->pers_fingerprint, p_attribute->p_data, p_attribute->data_size);
 
-    p_auth_token_list_item->profile = (uint32_t)p_context_params->profile;
+    memcpy(p_auth_token_list_item->binding_personality_fingerprint, p_attribute->p_data, p_attribute->data_size);
+    p_auth_token_list_item->derivation_profile = (uint32_t)p_context_params->profile;
     memset(p_auth_token_list_item->access_token, 0, GTA_ACCESS_TOKEN_LEN);
 
-    /* Compute and set pers_derived_access_token (256 bit value) */
-    /* TODO SHA256 error handling */
-    SHA256_CTX sha256;
-    SHA256_Init(&sha256);
-    SHA256_Update(&sha256, (char*)p_auth_token_list_item + sizeof(p_auth_token_list_item->p_next),
-               sizeof(struct provider_instance_auth_token_t ) - sizeof(p_auth_token_list_item->p_next));
-               /* Note: do not include "p_auth_token_list_item->p_next", as the pointer can change */
-    SHA256_Update(&sha256, p_auth_token_list_item->personality_name,
-                   strnlen(p_auth_token_list_item->personality_name, PERSONALITY_NAME_LENGTH_MAX)+1 );
-    SHA256_Update(&sha256, p_auth_token_list_item->pers_fingerprint, PERS_FINGERPRINT_LEN);
-#if (GTA_ACCESS_TOKEN_LEN != 32)
-#error Size of access_token does not match used hash function
-#endif
-    SHA256_Final((unsigned char *)p_auth_token_list_item->access_token, &sha256);
+    /* Compute and set basic_access_token (256 bit value) */
+    if (!generate_access_token(p_auth_token_list_item)) {
+        goto err;
+    }
     memcpy(*p_pers_derived_access_token, p_auth_token_list_item->access_token, GTA_ACCESS_TOKEN_LEN);
 
     /* Append item to list */
@@ -564,10 +727,9 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_context_auth_set_access_token,
     struct gta_sw_provider_context_params_t * p_context_params = NULL;
     bool ret = false;
 
-    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
     if (NULL == p_context_params) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
 
@@ -702,7 +864,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_provider_context_open,
     }
     p_context_params->h_ctx = h_ctx;
     p_context_params->p_personality_item = p_personality_item;
-
+    p_context_params->b_pers_derived_access_token_condition_fulfilled = false;
     p_context_params->profile = get_profile_enum(profile);
 
     /* check whether function is supported by profile */
@@ -1267,7 +1429,7 @@ bool policy_copy_helper(gta_context_handle_t h_ctx,
                             h_access_descriptor, GTA_ACCESS_DESCRIPTOR_ATTR_PERS_FINGERPRINT,
                             &p_attr, &attr_len, p_errinfo )) {
                             if (PERS_FINGERPRINT_LEN == attr_len) {
-                                memcpy( p_auth_info_list_current->pers_fingerprint,
+                                memcpy( p_auth_info_list_current->binding_personality_fingerprint,
                                     p_attr, attr_len );
                             }
                             else {
@@ -1292,11 +1454,12 @@ bool policy_copy_helper(gta_context_handle_t h_ctx,
                             &p_attr, &attr_len, p_errinfo )) {
                             /* NOTE: attr_len does not include the string termination! */
                             if (NULL != (
-                                p_auth_info_list_current->profile_name =
+                                p_auth_info_list_current->derivation_profile_name =
                                 gta_secmem_calloc(h_ctx, 1, attr_len + 1, p_errinfo)
                             )){
-                               strncpy( p_auth_info_list_current->profile_name,
-                                        p_attr, attr_len + 1 );
+                                memcpy(p_auth_info_list_current->derivation_profile_name,
+                                        p_attr, attr_len);
+                                p_auth_info_list_current->derivation_profile_name[attr_len] = '\0';
                             }
                             else {
                                 /* Cleanup memory */
@@ -1515,7 +1678,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_deploy,
     }
 
     /* If we reach this point we are correctly finished reading the personality content */
-    /* Now we can add the personality data strature ad the beginning of the personality list */
+    /* Now we can add the personality data structure ad the beginning of the personality list */
     list_append_front(
             (struct list_t **)(&(p_provider_params->p_devicestate_stack->p_personality_name_list)),
             p_personality_name_list_item);
@@ -1558,7 +1721,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_create,
     const gta_profile_name_t profile,
     gta_access_policy_handle_t h_auth_use,
     gta_access_policy_handle_t h_auth_admin,
-    struct gta_protection_properties_t requested_protection_properies,
+    struct gta_protection_properties_t requested_protection_properties,
     gta_errinfo_t * p_errinfo
     ))
 {
