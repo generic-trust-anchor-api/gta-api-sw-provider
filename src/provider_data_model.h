@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /**********************************************************************
- * Copyright (c) 2024, Siemens AG
+ * Copyright (c) 2024-2025, Siemens AG
  **********************************************************************/
 
 #include <gta_api/gta_api.h>
@@ -94,9 +94,10 @@ struct auth_info_list_item_t {
     struct auth_info_list_item_t * p_next;
 
     gta_access_descriptor_type_t type;
-    gta_access_token_t params;
-    gta_personality_fingerprint_t pers_fingerprint;
-    gta_profile_name_t profile_name;
+
+    /* These two attributes are only checked for personality derived tokens */
+    gta_personality_fingerprint_t binding_personality_fingerprint;
+    gta_profile_name_t derivation_profile_name;
 };
 
 /* free an Attribute of a Personality */
