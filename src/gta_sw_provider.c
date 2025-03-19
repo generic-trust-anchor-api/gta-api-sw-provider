@@ -1969,9 +1969,15 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_enroll,
     ))
 {
     struct gta_sw_provider_context_params_t * p_context_params = NULL;
+    struct gta_sw_provider_params_t * p_provider_params = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
     if (NULL == p_context_params) {
+        return false;
+    }
+
+    p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
+    if (NULL == p_provider_params) {
         return false;
     }
 
@@ -1979,6 +1985,12 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_enroll,
     if (NULL == supported_profiles[p_context_params->profile].pFunction->personality_enroll) {
         DEBUG_PRINT(("gta_sw_provider_gta_personality_enroll: Profile not supported\n"));
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        return false;
+    }
+
+    /* check access condition */
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_USE)) {
+        *p_errinfo = GTA_ERROR_ACCESS;
         return false;
     }
 
@@ -2167,12 +2179,16 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_add_trusted_attribute,
         return false;
     }
 
-    /* todo: check access condition */
-
     enum pers_attr_type_t pers_attr_type = get_pers_attr_type_enum(attrtype);
     /* Generic attribute types are not allowed */
     if ((PAT_INVALID == pers_attr_type) || (false == pers_attr_type_trusted[pers_attr_type])) {
         *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
+        return false;
+    }
+
+    /* check access condition */
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_ADMIN)) {
+        *p_errinfo = GTA_ERROR_ACCESS;
         return false;
     }
 
@@ -2333,6 +2349,12 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_remove_attribute,
         goto err;
     }
 
+    /* check access condition */
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_ADMIN)) {
+        *p_errinfo = GTA_ERROR_ACCESS;
+        goto err;
+    }
+
     /*
     * Remove the attribute from attribute list. Note that this function
     * searches again for the attribute in the list. This is not necessary
@@ -2394,7 +2416,12 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_deactivate_attribute,
         goto err;
     }
 
-    /* todo: check access condition */
+    /* check access condition */
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_ADMIN)) {
+        *p_errinfo = GTA_ERROR_ACCESS;
+        goto err;
+    }
+
     p_attribute->activated = false;
 
     /* Serialize the new device state */
@@ -2454,7 +2481,12 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_activate_attribute,
         goto err;
     }
 
-    /* todo: check access condition */
+    /* check access condition */
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_ADMIN)) {
+        *p_errinfo = GTA_ERROR_ACCESS;
+        goto err;
+    }
+
     p_attribute->activated = true;
 
     /* Serialize the new device state */
@@ -2607,10 +2639,16 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_seal_data,
     ))
 {
     struct gta_sw_provider_context_params_t * p_context_params = NULL;
+    struct gta_sw_provider_params_t * p_provider_params = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (!p_context_params)
-    {
+    if (!p_context_params) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        return false;
+    }
+
+    p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
+    if (!p_provider_params) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         return false;
     }
@@ -2619,6 +2657,12 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_seal_data,
     if (NULL == supported_profiles[p_context_params->profile].pFunction->seal_data) {
         DEBUG_PRINT(("gta_sw_provider_gta_seal_data: Profile not supported\n"));
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        return false;
+    }
+
+    /* check access condition */
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_USE)) {
+        *p_errinfo = GTA_ERROR_ACCESS;
         return false;
     }
 
@@ -2636,10 +2680,16 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_unseal_data,
     ))
 {
     struct gta_sw_provider_context_params_t * p_context_params = NULL;
+    struct gta_sw_provider_params_t * p_provider_params = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (!p_context_params)
-    {
+    if (!p_context_params) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        return false;
+    }
+
+    p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
+    if (!p_provider_params) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         return false;
     }
@@ -2648,6 +2698,12 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_unseal_data,
     if (NULL == supported_profiles[p_context_params->profile].pFunction->unseal_data) {
         DEBUG_PRINT(("gta_sw_provider_gta_unseal_data: Profile not supported\n"));
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        return false;
+    }
+
+    /* check access condition */
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_USE)) {
+        *p_errinfo = GTA_ERROR_ACCESS;
         return false;
     }
 
@@ -2682,11 +2738,15 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_authenticate_data_detached,
     ))
 {
     struct gta_sw_provider_context_params_t * p_context_params = NULL;
+    struct gta_sw_provider_params_t * p_provider_params = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (!p_context_params)
-    {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!p_context_params) {
+        return false;
+    }
+
+    p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
+    if (!p_provider_params) {
         return false;
     }
 
@@ -2694,6 +2754,12 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_authenticate_data_detached,
     if (NULL == supported_profiles[p_context_params->profile].pFunction->authenticate_data_detached) {
         DEBUG_PRINT(("gta_sw_provider_gta_authenticate_data_detached: Profile not supported\n"));
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        return false;
+    }
+
+    /* check access condition */
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_USE)) {
+        *p_errinfo = GTA_ERROR_ACCESS;
         return false;
     }
 
