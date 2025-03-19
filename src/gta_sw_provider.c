@@ -318,7 +318,7 @@ bool find_access_policy(void *p_item, void *p_item_crit) {
 }
 
 /* Helper function to check whether a valid access token is available and the policy allows access to the personality */
-bool check_access_permission(struct gta_sw_provider_context_params_t * p_context_params, struct gta_sw_provider_params_t * p_provider_params, gta_access_token_usage_t usage) {
+bool check_access_permission(struct gta_sw_provider_context_params_t * p_context_params, struct gta_sw_provider_params_t * p_provider_params, gta_access_token_usage_t usage, gta_errinfo_t * p_errinfo) {
 
     bool personality_access_granted = false;
     struct provider_instance_auth_token_t * p_auth_token;
@@ -352,14 +352,19 @@ bool check_access_permission(struct gta_sw_provider_context_params_t * p_context
                         personality_access_granted = true;
                     }
                     else {
+                        *p_errinfo = GTA_ERROR_ACCESS;
                         personality_access_granted = false;
                     }
                 }
             }
             else {
+                *p_errinfo = GTA_ERROR_ACCESS;
                 personality_access_granted = false;
             }
         }
+    }
+    else {
+        *p_errinfo = GTA_ERROR_ACCESS;
     }
 
     return personality_access_granted;
@@ -1980,8 +1985,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_enroll,
     }
 
     /* check access condition */
-    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_USE)) {
-        *p_errinfo = GTA_ERROR_ACCESS;
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_USE, p_errinfo)) {
         return false;
     }
 
@@ -2178,8 +2182,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_add_trusted_attribute,
     }
 
     /* check access condition */
-    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_ADMIN)) {
-        *p_errinfo = GTA_ERROR_ACCESS;
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_ADMIN, p_errinfo)) {
         return false;
     }
 
@@ -2341,8 +2344,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_remove_attribute,
     }
 
     /* check access condition */
-    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_ADMIN)) {
-        *p_errinfo = GTA_ERROR_ACCESS;
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_ADMIN, p_errinfo)) {
         goto err;
     }
 
@@ -2408,8 +2410,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_deactivate_attribute,
     }
 
     /* check access condition */
-    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_ADMIN)) {
-        *p_errinfo = GTA_ERROR_ACCESS;
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_ADMIN, p_errinfo)) {
         goto err;
     }
 
@@ -2473,8 +2474,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_activate_attribute,
     }
 
     /* check access condition */
-    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_ADMIN)) {
-        *p_errinfo = GTA_ERROR_ACCESS;
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_ADMIN, p_errinfo)) {
         goto err;
     }
 
@@ -2652,8 +2652,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_seal_data,
     }
 
     /* check access condition */
-    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_USE)) {
-        *p_errinfo = GTA_ERROR_ACCESS;
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_USE, p_errinfo)) {
         return false;
     }
 
@@ -2693,8 +2692,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_unseal_data,
     }
 
     /* check access condition */
-    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_USE)) {
-        *p_errinfo = GTA_ERROR_ACCESS;
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_USE, p_errinfo)) {
         return false;
     }
 
@@ -2749,8 +2747,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_authenticate_data_detached,
     }
 
     /* check access condition */
-    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_USE)) {
-        *p_errinfo = GTA_ERROR_ACCESS;
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_USE, p_errinfo)) {
         return false;
     }
 
