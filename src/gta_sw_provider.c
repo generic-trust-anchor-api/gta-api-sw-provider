@@ -301,23 +301,34 @@ bool find_access_token(void *p_item, void *p_item_crit) {
     }
 }
 
-bool find_access_policy(void *p_item, void *p_item_crit) {
+bool find_matching_access_policy(void *p_item, void *p_item_crit) {
     /*
-    *  ::: We search for an item in the auth_*_info_list where the type matches:
+    *  ::: We search for an item in the auth_*_info_list where the type matches,
+    * and in case of personality derived access tokens, the additional
+    * conditions match:
     *  *p_item      : (struct auth_info_list_item_t *)
     *                 p_auth_use_info_list->type
     *
     *  *p_item_crit : (struct provider_instance_auth_token_t *)
     *                 p_auth_token->type
     */
-    if (((struct auth_info_list_item_t *)p_item)->type ==
-         ((struct provider_instance_auth_token_t *)p_item_crit)->type) {
+    struct auth_info_list_item_t * p_auth_info_list_item = (struct auth_info_list_item_t *)p_item;
+    struct provider_instance_auth_token_t * p_provider_instance_auth_token = (struct provider_instance_auth_token_t *)p_item_crit;
 
-        return true;
-    }
-    else {
+    if (p_auth_info_list_item->type != p_provider_instance_auth_token->type) {
         return false;
     }
+    if (GTA_ACCESS_DESCRIPTOR_TYPE_PERS_DERIVED_TOKEN == p_provider_instance_auth_token->type) {
+        const enum profile_t profile = get_profile_enum(p_auth_info_list_item->derivation_profile_name);
+        if (PROF_INVALID == profile) {
+            return false;
+        }
+        if ((p_auth_info_list_item->binding_personality_fingerprint != p_provider_instance_auth_token->binding_personality_fingerprint)
+            || (profile != p_provider_instance_auth_token->derivation_profile)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /* Helper function to check whether a valid access token is available and the policy allows access to the personality */
@@ -351,7 +362,11 @@ bool check_access_permission(struct gta_sw_provider_context_params_t * p_context
             p_auth_token = list_find((struct list_t *)p_provider_params->p_auth_token_list, p_context_params->access_token, find_access_token);
             if(NULL != p_auth_token) {
                 if (usage == p_auth_token->usage) {
-                    if (NULL != list_find((struct list_t *)p_auth_x_info_list, p_auth_token, find_access_policy)) {
+                    /*
+                     * Checks if type matches and in case of personality derived
+                     * access tokens, if the two additional conditions match.
+                     */
+                    if (NULL != list_find((struct list_t *)p_auth_x_info_list, p_auth_token, find_matching_access_policy)) {
                         personality_access_granted = true;
                     }
                     else {
