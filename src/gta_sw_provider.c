@@ -248,7 +248,7 @@ static bool check_provider_params
 }
 
 /* Helper function to get the fingerprint of a personality specified by name */
-bool get_personality_fingerprint(
+static bool get_personality_fingerprint(
     struct personality_name_list_item_t * p_personality_name_list,
     const gta_personality_name_t personality_name,
     gta_personality_fingerprint_t * target_personality_fingerprint,
@@ -312,8 +312,8 @@ bool find_matching_access_policy(void *p_item, void *p_item_crit) {
     *  *p_item_crit : (struct provider_instance_auth_token_t *)
     *                 p_auth_token->type
     */
-    struct auth_info_list_item_t * p_auth_info_list_item = (struct auth_info_list_item_t *)p_item;
-    struct provider_instance_auth_token_t * p_provider_instance_auth_token = (struct provider_instance_auth_token_t *)p_item_crit;
+    const struct auth_info_list_item_t * p_auth_info_list_item = (struct auth_info_list_item_t *)p_item;
+    const struct provider_instance_auth_token_t * p_provider_instance_auth_token = (struct provider_instance_auth_token_t *)p_item_crit;
 
     if (p_auth_info_list_item->type != p_provider_instance_auth_token->type) {
         return false;
@@ -577,7 +577,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_basic,
     p_provider_params = gta_provider_get_params(h_inst, p_errinfo);
     if (NULL == p_provider_params) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        return false;
     }
 
     /* TODO: For now we ignore the granting token (set to NULL) and accept
@@ -594,12 +594,13 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_basic,
     p_auth_token_list_item->p_next = NULL;
 
     /* Get the personality fingerprint of the personality specified with "personality_name" */
-    get_personality_fingerprint(
+    if (!get_personality_fingerprint(
                 p_provider_params->p_devicestate_stack->p_personality_name_list,
                 target_personality_name,
                 &(p_auth_token_list_item->target_personality_fingerprint),
-                p_errinfo
-    );
+                p_errinfo)) {
+        goto err;
+    }
 
     p_auth_token_list_item->type = GTA_ACCESS_DESCRIPTOR_TYPE_BASIC_TOKEN;
     p_auth_token_list_item->usage = usage;
@@ -650,7 +651,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_pers_derived,
     p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
     if (NULL == p_provider_params) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        return false;
     }
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
@@ -675,12 +676,13 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_pers_derived,
     p_auth_token_list_item->p_next = NULL;
 
     /* Get the personality fingerprint of the personality specified with "personality_name" */
-    get_personality_fingerprint(
+    if (!get_personality_fingerprint(
                 p_provider_params->p_devicestate_stack->p_personality_name_list,
                 target_personality_name,
                 &(p_auth_token_list_item->target_personality_fingerprint),
-                p_errinfo
-    );
+                p_errinfo)) {
+        goto err;
+    }
 
     p_auth_token_list_item->type = GTA_ACCESS_DESCRIPTOR_TYPE_PERS_DERIVED_TOKEN;
     p_auth_token_list_item->usage = usage;
