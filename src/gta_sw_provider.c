@@ -285,15 +285,14 @@ bool find_access_token(void *p_item, void *p_item_crit) {
     *  *p_item      : (struct provider_instance_auth_token_t *)
     *                 p_auth_token_list->access_token
     *
-    *  ::: The context is associated with a token and a personality, the personality_item includes the name:
-    *  *p_item_crit : (struct gta_sw_provider_context_params_t *)
-    *                 p_context_params->access_token  (=> current token stored in context)
+    *  ::: The access token to look for:
+    *  *p_item_crit : (struct gta_access_token_t)
     *
     *   ::: Note: Here we do not test whether the policy allows a certain usage, profile, type, ...
     */
 
     if (0 == memcmp(((struct provider_instance_auth_token_t *)p_item)->access_token,
-                    ((struct gta_sw_provider_context_params_t *)p_item_crit)->access_token,
+                    (struct gta_access_token_t *)p_item_crit,
                     GTA_ACCESS_TOKEN_LEN)) {
         return true;
     }
@@ -349,7 +348,7 @@ bool check_access_permission(struct gta_sw_provider_context_params_t * p_context
         }
         else {
             /* Next, we proceed with the verification of the access token */
-            p_auth_token = list_find((struct list_t *)p_provider_params->p_auth_token_list, p_context_params, find_access_token);
+            p_auth_token = list_find((struct list_t *)p_provider_params->p_auth_token_list, p_context_params->access_token, find_access_token);
             if(NULL != p_auth_token) {
                 if (usage == p_auth_token->usage) {
                     if (NULL != list_find((struct list_t *)p_auth_x_info_list, p_auth_token, find_access_policy)) {
@@ -556,9 +555,9 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_basic,
     gta_errinfo_t * p_errinfo
     ))
 {
-    bool ret = false;
     struct gta_sw_provider_params_t * p_provider_params = NULL;
     struct provider_instance_auth_token_t * p_auth_token_list_item = NULL;
+    gta_errinfo_t errinfo_tmp = 0;
 
     p_provider_params = gta_provider_get_params(h_inst, p_errinfo);
     if (NULL == p_provider_params) {
@@ -610,10 +609,11 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_basic,
 
     /* Append item to list */
     list_append((struct list_t **) &p_provider_params->p_auth_token_list, (void *) p_auth_token_list_item);
-    ret = true;
+    return true;
 
 err:
-    return ret;
+    gta_secmem_free(p_provider_params->h_ctx, p_auth_token_list_item, &errinfo_tmp);
+    return false;
 }
 
 
@@ -626,12 +626,11 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_pers_derived,
     gta_errinfo_t * p_errinfo
     ))
 {
-    bool ret = false;
-
     struct gta_sw_provider_params_t * p_provider_params = NULL;
     struct provider_instance_auth_token_t * p_auth_token_list_item = NULL;
     struct gta_sw_provider_context_params_t * p_context_params = NULL;
     const struct personality_attribute_t * p_attribute = NULL;
+    gta_errinfo_t errinfo_tmp = 0;
 
     p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
     if (NULL == p_provider_params) {
@@ -699,10 +698,11 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_pers_derived,
 
     /* Append item to list */
     list_append((struct list_t **) &(p_provider_params->p_auth_token_list), (void *) p_auth_token_list_item);
-    ret = true;
+    return true;
 
 err:
-    return ret;
+    gta_secmem_free(p_provider_params->h_ctx, p_auth_token_list_item, &errinfo_tmp);
+    return false;
 }
 
 
@@ -713,13 +713,24 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_revoke,
     gta_errinfo_t * p_errinfo
     ))
 {
-    bool ret = false;
+    struct gta_sw_provider_params_t * p_provider_params = NULL;
+    struct provider_instance_auth_token_t * p_auth_token_list_item = NULL;
 
-    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    p_provider_params = gta_provider_get_params(h_inst, p_errinfo);
+    if (NULL == p_provider_params) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        return false;
+    }
 
-    /* ... */
+    /* Remove item from list */
+    p_auth_token_list_item = list_remove((struct list_t **) &p_provider_params->p_auth_token_list, access_token_tbr, find_access_token);
+    if (NULL == p_auth_token_list_item) {
+        *p_errinfo = GTA_ERROR_INVALID_PARAMETER;
+        return false;
+    }
 
-    return ret;
+    gta_secmem_free(p_provider_params->h_ctx, p_auth_token_list_item, p_errinfo);
+    return true;
 }
 
 GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_context_auth_set_access_token,
