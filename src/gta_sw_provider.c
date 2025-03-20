@@ -335,8 +335,8 @@ bool find_matching_access_policy(void *p_item, void *p_item_crit) {
 bool check_access_permission(struct gta_sw_provider_context_params_t * p_context_params, struct gta_sw_provider_params_t * p_provider_params, gta_access_token_usage_t usage, gta_errinfo_t * p_errinfo) {
 
     bool personality_access_granted = false;
-    struct provider_instance_auth_token_t * p_auth_token;
-    struct auth_info_list_item_t * p_auth_x_info_list;
+    struct provider_instance_auth_token_t * p_auth_token = NULL;
+    struct auth_info_list_item_t * p_auth_x_info_list = NULL;
 
     if(GTA_ACCESS_TOKEN_USAGE_USE == usage ) {
         p_auth_x_info_list = p_context_params->p_personality_item->p_personality_content->p_auth_use_info_list;
@@ -361,6 +361,19 @@ bool check_access_permission(struct gta_sw_provider_context_params_t * p_context
             /* Next, we proceed with the verification of the access token */
             p_auth_token = list_find((struct list_t *)p_provider_params->p_auth_token_list, p_context_params->access_token, find_access_token);
             if(NULL != p_auth_token) {
+                /* Check if target personality matches */
+                struct personality_attribute_t * p_personality_attribute = NULL;
+                p_personality_attribute = list_find((struct list_t *) p_context_params->p_personality_item->p_personality_content->p_attribute_list,
+                                            (unsigned char *)PERS_ATTR_NAME_FINGERPRINT,
+                                            attribute_list_item_cmp_name);
+                if (NULL == p_personality_attribute) {
+                    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+                    return false;
+                }
+                if (0 != memcmp (p_personality_attribute->p_data, p_auth_token->target_personality_fingerprint, sizeof(gta_personality_fingerprint_t))) {
+                    *p_errinfo = GTA_ERROR_ACCESS;
+                    return false;
+                }
                 if (usage == p_auth_token->usage) {
                     /*
                      * Checks if type matches and in case of personality derived
@@ -371,13 +384,11 @@ bool check_access_permission(struct gta_sw_provider_context_params_t * p_context
                     }
                     else {
                         *p_errinfo = GTA_ERROR_ACCESS;
-                        personality_access_granted = false;
                     }
                 }
             }
             else {
                 *p_errinfo = GTA_ERROR_ACCESS;
-                personality_access_granted = false;
             }
         }
     }
