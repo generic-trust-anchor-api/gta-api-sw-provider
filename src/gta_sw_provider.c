@@ -1441,7 +1441,7 @@ bool policy_copy_helper(gta_context_handle_t h_ctx,
                             gta_access_policy_handle_t h_auth,
                             struct auth_info_list_item_t ** p_auth_info_list,
                             gta_errinfo_t * p_errinfo
-          ) {
+) {
     gta_enum_handle_t h_enum = GTA_HANDLE_ENUM_FIRST;
     gta_access_descriptor_handle_t h_access_descriptor = GTA_HANDLE_INVALID;
     struct auth_info_list_item_t * p_auth_info_list_current = NULL;
@@ -1464,8 +1464,15 @@ bool policy_copy_helper(gta_context_handle_t h_ctx,
                 switch (access_descriptor_type) {
                     case GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL:
                     case GTA_ACCESS_DESCRIPTOR_TYPE_BASIC_TOKEN:
-                    case GTA_ACCESS_DESCRIPTOR_TYPE_PHYSICAL_PRESENCE_TOKEN:
                         /* Nothing to do */
+                        break;
+                    case GTA_ACCESS_DESCRIPTOR_TYPE_PHYSICAL_PRESENCE_TOKEN:
+                        /* Cleanup memory */
+                        gta_secmem_free(h_ctx, p_auth_info_list_current, p_errinfo);
+                        p_auth_info_list_current = NULL;
+                        /* Access policy invalid */
+                        *p_errinfo = GTA_ERROR_ACCESS_POLICY;
+                        goto err;
                         break;
                     case GTA_ACCESS_DESCRIPTOR_TYPE_PERS_DERIVED_TOKEN:
                         /* Copy fingerprint */
