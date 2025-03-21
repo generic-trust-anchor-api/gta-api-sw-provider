@@ -1381,8 +1381,11 @@ static void access_policies_and_access_tokens(void ** state)
     gta_access_policy_handle_t h_auth_use = GTA_HANDLE_INVALID;
     gta_access_policy_handle_t h_auth_admin = GTA_HANDLE_INVALID;
     struct gta_protection_properties_t protection_properties = { 0 };
+    gta_personality_fingerprint_t fingerprint = { 0 };
 
-    h_auth_use = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_BASIC_TOKEN, &errinfo);
+    h_auth_use = gta_access_policy_create(test_params->h_inst, &errinfo);
+    gta_access_policy_add_basic_access_token_descriptor(h_auth_use, &errinfo);
+    gta_access_policy_add_pers_derived_access_token_descriptor(h_auth_use, fingerprint, "todo", &errinfo);
     assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
     assert_int_equal(0, errinfo);
 
@@ -1413,6 +1416,8 @@ static void access_policies_and_access_tokens(void ** state)
                                        protection_properties,
                                        &errinfo));
     assert_int_equal(0, errinfo);
+
+    assert_true(gta_access_policy_destroy(h_auth_use, &errinfo));
 
     h_ctx = gta_context_open(test_params->h_inst,
                              "local_data_prot_access_control",
@@ -1448,6 +1453,14 @@ static void access_policies_and_access_tokens(void ** state)
     assert_true(gta_access_token_get_basic(test_params->h_inst, test_params->granting_token, "local_data_prot_access_control", GTA_ACCESS_TOKEN_USAGE_USE, access_token, &errinfo));
     assert_int_equal(0, errinfo);
 
+    assert_true(gta_context_auth_set_access_token(h_ctx, test_params->physical_presence_token, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    istream_from_buf_init(&istream, test_input, strlen(test_input));
+    assert_false(gta_seal_data(h_ctx, (gtaio_istream_t*)&istream, &ostream_null, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+
     assert_true(gta_context_auth_set_access_token(h_ctx, access_token, &errinfo));
     assert_int_equal(0, errinfo);
 
@@ -1470,6 +1483,70 @@ static void access_policies_and_access_tokens(void ** state)
     assert_true(gta_context_close(h_ctx, &errinfo));
     assert_int_equal(0, errinfo);
 
+    /* Create another personality */
+    h_auth_use = gta_access_policy_create(test_params->h_inst, &errinfo);
+    gta_access_policy_add_pers_derived_access_token_descriptor(h_auth_use, fingerprint, "todo", &errinfo);
+    assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
+    assert_int_equal(0, errinfo);
+
+    h_auth_admin = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_BASIC_TOKEN, &errinfo);
+    assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
+    assert_int_equal(0, errinfo);
+
+    assert_true(gta_personality_create(test_params->h_inst,
+                                       IDENTIFIER2_VALUE,
+                                       "ec_access_control",
+                                       "access control",
+                                       "com.github.generic-trust-anchor-api.basic.ec",
+                                       h_auth_use,
+                                       h_auth_admin,
+                                       protection_properties,
+                                       &errinfo));
+    assert_int_equal(0, errinfo);
+    assert_true(gta_access_policy_destroy(h_auth_use, &errinfo));
+
+    h_ctx = gta_context_open(test_params->h_inst,
+        "ec_access_control",
+        "com.github.generic-trust-anchor-api.basic.tls",
+        &errinfo);
+
+    assert_non_null(h_ctx);
+    assert_int_equal(0, errinfo);
+
+    assert_true(gta_access_token_get_basic(test_params->h_inst, test_params->granting_token, "local_data_prot_access_control", GTA_ACCESS_TOKEN_USAGE_USE, access_token, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_true(gta_context_auth_set_access_token(h_ctx, access_token, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_true(gta_access_token_get_basic(test_params->h_inst, test_params->granting_token, "ec_access_control", GTA_ACCESS_TOKEN_USAGE_USE, access_token, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_true(gta_context_auth_set_access_token(h_ctx, access_token, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    istream_from_buf_init(&istream, test_input, strlen(test_input));
+    assert_false(gta_authenticate_data_detached(h_ctx, (gtaio_istream_t*)&istream, &ostream_null, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+
+    assert_false(gta_personality_add_trusted_attribute(h_ctx, "ch.iec.30168.trustlist.certificate.trusted.x509v3", "Dummy EE Cert trusted", (gtaio_istream_t *)&istream, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+
+    assert_true(gta_access_token_get_basic(test_params->h_inst, test_params->granting_token, "ec_access_control", GTA_ACCESS_TOKEN_USAGE_ADMIN, access_token, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_true(gta_context_auth_set_access_token(h_ctx, access_token, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_true(gta_personality_add_trusted_attribute(h_ctx, "ch.iec.30168.trustlist.certificate.trusted.x509v3", "Dummy EE Cert trusted", (gtaio_istream_t *)&istream, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Revoke some access tokens */
     assert_true(gta_access_token_revoke(test_params->h_inst, test_params->physical_presence_token, &errinfo));
     assert_int_equal(0, errinfo);
 
