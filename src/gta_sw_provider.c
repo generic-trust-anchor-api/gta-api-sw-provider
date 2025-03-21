@@ -104,6 +104,13 @@ struct provider_instance_auth_token_t {
 };
 
 
+/* List of access tokens */
+struct gta_access_token_list_t {
+    struct gta_access_token_list_t * p_next;
+    gta_access_token_t access_token;
+};
+
+
 /*
  * Helper function to get enum value of a profile string. In case the string is
  * not found, 0 (PROF_INVALID) is returned.
@@ -332,6 +339,80 @@ bool find_matching_access_policy(void *p_item, void *p_item_crit) {
 }
 
 /* Helper function to check whether a valid access token is available and the policy allows access to the personality */
+bool check_access_permission (
+    struct gta_sw_provider_context_params_t * p_context_params,
+    struct gta_sw_provider_params_t * p_provider_params,
+    gta_access_token_usage_t usage,
+    gta_errinfo_t * p_errinfo
+)
+{
+    struct provider_instance_auth_token_t * p_auth_token = NULL;
+    struct auth_info_list_item_t * p_auth_x_info_list = NULL;
+
+    if(GTA_ACCESS_TOKEN_USAGE_USE == usage ) {
+        p_auth_x_info_list = p_context_params->p_personality_item->p_personality_content->p_auth_use_info_list;
+    }
+    else if (GTA_ACCESS_TOKEN_USAGE_ADMIN == usage) {
+        p_auth_x_info_list = p_context_params->p_personality_item->p_personality_content->p_auth_admin_info_list;
+    }
+    else {
+        /* Todo: checks for recede here! */
+        p_auth_x_info_list = NULL;
+    }
+
+    /* None of the policy lists are allowed to be empty */
+    if (NULL == p_auth_x_info_list) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        return false;
+    }
+
+    /* If policy type is "initial", it is the only list element */
+    if(GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL == p_auth_x_info_list->type) {
+        /*
+         * TODO: Infrastructure for initial access tokens to be defined.
+         * Here we have to check a flag whether the condition for this policy is met.
+         */
+        return true;
+    }
+
+    /* Get the fingerprint of the current personality */
+    struct personality_attribute_t * p_personality_attribute = NULL;
+    p_personality_attribute = list_find((struct list_t *) p_context_params->p_personality_item->p_personality_content->p_attribute_list,
+                                (unsigned char *)PERS_ATTR_NAME_FINGERPRINT,
+                                attribute_list_item_cmp_name);
+    if (NULL == p_personality_attribute) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        return false;
+    }
+
+    /*
+     * For all the other policy types, access tokens are needed. We loop over
+     * all available access tokens in the context, until one meets the
+     * requirements of the policy.
+     */
+    struct gta_access_token_list_t * access_token_list_item = p_context_params->p_access_token_list;
+    while (NULL != access_token_list_item) {
+        /* Find the auth token for the current access token */
+        p_auth_token = list_find((struct list_t *)p_provider_params->p_auth_token_list, access_token_list_item->access_token, find_access_token);
+        if ((NULL != p_auth_token) && (GTA_ACCESS_DESCRIPTOR_TYPE_PHYSICAL_PRESENCE_TOKEN != p_auth_token->type)) {
+            /* Check if target personality and usage matches */
+            if ((0 == memcmp (p_personality_attribute->p_data, p_auth_token->target_personality_fingerprint, sizeof(gta_personality_fingerprint_t)))
+                && (usage == p_auth_token->usage)) {
+
+                /* Now we look for a policy which can be fulfilled by this token */
+                if (NULL != list_find((struct list_t *)p_auth_x_info_list, p_auth_token, find_matching_access_policy)) {
+                    return true;
+                }
+            }
+        }
+        access_token_list_item = access_token_list_item->p_next;
+    }
+    *p_errinfo = GTA_ERROR_ACCESS;
+    return false;
+}
+
+#if 0
+/* Helper function to check whether a valid access token is available and the policy allows access to the personality */
 bool check_access_permission(struct gta_sw_provider_context_params_t * p_context_params, struct gta_sw_provider_params_t * p_provider_params, gta_access_token_usage_t usage, gta_errinfo_t * p_errinfo) {
 
     bool personality_access_granted = false;
@@ -398,6 +479,7 @@ bool check_access_permission(struct gta_sw_provider_context_params_t * p_context
 
     return personality_access_granted;
 }
+#endif
 
 GTA_DECLARE_FUNCTION(const struct gta_function_list_t *, gta_sw_provider_init, ());
 GTA_DEFINE_FUNCTION(const struct gta_function_list_t *, gta_sw_provider_init,
@@ -870,6 +952,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_context_auth_set_access_token,
     ))
 {
     struct gta_sw_provider_context_params_t * p_context_params = NULL;
+    struct gta_access_token_list_t * p_access_token_list_item = NULL;
     bool ret = false;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
@@ -878,9 +961,14 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_context_auth_set_access_token,
         goto err;
     }
 
-    /* Here we set the token in the context parameters,
-     * currently only one token per context is allowed */
-    memcpy(p_context_params->access_token, access_token, GTA_ACCESS_TOKEN_LEN);
+    /* Here we add the token to the list of tokens in the context */
+    p_access_token_list_item = gta_secmem_calloc(h_ctx, 1, sizeof(struct gta_access_token_list_t), p_errinfo);
+    if (NULL == p_access_token_list_item) {
+        *p_errinfo = GTA_ERROR_MEMORY;
+        goto err;
+    }
+    memcpy(p_access_token_list_item->access_token, access_token, GTA_ACCESS_TOKEN_LEN);
+    list_append_front((struct list_t **)&(p_context_params->p_access_token_list), p_access_token_list_item);
     ret = true;
 
 err:
@@ -1011,6 +1099,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_provider_context_open,
     p_context_params->p_personality_item = p_personality_item;
     p_context_params->b_pers_derived_access_token_condition_fulfilled = false;
     p_context_params->profile = get_profile_enum(profile);
+    p_context_params->p_access_token_list = NULL;
 
     /* check whether function is supported by profile */
     if (NULL == supported_profiles[p_context_params->profile].pFunction->context_open) {
