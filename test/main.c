@@ -1368,6 +1368,22 @@ static void access_policies_and_access_tokens(void ** state)
     h_auth_use = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_BASIC_TOKEN, &errinfo);
     assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
     assert_int_equal(0, errinfo);
+
+    h_auth_admin = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_PHYSICAL_PRESENCE_TOKEN, &errinfo);
+    assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
+    assert_int_equal(0, errinfo);
+
+    assert_false(gta_personality_create(test_params->h_inst,
+                                        IDENTIFIER2_VALUE,
+                                        "local_data_prot_access_control",
+                                        "local_data_protection",
+                                        "ch.iec.30168.basic.local_data_protection",
+                                        h_auth_use,
+                                        h_auth_admin,
+                                        protection_properties,
+                                        &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS_POLICY, errinfo);
+    errinfo = 0;
     h_auth_admin = h_auth_use;
 
     assert_true(gta_personality_create(test_params->h_inst,
