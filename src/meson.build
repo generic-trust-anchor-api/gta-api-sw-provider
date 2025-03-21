@@ -23,6 +23,7 @@ gta_sw_provider_files = files (
 build_dep = [ dep_libcrypto,
               dep_qcbor,
               dep_t_cose,
+              dep_gta_core,
             ]
 
 if enable_pqc
@@ -38,3 +39,8 @@ gta_sw_provider_static = static_library('gta_sw_provider',
     install: true
 )
 
+pkg = import('pkgconfig')
+pkg.generate(libraries : [gta_sw_provider_static],
+             version : meson.project_version(),
+             name : 'libgta_sw_provider',
+             description : 'Generic Trust Anchor API SW Provider')
