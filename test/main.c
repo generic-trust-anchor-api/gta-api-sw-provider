@@ -109,6 +109,8 @@ extern const struct gta_function_list_t * gta_sw_provider_init(gta_context_handl
 
 struct test_params_t {
     gta_instance_handle_t h_inst;
+    gta_access_token_t granting_token;
+    gta_access_token_t physical_presence_token;
 };
 
 /* gtaio_istream implementation to read from a temporary buffer */
@@ -607,6 +609,27 @@ char* get_personality_name(int i) {
 /*-----------------------------------------------------------------------------
  * individual test functions
  */
+static void get_physical_presence_and_issuing_token(void ** state)
+{
+    DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
+    struct test_params_t * test_params = (struct test_params_t *)(*state);
+    gta_errinfo_t errinfo = 0;
+
+    assert_true(gta_access_token_get_physical_presence(test_params->h_inst, test_params->physical_presence_token, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_false(gta_access_token_get_physical_presence(test_params->h_inst, test_params->physical_presence_token, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+
+    assert_true(gta_access_token_get_issuing(test_params->h_inst, test_params->granting_token, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_false(gta_access_token_get_issuing(test_params->h_inst, test_params->granting_token, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+}
+
 static void profile_spec_create(void ** state)
 {
     DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
@@ -1322,13 +1345,7 @@ static void access_control(void ** state)
     assert_true(gta_access_policy_destroy(h_auth_admin, &errinfo));
     assert_true(gta_access_policy_destroy(h_auth_use, &errinfo));
 
-    gta_access_token_t granting_token;
     gta_access_token_t access_token;
-
-    /* Try to get a basic access token */
-    assert_true(gta_access_token_get_basic(test_params->h_inst, granting_token,
-        "pers_passcode_with_access_token", GTA_ACCESS_TOKEN_USAGE_USE,
-        access_token, &errinfo));
 
     /* Open a context to get access personality_derived_access token (todo) */
     assert_non_null(h_ctx = gta_context_open(test_params->h_inst,
@@ -1417,13 +1434,18 @@ static void access_policies_and_access_tokens(void ** state)
     assert_int_equal(GTA_ERROR_ACCESS, errinfo);
     errinfo = 0;
 
-    gta_access_token_t granting_token = { 0 };
+    gta_access_token_t invalid_granting_token = { 0 };
     gta_access_token_t access_token = { 0 };
-    assert_false(gta_access_token_get_basic(test_params->h_inst, granting_token, "invalid personality", GTA_ACCESS_TOKEN_USAGE_USE, access_token, &errinfo));
+
+    assert_false(gta_access_token_get_basic(test_params->h_inst, invalid_granting_token, "local_data_prot_access_control", GTA_ACCESS_TOKEN_USAGE_USE, access_token, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+
+    assert_false(gta_access_token_get_basic(test_params->h_inst, test_params->granting_token, "invalid personality", GTA_ACCESS_TOKEN_USAGE_USE, access_token, &errinfo));
     assert_int_equal(GTA_ERROR_ITEM_NOT_FOUND, errinfo);
     errinfo = 0;
 
-    assert_true(gta_access_token_get_basic(test_params->h_inst, granting_token, "local_data_prot_access_control", GTA_ACCESS_TOKEN_USAGE_USE, access_token, &errinfo));
+    assert_true(gta_access_token_get_basic(test_params->h_inst, test_params->granting_token, "local_data_prot_access_control", GTA_ACCESS_TOKEN_USAGE_USE, access_token, &errinfo));
     assert_int_equal(0, errinfo);
 
     assert_true(gta_context_auth_set_access_token(h_ctx, access_token, &errinfo));
@@ -1433,8 +1455,8 @@ static void access_policies_and_access_tokens(void ** state)
     assert_true(gta_seal_data(h_ctx, (gtaio_istream_t*)&istream, &ostream_null, &errinfo));
     assert_int_equal(0, errinfo);
 
-    assert_false(gta_access_token_revoke(test_params->h_inst, granting_token, &errinfo));
-    assert_int_equal(GTA_ERROR_INVALID_PARAMETER, errinfo);
+    assert_false(gta_access_token_revoke(test_params->h_inst, invalid_granting_token, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
     errinfo = 0;
 
     assert_true(gta_access_token_revoke(test_params->h_inst, access_token, &errinfo));
@@ -1447,6 +1469,24 @@ static void access_policies_and_access_tokens(void ** state)
 
     assert_true(gta_context_close(h_ctx, &errinfo));
     assert_int_equal(0, errinfo);
+
+    assert_true(gta_access_token_revoke(test_params->h_inst, test_params->physical_presence_token, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_false(gta_access_token_revoke(test_params->h_inst, test_params->physical_presence_token, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+
+    assert_true(gta_access_token_revoke(test_params->h_inst, test_params->granting_token, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_false(gta_access_token_revoke(test_params->h_inst, test_params->granting_token, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+
+    assert_false(gta_access_token_get_basic(test_params->h_inst, test_params->granting_token, "local_data_prot_access_control", GTA_ACCESS_TOKEN_USAGE_USE, access_token, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
 }
 
 /*
@@ -1490,6 +1530,8 @@ static void provider_deserialize(void ** state)
 int ts_gta_sw_provider(void)
 {
     const struct CMUnitTest gta_sw_provider_tests[] = {
+        /* Tests for physical presence and issuing token */
+        cmocka_unit_test(get_physical_presence_and_issuing_token),
         /* Tests for gta_identifier assign */
         cmocka_unit_test(identifier_assign),
         /* Tests profile spec vs impl support */
