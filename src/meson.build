@@ -39,3 +39,8 @@ gta_sw_provider_static = static_library('gta_sw_provider',
     install: true
 )
 
+pkg = import('pkgconfig')
+pkg.generate(libraries : [gta_sw_provider_static],
+             version : meson.project_version(),
+             name : 'libgta_sw_provider',
+             description : 'Generic Trust Anchor API SW Provider')
