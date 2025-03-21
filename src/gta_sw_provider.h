@@ -111,7 +111,7 @@ struct gta_sw_provider_params_t {
 struct gta_sw_provider_context_params_t {
     gta_context_handle_t h_ctx;
     struct personality_name_list_item_t * p_personality_item;
-    gta_access_token_t access_token;
+    struct gta_access_token_list_t * p_access_token_list;
     /* Profile specific condition to be fulfilled before a personality derived access token is issued */
     bool b_pers_derived_access_token_condition_fulfilled;
     enum profile_t profile;
