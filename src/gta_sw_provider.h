@@ -93,8 +93,15 @@ struct gta_sw_provider_params_t {
     /* The runtime device stack is initialized or de-serialized during provider init */
     struct devicestate_stack_item_t * p_devicestate_stack;
 
-    /* This struct stores a list of tokens associated with with this instance */
+    /* This struct stores a list of tokens associated with this instance */
     struct provider_instance_auth_token_t * p_auth_token_list;
+    /* Struct to track metainfo for auth tokens */
+    struct provider_instance_auth_token_info_t {
+        gta_access_token_t issuing_token;
+        bool issuing_token_issued;
+        bool issuing_token_revoked;
+        bool physical_presence_token_issued;
+    } provider_instance_auth_token_info;
 
     /* Path used for Serialization files */
     char p_serializ_path[SERIALIZE_PATH_LEN_MAX + 2];

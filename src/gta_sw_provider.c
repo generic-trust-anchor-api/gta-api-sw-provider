@@ -428,6 +428,18 @@ GTA_DEFINE_FUNCTION(const struct gta_function_list_t *, gta_sw_provider_init,
     /* save context for later use */
     p_provider_params->h_ctx = h_ctx;
 
+    /* init params */
+    p_provider_params->p_auth_token_list = NULL;
+    p_provider_params->provider_instance_auth_token_info.issuing_token_issued = false;
+    p_provider_params->provider_instance_auth_token_info.issuing_token_revoked = false;
+    p_provider_params->provider_instance_auth_token_info.physical_presence_token_issued = false;
+
+    /* Create random token issuing token */
+    if (1 != RAND_bytes((unsigned char *)(p_provider_params->provider_instance_auth_token_info.issuing_token), sizeof(gta_access_token_t))) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        goto err;
+    }
+
     /* configure provider */
     if (provider_init_config->read(provider_init_config, p_provider_params->p_serializ_path, SERIALIZE_PATH_LEN_MAX, p_errinfo)
         > SERIALIZE_PATH_LEN_MAX) {
@@ -480,40 +492,6 @@ err:
     }
 
     return NULL;
-}
-
-
-GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_physical_presence,
-(
-    gta_instance_handle_t h_inst,
-    gta_access_token_t physical_presence_token,
-    gta_errinfo_t * p_errinfo
-    ))
-{
-    bool ret = false;
-
-    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-
-    /* ... */
-
-    return ret;
-}
-
-
-GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_issuing,
-(
-    gta_instance_handle_t h_inst,
-    gta_access_token_t granting_token,
-    gta_errinfo_t * p_errinfo
-    ))
-{
-    bool ret = false;
-
-    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-
-    /* ... */
-
-    return ret;
 }
 
 
@@ -571,6 +549,106 @@ err:
 }
 
 
+GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_physical_presence,
+(
+    gta_instance_handle_t h_inst,
+    gta_access_token_t physical_presence_token,
+    gta_errinfo_t * p_errinfo
+    ))
+{
+    struct gta_sw_provider_params_t * p_provider_params = NULL;
+    struct provider_instance_auth_token_t * p_auth_token_list_item = NULL;
+    gta_errinfo_t errinfo_tmp = 0;
+
+    p_provider_params = gta_provider_get_params(h_inst, p_errinfo);
+    if (NULL == p_provider_params) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        return false;
+    }
+
+    /*
+     * Check conditions - only allowed to be called once. If issuing token
+     * already issued, physical presence token cannot be issued anymore.
+     */
+    if ((p_provider_params->provider_instance_auth_token_info.physical_presence_token_issued)
+        || (p_provider_params->provider_instance_auth_token_info.issuing_token_issued)) {
+
+        *p_errinfo = GTA_ERROR_ACCESS;
+        return false;
+    }
+
+    /* Create a new access token object */
+    p_auth_token_list_item =
+        gta_secmem_calloc(p_provider_params->h_ctx,
+        1, sizeof(struct provider_instance_auth_token_t ), p_errinfo);
+    if (NULL == p_auth_token_list_item) {
+        *p_errinfo = GTA_ERROR_MEMORY;
+        goto err;
+    }
+    p_auth_token_list_item->p_next = NULL;
+    p_auth_token_list_item->type = GTA_ACCESS_DESCRIPTOR_TYPE_PHYSICAL_PRESENCE_TOKEN;
+    /* Physical presence access token only valid for devicestate recede */
+    p_auth_token_list_item->usage = GTA_ACCESS_TOKEN_USAGE_RECEDE;
+
+    /* Get random number from OpenSSL for freshness */
+    if (1 != RAND_bytes((unsigned char *)&p_auth_token_list_item->freshness,
+                sizeof(p_auth_token_list_item->freshness)))
+    {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        goto err;
+    }
+
+    /* Set other attributes to undefined */
+    p_auth_token_list_item->derivation_profile = PROF_INVALID;
+    memset(p_auth_token_list_item->binding_personality_fingerprint, 0, PERS_FINGERPRINT_LEN);
+    memset(p_auth_token_list_item->target_personality_fingerprint, 0, PERS_FINGERPRINT_LEN);
+
+    /* Compute and set basic_access_token (256 bit value) */
+    if (!generate_access_token(p_auth_token_list_item)) {
+        goto err;
+    }
+    memcpy(physical_presence_token, p_auth_token_list_item->access_token, GTA_ACCESS_TOKEN_LEN);
+
+    /* Append item to list */
+    list_append((struct list_t **) &p_provider_params->p_auth_token_list, (void *) p_auth_token_list_item);
+    p_provider_params->provider_instance_auth_token_info.physical_presence_token_issued = true;
+    return true;
+
+err:
+    gta_secmem_free(p_provider_params->h_ctx, p_auth_token_list_item, &errinfo_tmp);
+    return false;
+}
+
+
+GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_issuing,
+(
+    gta_instance_handle_t h_inst,
+    gta_access_token_t granting_token,
+    gta_errinfo_t * p_errinfo
+    ))
+{
+    bool ret = false;
+    struct gta_sw_provider_params_t * p_provider_params = NULL;
+
+    p_provider_params = gta_provider_get_params(h_inst, p_errinfo);
+    if (NULL == p_provider_params) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        return false;
+    }
+
+    /* Check condition - this function can only be called once */
+    if (!p_provider_params->provider_instance_auth_token_info.issuing_token_issued) {
+        memcpy(granting_token, p_provider_params->provider_instance_auth_token_info.issuing_token, sizeof(gta_access_token_t));
+        p_provider_params->provider_instance_auth_token_info.issuing_token_issued = true;
+        ret = true;
+    }
+    else {
+        *p_errinfo = GTA_ERROR_ACCESS;
+    }
+    return ret;
+}
+
+
 GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_basic,
 (
     gta_instance_handle_t h_inst,
@@ -591,8 +669,19 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_basic,
         return false;
     }
 
-    /* TODO: For now we ignore the granting token (set to NULL) and accept
-        * any request */
+    /*
+     * Check granting token:
+     * - Needs to be issued
+     * - Must not be revoked
+     * - Token must be valid (content check)
+     */
+    if ((!p_provider_params->provider_instance_auth_token_info.issuing_token_issued)
+        || (p_provider_params->provider_instance_auth_token_info.issuing_token_revoked)
+        || (0 != memcmp(p_provider_params->provider_instance_auth_token_info.issuing_token, granting_token, sizeof(gta_access_token_t)))) {
+        
+        *p_errinfo = GTA_ERROR_ACCESS;
+        return false;
+    }
 
     /* Create a new access token object */
     p_auth_token_list_item =
@@ -750,10 +839,22 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_revoke,
         return false;
     }
 
+    /* Check if access_token_tbr is issuing token */
+    if (0 == memcmp(p_provider_params->provider_instance_auth_token_info.issuing_token, access_token_tbr, sizeof(gta_access_token_t))) {
+        if (p_provider_params->provider_instance_auth_token_info.issuing_token_revoked) {
+            *p_errinfo = GTA_ERROR_ACCESS;
+            return false;
+        }
+        else {
+            p_provider_params->provider_instance_auth_token_info.issuing_token_revoked = true;
+            return true;
+        }
+    }
+
     /* Remove item from list */
     p_auth_token_list_item = list_remove((struct list_t **) &p_provider_params->p_auth_token_list, access_token_tbr, find_access_token);
     if (NULL == p_auth_token_list_item) {
-        *p_errinfo = GTA_ERROR_INVALID_PARAMETER;
+        *p_errinfo = GTA_ERROR_ACCESS;
         return false;
     }
 
