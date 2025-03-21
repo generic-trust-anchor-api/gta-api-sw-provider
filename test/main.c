@@ -1446,6 +1446,14 @@ static void access_policies_and_access_tokens(void ** state)
     assert_true(gta_access_token_get_basic(test_params->h_inst, test_params->granting_token, "local_data_prot_access_control", GTA_ACCESS_TOKEN_USAGE_USE, access_token, &errinfo));
     assert_int_equal(0, errinfo);
 
+    assert_true(gta_context_auth_set_access_token(h_ctx, test_params->physical_presence_token, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    istream_from_buf_init(&istream, test_input, strlen(test_input));
+    assert_false(gta_seal_data(h_ctx, (gtaio_istream_t*)&istream, &ostream_null, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+
     assert_true(gta_context_auth_set_access_token(h_ctx, access_token, &errinfo));
     assert_int_equal(0, errinfo);
 
