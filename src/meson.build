@@ -23,6 +23,7 @@ gta_sw_provider_files = files (
 build_dep = [ dep_libcrypto,
               dep_qcbor,
               dep_t_cose,
+              dep_gta_core,
             ]
 
 if enable_pqc
