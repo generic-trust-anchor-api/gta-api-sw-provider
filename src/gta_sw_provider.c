@@ -376,7 +376,7 @@ bool check_access_permission (
     }
 
     /* Get the fingerprint of the current personality */
-    struct personality_attribute_t * p_personality_attribute = NULL;
+    const struct personality_attribute_t * p_personality_attribute = NULL;
     p_personality_attribute = list_find((struct list_t *) p_context_params->p_personality_item->p_personality_content->p_attribute_list,
                                 (unsigned char *)PERS_ATTR_NAME_FINGERPRINT,
                                 attribute_list_item_cmp_name);
@@ -394,16 +394,14 @@ bool check_access_permission (
     while (NULL != access_token_list_item) {
         /* Find the auth token for the current access token */
         p_auth_token = list_find((struct list_t *)p_provider_params->p_auth_token_list, access_token_list_item->access_token, find_access_token);
-        if ((NULL != p_auth_token) && (GTA_ACCESS_DESCRIPTOR_TYPE_PHYSICAL_PRESENCE_TOKEN != p_auth_token->type)) {
+        if ((NULL != p_auth_token) && (GTA_ACCESS_DESCRIPTOR_TYPE_PHYSICAL_PRESENCE_TOKEN != p_auth_token->type)
             /* Check if target personality and usage matches */
-            if ((0 == memcmp (p_personality_attribute->p_data, p_auth_token->target_personality_fingerprint, sizeof(gta_personality_fingerprint_t)))
-                && (usage == p_auth_token->usage)) {
+            && (0 == memcmp (p_personality_attribute->p_data, p_auth_token->target_personality_fingerprint, sizeof(gta_personality_fingerprint_t)))
+            && (usage == p_auth_token->usage)
+            /* Now we look for a policy which can be fulfilled by this token */
+            && (NULL != list_find((struct list_t *)p_auth_x_info_list, p_auth_token, find_matching_access_policy))) {
 
-                /* Now we look for a policy which can be fulfilled by this token */
-                if (NULL != list_find((struct list_t *)p_auth_x_info_list, p_auth_token, find_matching_access_policy)) {
-                    return true;
-                }
-            }
+            return true;
         }
         access_token_list_item = access_token_list_item->p_next;
     }
@@ -411,75 +409,6 @@ bool check_access_permission (
     return false;
 }
 
-#if 0
-/* Helper function to check whether a valid access token is available and the policy allows access to the personality */
-bool check_access_permission(struct gta_sw_provider_context_params_t * p_context_params, struct gta_sw_provider_params_t * p_provider_params, gta_access_token_usage_t usage, gta_errinfo_t * p_errinfo) {
-
-    bool personality_access_granted = false;
-    struct provider_instance_auth_token_t * p_auth_token = NULL;
-    struct auth_info_list_item_t * p_auth_x_info_list = NULL;
-
-    if(GTA_ACCESS_TOKEN_USAGE_USE == usage ) {
-        p_auth_x_info_list = p_context_params->p_personality_item->p_personality_content->p_auth_use_info_list;
-    }
-    else if (GTA_ACCESS_TOKEN_USAGE_ADMIN == usage) {
-        p_auth_x_info_list = p_context_params->p_personality_item->p_personality_content->p_auth_admin_info_list;
-    }
-    else {
-        p_auth_x_info_list = NULL;
-    }
-
-    if (NULL != p_auth_x_info_list) {
-        /* Note: our assumption is, that in case of an initial access policy there is only one element in the list */
-        if(GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL == p_auth_x_info_list->type) {
-            /*
-             * TODO: Infrastructure for initial access tokens to be defined.
-             * Here we have to check a flag whether the condition for this policy is met.
-             */
-            personality_access_granted = true;
-        }
-        else {
-            /* Next, we proceed with the verification of the access token */
-            p_auth_token = list_find((struct list_t *)p_provider_params->p_auth_token_list, p_context_params->access_token, find_access_token);
-            if(NULL != p_auth_token) {
-                /* Check if target personality matches */
-                struct personality_attribute_t * p_personality_attribute = NULL;
-                p_personality_attribute = list_find((struct list_t *) p_context_params->p_personality_item->p_personality_content->p_attribute_list,
-                                            (unsigned char *)PERS_ATTR_NAME_FINGERPRINT,
-                                            attribute_list_item_cmp_name);
-                if (NULL == p_personality_attribute) {
-                    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-                    return false;
-                }
-                if (0 != memcmp (p_personality_attribute->p_data, p_auth_token->target_personality_fingerprint, sizeof(gta_personality_fingerprint_t))) {
-                    *p_errinfo = GTA_ERROR_ACCESS;
-                    return false;
-                }
-                if (usage == p_auth_token->usage) {
-                    /*
-                     * Checks if type matches and in case of personality derived
-                     * access tokens, if the two additional conditions match.
-                     */
-                    if (NULL != list_find((struct list_t *)p_auth_x_info_list, p_auth_token, find_matching_access_policy)) {
-                        personality_access_granted = true;
-                    }
-                    else {
-                        *p_errinfo = GTA_ERROR_ACCESS;
-                    }
-                }
-            }
-            else {
-                *p_errinfo = GTA_ERROR_ACCESS;
-            }
-        }
-    }
-    else {
-        *p_errinfo = GTA_ERROR_ACCESS;
-    }
-
-    return personality_access_granted;
-}
-#endif
 
 GTA_DECLARE_FUNCTION(const struct gta_function_list_t *, gta_sw_provider_init, ());
 GTA_DEFINE_FUNCTION(const struct gta_function_list_t *, gta_sw_provider_init,
@@ -1838,17 +1767,11 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_deploy,
     p_personality_name_list_item->p_personality_content->p_auth_use_info_list = NULL;
     p_personality_name_list_item->p_personality_content->p_auth_admin_info_list = NULL;
 
-    if(false == policy_copy_helper(p_provider_params->h_ctx,
-                        h_auth_use,
-                        &(p_personality_name_list_item->p_personality_content->p_auth_use_info_list),
-                        p_errinfo)) {
+    if (!policy_copy_helper(p_provider_params->h_ctx, h_auth_use, &(p_personality_name_list_item->p_personality_content->p_auth_use_info_list), p_errinfo)) {
         goto err;
     }
 
-    if(false == policy_copy_helper(p_provider_params->h_ctx,
-                        h_auth_admin,
-                        &(p_personality_name_list_item->p_personality_content->p_auth_admin_info_list),
-                        p_errinfo)) {
+    if (!policy_copy_helper(p_provider_params->h_ctx, h_auth_admin, &(p_personality_name_list_item->p_personality_content->p_auth_admin_info_list), p_errinfo)) {
         goto err;
     }
 
@@ -2107,17 +2030,11 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_create,
 
     errinfo_tmp = *p_errinfo;
     /* Access policy management: get policy information from policy handle and copy to personality */
-    if(false == policy_copy_helper(p_provider_params->h_ctx,
-                        h_auth_use,
-                        &(p_personality_name_list_item->p_personality_content->p_auth_use_info_list),
-                        p_errinfo)) {
+    if (!policy_copy_helper(p_provider_params->h_ctx, h_auth_use, &(p_personality_name_list_item->p_personality_content->p_auth_use_info_list), p_errinfo)) {
         goto err;
     }
 
-    if(false == policy_copy_helper(p_provider_params->h_ctx,
-                        h_auth_admin,
-                        &(p_personality_name_list_item->p_personality_content->p_auth_admin_info_list),
-                        p_errinfo)) {
+    if (!policy_copy_helper(p_provider_params->h_ctx, h_auth_admin, &(p_personality_name_list_item->p_personality_content->p_auth_admin_info_list), p_errinfo)) {
         goto err;
     }
 
