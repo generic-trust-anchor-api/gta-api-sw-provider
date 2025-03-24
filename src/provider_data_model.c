@@ -182,6 +182,7 @@ bool devicestate_stack_list_item_free(gta_context_handle_t h_ctx,
 )
 {
     if (NULL != p_devicestate_stack_item) {
+        auth_info_list_destroy(h_ctx, p_devicestate_stack_item->p_auth_recede_info_list, p_errinfo);
         personality_name_list_destroy(h_ctx, p_devicestate_stack_item->p_personality_name_list, p_errinfo);
         identifier_list_destroy(h_ctx, p_devicestate_stack_item->p_identifier_list, p_errinfo);
         gta_secmem_free(h_ctx, p_devicestate_stack_item, p_errinfo);

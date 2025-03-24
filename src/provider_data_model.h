@@ -20,6 +20,7 @@
 struct devicestate_stack_item_t {
     struct devicestate_stack_item_t * p_next;
 
+    struct auth_info_list_item_t * p_auth_recede_info_list;
     uint8_t owner_lock_count;
 
     /* List of identifiers and personalities related to this device state. */
@@ -163,6 +164,12 @@ bool devicestate_stack_list_item_free(gta_context_handle_t h_ctx,
 bool devicestate_stack_list_destroy(gta_context_handle_t h_ctx,
                                     struct devicestate_stack_item_t * p_devicestate_stack_head,
                                     gta_errinfo_t * p_errinfo
+);
+
+/* free the list of auth info */
+bool auth_info_list_destroy(gta_context_handle_t h_ctx,
+                            struct auth_info_list_item_t * p_auth_info_list_head,
+                            gta_errinfo_t * p_errinfo
 );
 
 #endif /* PROVIDER_DATA_MODEL_H */
