@@ -1684,6 +1684,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_deploy,
     struct gta_sw_provider_params_t * p_provider_params = NULL;
     struct identifier_list_item_t * p_identifier_list_item = NULL;
     struct personality_name_list_item_t * p_personality_name_list_item = NULL;
+    struct devicestate_stack_item_t * p_devicestate_stack_item = NULL;
     size_t buffer_idx = 0;
     char * p_buffer = NULL;
     size_t personality_name_length = 0;
@@ -1703,11 +1704,20 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_deploy,
         goto err;
     }
 
-    /* Find identifier_list_item with specific name */
-    p_identifier_list_item = list_find((struct list_t *)(p_provider_params->p_devicestate_stack->p_identifier_list),
-                                 identifier_value, identifier_list_item_cmp_name);
-    if (NULL == p_identifier_list_item)
-    {
+    /* Iterate device states to find requested identifier */
+    p_devicestate_stack_item = p_provider_params->p_devicestate_stack;
+    while (NULL != p_devicestate_stack_item) {
+        p_identifier_list_item = list_find((struct list_t *)p_devicestate_stack_item->p_identifier_list,
+                                    identifier_value, identifier_list_item_cmp_name);
+        if (NULL == p_identifier_list_item ) {
+            p_devicestate_stack_item = p_devicestate_stack_item->p_next;
+        } else {
+            /* Identifier found, exit the Loop */
+            p_devicestate_stack_item = NULL;
+        }
+    }
+
+    if (NULL == p_identifier_list_item) {
         *p_errinfo = GTA_ERROR_ITEM_NOT_FOUND;
         goto err;
     }
