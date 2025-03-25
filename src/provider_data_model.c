@@ -78,6 +78,26 @@ bool auth_info_list_destroy(gta_context_handle_t h_ctx,
     return true;
 }
 
+/* free personality content */
+bool personality_content_free(gta_context_handle_t h_ctx,
+                              struct personality_t * p_personality_content,
+                              gta_errinfo_t * p_errinfo
+)
+{
+    if (NULL != p_personality_content) {
+        /* free personality_t (personality content) */
+        personality_attribute_list_destroy(h_ctx, p_personality_content->p_attribute_list, p_errinfo);
+        auth_info_list_destroy(h_ctx, p_personality_content->p_auth_admin_info_list, p_errinfo);
+        auth_info_list_destroy(h_ctx, p_personality_content->p_auth_use_info_list, p_errinfo);
+
+        if (NULL != p_personality_content->secret_data) {
+            gta_secmem_free(h_ctx, p_personality_content->secret_data, p_errinfo);
+        }
+        gta_secmem_free(h_ctx, p_personality_content, p_errinfo);
+    }
+
+    return true;
+}
 
 /* free a Personality */
 bool personality_name_list_item_free(gta_context_handle_t h_ctx,
@@ -87,15 +107,7 @@ bool personality_name_list_item_free(gta_context_handle_t h_ctx,
 {
     if (NULL != p_personality_name_item) {
         /* free personality_t (personality content) */
-        if (NULL != p_personality_name_item->p_personality_content) {
-            personality_attribute_list_destroy(h_ctx, p_personality_name_item->p_personality_content->p_attribute_list, p_errinfo);
-            auth_info_list_destroy(h_ctx, p_personality_name_item->p_personality_content->p_auth_admin_info_list, p_errinfo);
-            auth_info_list_destroy(h_ctx, p_personality_name_item->p_personality_content->p_auth_use_info_list, p_errinfo);
-
-            if (NULL != p_personality_name_item->p_personality_content->secret_data) {
-                gta_secmem_free(h_ctx, p_personality_name_item->p_personality_content->secret_data, p_errinfo);
-            }
-        }
+        personality_content_free(h_ctx, p_personality_name_item->p_personality_content, p_errinfo);
 
         if (NULL != p_personality_name_item->personality_name) {
             gta_secmem_free(h_ctx, p_personality_name_item->personality_name, p_errinfo);
