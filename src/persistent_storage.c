@@ -1002,6 +1002,9 @@ static bool decode_personalities(
             DEBUG_PRINT(("DESERIALIZATION Failed. QCBOR error: %d\n", qcbor_result));
             goto err;
         }
+
+        /* Set reference counter to zero */
+        p_personality_name_list_item->refcount = 0;
     }
 
     ret = true;

@@ -1074,6 +1074,13 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_provider_context_open,
     }
 #endif
 
+    /* Increase reference count in personality if not max already */
+    if (SIZE_MAX == p_personality_item->refcount) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        goto err;
+    }
+    p_personality_item->refcount++;
+
     return true;
 
 err:
@@ -1092,10 +1099,32 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_provider_context_close,
     gta_errinfo_t * p_errinfo
 ))
 {
-    /*
-     * Memory allocated with gta_secmem will be automatically freed. There
-     * is currently nothing else to do.
-     */
+    struct gta_sw_provider_context_params_t * p_context_params = NULL;
+    struct gta_sw_provider_params_t * p_provider_params = NULL;
+    gta_errinfo_t errinfo_tmp = 0;
+
+    p_context_params = gta_context_get_params(h_ctx, p_errinfo);
+    /* We don't use the helper function here, and do checks manually */
+    if (( NULL == p_context_params) || (NULL == p_context_params->p_personality_item)) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        return false;
+    }
+
+    p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
+        return false;
+    }
+
+    /* Decrease reference count in personality */
+    p_context_params->p_personality_item->refcount--;
+
+    /* In case refcount == 0 and personality content == NULL we free the memory */
+    if ((NULL == p_context_params->p_personality_item->p_personality_content)
+        && (0 == p_context_params->p_personality_item->refcount)) {
+
+        personality_name_list_item_free(p_provider_params->h_ctx, p_context_params->p_personality_item, &errinfo_tmp);
+    }
+
     return true;
 }
 
