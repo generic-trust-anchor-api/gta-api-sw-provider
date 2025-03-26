@@ -2352,14 +2352,54 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_remove,
 (
     gta_context_handle_t h_ctx,
     gta_errinfo_t * p_errinfo
-    ))
+))
 {
     bool ret = false;
+    struct gta_sw_provider_params_t * p_provider_params = NULL;
+    struct gta_sw_provider_context_params_t * p_context_params = NULL;
+    struct personality_name_list_item_t * p_personality_item = NULL;
+    struct devicestate_stack_item_t * p_devicestate_stack_item = NULL;
+    gta_errinfo_t errinfo_tmp = GTA_ERROR_INTERNAL_ERROR;
 
-    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    p_context_params = gta_context_get_params(h_ctx, p_errinfo);
+    if (!check_context_params(p_context_params, p_errinfo)) {
+        goto err;
+    }
 
-    /* ... */
+    p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
+        goto err;
+    }
 
+    /* check access condition */
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_ADMIN, p_errinfo)) {
+        goto err;
+    }
+
+    /* Remove the personality from device states personality list */
+    p_devicestate_stack_item = p_provider_params->p_devicestate_stack;
+    while (NULL != p_devicestate_stack_item) {
+        /* Instead of searching by name, we could search by pointer... */
+        p_personality_item = list_remove((struct list_t **)(&p_devicestate_stack_item->p_personality_name_list),
+            p_context_params->p_personality_item->personality_name, personality_list_item_cmp_name);
+        if (NULL == p_personality_item ) {
+            p_devicestate_stack_item = p_devicestate_stack_item->p_next;
+        } else {
+            /* Personality found and unlinked from list. Free only the content as the refcount can never be zero */
+            personality_content_free(p_provider_params->h_ctx, p_personality_item->p_personality_content, &errinfo_tmp);
+            p_personality_item->p_personality_content = NULL;
+            /* End the loop */
+            p_devicestate_stack_item = NULL;
+        }
+    }
+
+    /* Serialize the new device state */
+    if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        goto err;
+    }
+    ret = true;
+err:
     return ret;
 }
 
@@ -2368,14 +2408,45 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_deactivate,
 (
     gta_context_handle_t h_ctx,
     gta_errinfo_t * p_errinfo
-    ))
+))
 {
     bool ret = false;
 
-    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    struct gta_sw_provider_params_t * p_provider_params = NULL;
+    struct gta_sw_provider_context_params_t * p_context_params = NULL;
 
-    /* ... */
+    p_context_params = gta_context_get_params(h_ctx, p_errinfo);
+    if (!check_context_params(p_context_params, p_errinfo)) {
+        goto err;
+    }
 
+    p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
+        goto err;
+    }
+
+    /* Check whether function is supported by profile */
+    if (!supported_profiles[p_context_params->profile].pFunction->personality_activate_deactivate_supported) {
+        DEBUG_PRINT(("gta_sw_provider_gta_personality_deactivate: Profile not supported\n"));
+        *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        goto err;
+    }
+
+    /* Check access condition */
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_ADMIN, p_errinfo)) {
+        goto err;
+    }
+
+    p_context_params->p_personality_item->activated = false;
+
+    /* Serialize the new device state */
+    if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        goto err;
+    }
+    ret = true;
+
+err:
     return ret;
 }
 
@@ -2384,14 +2455,57 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_activate,
 (
     gta_context_handle_t h_ctx,
     gta_errinfo_t * p_errinfo
-    ))
+))
 {
     bool ret = false;
 
-    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    struct gta_sw_provider_params_t * p_provider_params = NULL;
+    struct gta_sw_provider_context_params_t * p_context_params = NULL;
 
-    /* ... */
+    p_context_params = gta_context_get_params(h_ctx, p_errinfo);
+    /* We don't use the helper function here, but check the context params manually */
+    if ((NULL == p_context_params) || (NULL == p_context_params->p_personality_item)) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        goto err;
+    }
+    else if (NULL == p_context_params->p_personality_item->p_personality_content) {
+        *p_errinfo = GTA_ERROR_HANDLE_INVALID;
+        goto err;
+    }
 
+    p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
+        goto err;
+    }
+
+    /* Check whether function is supported by profile */
+    if (!supported_profiles[p_context_params->profile].pFunction->personality_activate_deactivate_supported) {
+        DEBUG_PRINT(("gta_sw_provider_gta_personality_activate: Profile not supported\n"));
+        *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        goto err;
+    }
+
+    /* Check whether personality is already activated */
+    if (p_context_params->p_personality_item->activated) {
+        *p_errinfo = GTA_ERROR_INVALID_PARAMETER;
+        goto err;
+    }
+
+    /* Check access condition */
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_ADMIN, p_errinfo)) {
+        goto err;
+    }
+
+    p_context_params->p_personality_item->activated = true;
+
+    /* Serialize the new device state */
+    if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        goto err;
+    }
+    ret = true;
+
+err:
     return ret;
 }
 
