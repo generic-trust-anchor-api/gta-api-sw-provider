@@ -790,6 +790,16 @@ static void profile_local_data_protection(void ** state)
     assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
     errinfo = 0;
 
+    /* Negative test for gta_personality_activate */
+    assert_false(gta_personality_activate(h_ctx, &errinfo));
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+    errinfo = 0;
+
+    /* Negative test for gta_personality_deactivate */
+    assert_false(gta_personality_deactivate(h_ctx, &errinfo));
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+    errinfo = 0;
+
     assert_true(myio_open_ifilestream(&istream_data_to_seal, TEST_DATA_PAYLOAD, &errinfo));
     assert_int_equal(0, errinfo);
     ostream_to_buf_init(&ostream, protected_data, protected_data_size);
@@ -1883,6 +1893,107 @@ static void personality_attributes_enumerate(void ** state)
     }
 }
 
+static void personality_management(void ** state)
+{
+    DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
+    struct test_params_t * test_params = (struct test_params_t *)(*state);
+    gta_errinfo_t errinfo = 0;
+    gta_context_handle_t h_ctx = GTA_HANDLE_INVALID;
+    gta_access_policy_handle_t h_auth_use = GTA_HANDLE_INVALID;
+    gta_access_policy_handle_t h_auth_admin = GTA_HANDLE_INVALID;
+    struct gta_protection_properties_t protection_properties = { 0 };
+
+    h_auth_use = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL, &errinfo);
+    h_auth_admin = h_auth_use;
+
+    /* Create a personality */
+    assert_true(gta_personality_create(test_params->h_inst,
+                                       IDENTIFIER1_VALUE,
+                                       "ec_pers_management",
+                                       "personality_management",
+                                       "com.github.generic-trust-anchor-api.basic.ec",
+                                       h_auth_use,
+                                       h_auth_admin,
+                                       protection_properties,
+                                       &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Do something with the personality */
+    h_ctx = gta_context_open(test_params->h_inst,
+        "ec_pers_management",
+        "com.github.generic-trust-anchor-api.basic.tls",
+        &errinfo);
+
+    assert_non_null(h_ctx);
+    assert_int_equal(0, errinfo);
+
+    const char * test_input = "test";
+    istream_from_buf_t istream = { 0 };
+
+    gtaio_ostream_t ostream_null = { 0 };
+    ostream_null.write = (gtaio_stream_write_t)ostream_null_write;
+    ostream_null.finish = (gtaio_stream_finish_t)ostream_finish;
+
+    istream_from_buf_init(&istream, test_input, strlen(test_input));
+    assert_true(gta_authenticate_data_detached(h_ctx, (gtaio_istream_t*)&istream, &ostream_null, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Deactivate the personality */
+    assert_true(gta_personality_deactivate(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_false(gta_personality_deactivate(h_ctx, &errinfo));
+    assert_int_equal(GTA_ERROR_HANDLE_INVALID, errinfo);
+    errinfo = 0;
+
+    /* Try to use it */
+    istream_from_buf_init(&istream, test_input, strlen(test_input));
+    assert_false(gta_authenticate_data_detached(h_ctx, (gtaio_istream_t*)&istream, &ostream_null, &errinfo));
+    assert_int_equal(GTA_ERROR_HANDLE_INVALID, errinfo);
+    errinfo = 0;
+
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Activate the personality */
+    h_ctx = gta_context_open(test_params->h_inst,
+        "ec_pers_management",
+        "com.github.generic-trust-anchor-api.basic.tls",
+        &errinfo);
+
+    assert_non_null(h_ctx);
+    assert_int_equal(0, errinfo);
+
+    assert_true(gta_personality_activate(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_false(gta_personality_activate(h_ctx, &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_PARAMETER, errinfo);
+    errinfo = 0;
+
+    /* Try to use it */
+    istream_from_buf_init(&istream, test_input, strlen(test_input));
+    assert_true(gta_authenticate_data_detached(h_ctx, (gtaio_istream_t*)&istream, &ostream_null, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Remove the personality */
+    assert_true(gta_personality_remove(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_false(gta_personality_remove(h_ctx, &errinfo));
+    assert_int_equal(GTA_ERROR_HANDLE_INVALID, errinfo);
+    errinfo = 0;
+
+    /* Try to use it */
+    istream_from_buf_init(&istream, test_input, strlen(test_input));
+    assert_false(gta_authenticate_data_detached(h_ctx, (gtaio_istream_t*)&istream, &ostream_null, &errinfo));
+    assert_int_equal(GTA_ERROR_HANDLE_INVALID, errinfo);
+    errinfo = 0;
+
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+}
+
 static void devicestates(void ** state)
 {
     DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
@@ -1933,6 +2044,20 @@ static void devicestates(void ** state)
     /* Assign identifier again */
     assert_true(gta_identifier_assign(test_params->h_inst, IDENTIFIER1_TYPE, IDENTIFIER1_VALUE, &errinfo));
 
+    /* Create a personality */
+    h_auth_use = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL, &errinfo);
+    h_auth_admin = h_auth_use;
+    assert_true(gta_personality_create(test_params->h_inst,
+                                       IDENTIFIER1_VALUE,
+                                       "local_data_prot_dummy",
+                                       "local_data_protection",
+                                       "ch.iec.30168.basic.local_data_protection",
+                                       h_auth_use,
+                                       h_auth_admin,
+                                       protection_properties,
+                                       &errinfo));
+    assert_int_equal(0, errinfo);
+
     /* Device state transition */
     h_auth_recede = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_BASIC_TOKEN, &errinfo);
     assert_false(gta_devicestate_transition(test_params->h_inst, h_auth_recede, 5, &errinfo));
@@ -1952,8 +2077,6 @@ static void devicestates(void ** state)
     errinfo = 0;
 
     /* Create a personality */
-    h_auth_use = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL, &errinfo);
-    h_auth_admin = h_auth_use;
     assert_true(gta_personality_create(test_params->h_inst,
                                        IDENTIFIER1_VALUE,
                                        "local_data_prot_devicestate",
@@ -1988,7 +2111,19 @@ static void devicestates(void ** state)
     assert_int_equal(0, errinfo);
     errinfo = 0;
 
-    /* Do something with the personality */
+    /* Remove personality from other device state */
+    h_ctx = gta_context_open(test_params->h_inst,
+        "local_data_prot_dummy",
+        "ch.iec.30168.basic.local_data_protection",
+        &errinfo);
+    assert_non_null(h_ctx);
+    assert_int_equal(0, errinfo);
+    assert_true(gta_personality_remove(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Do something with a personality */
     h_ctx = gta_context_open(test_params->h_inst,
                              "local_data_prot_devicestate",
                              "ch.iec.30168.basic.local_data_protection",
@@ -2050,6 +2185,11 @@ static void devicestates(void ** state)
     /* Try if the context still works */
     istream_from_buf_init(&istream, test_input, strlen(test_input));
     assert_false(gta_seal_data(h_ctx, (gtaio_istream_t*)&istream, &ostream_null, &errinfo));
+    assert_int_equal(GTA_ERROR_HANDLE_INVALID, errinfo);
+    errinfo = 0;
+
+    /* Negative test for gta_personality_activate */
+    assert_false(gta_personality_activate(h_ctx, &errinfo));
     assert_int_equal(GTA_ERROR_HANDLE_INVALID, errinfo);
     errinfo = 0;
 
@@ -2308,6 +2448,15 @@ static void access_policies_and_access_tokens(void ** state)
     assert_int_equal(GTA_ERROR_ACCESS, errinfo);
     errinfo = 0;
 
+    /* Negative tests */
+    assert_false(gta_personality_remove(h_ctx, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+
+    assert_false(gta_personality_deactivate(h_ctx, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+
     assert_true(gta_access_token_get_basic(test_params->h_inst, test_params->granting_token, "ec_access_control", GTA_ACCESS_TOKEN_USAGE_ADMIN, access_token, &errinfo));
     assert_int_equal(0, errinfo);
 
@@ -2317,6 +2466,23 @@ static void access_policies_and_access_tokens(void ** state)
     assert_true(gta_personality_add_trusted_attribute(h_ctx, "ch.iec.30168.trustlist.certificate.trusted.x509v3", "Dummy EE Cert trusted", (gtaio_istream_t *)&istream, &errinfo));
     assert_int_equal(0, errinfo);
 
+    assert_true(gta_personality_deactivate(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Negative test for gta_personality_activate */
+    h_ctx = gta_context_open(test_params->h_inst,
+        "ec_access_control",
+        supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE],
+        &errinfo);
+    assert_false(gta_personality_activate(h_ctx, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+    assert_non_null(h_ctx);
+    assert_int_equal(0, errinfo);
+    
     assert_true(gta_context_close(h_ctx, &errinfo));
     assert_int_equal(0, errinfo);
 
@@ -2404,6 +2570,7 @@ int ts_gta_sw_provider(void)
         cmocka_unit_test(personality_enumerate),
         cmocka_unit_test(personality_enumerate_application),
         cmocka_unit_test(personality_attributes_enumerate),
+        cmocka_unit_test(personality_management),
         /* Tests for devicestate management functions */
         cmocka_unit_test(devicestates),
         /* Tests for access control */
