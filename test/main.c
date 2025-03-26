@@ -1656,6 +1656,107 @@ static void personality_attributes_enumerate(void ** state)
     }
 }
 
+static void personality_management(void ** state)
+{
+    DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
+    struct test_params_t * test_params = (struct test_params_t *)(*state);
+    gta_errinfo_t errinfo = 0;
+    gta_context_handle_t h_ctx = GTA_HANDLE_INVALID;
+    gta_access_policy_handle_t h_auth_use = GTA_HANDLE_INVALID;
+    gta_access_policy_handle_t h_auth_admin = GTA_HANDLE_INVALID;
+    struct gta_protection_properties_t protection_properties = { 0 };
+
+    h_auth_use = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL, &errinfo);
+    h_auth_admin = h_auth_use;
+
+    /* Create a personality */
+    assert_true(gta_personality_create(test_params->h_inst,
+                                       IDENTIFIER1_VALUE,
+                                       "ec_pers_management",
+                                       "personality_management",
+                                       "com.github.generic-trust-anchor-api.basic.ec",
+                                       h_auth_use,
+                                       h_auth_admin,
+                                       protection_properties,
+                                       &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Do something with the personality */
+    h_ctx = gta_context_open(test_params->h_inst,
+        "ec_pers_management",
+        "com.github.generic-trust-anchor-api.basic.tls",
+        &errinfo);
+
+    assert_non_null(h_ctx);
+    assert_int_equal(0, errinfo);
+
+    const char * test_input = "test";
+    istream_from_buf_t istream = { 0 };
+
+    gtaio_ostream_t ostream_null = { 0 };
+    ostream_null.write = (gtaio_stream_write_t)ostream_null_write;
+    ostream_null.finish = (gtaio_stream_finish_t)ostream_finish;
+
+    istream_from_buf_init(&istream, test_input, strlen(test_input));
+    assert_true(gta_authenticate_data_detached(h_ctx, (gtaio_istream_t*)&istream, &ostream_null, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Deactivate the personality */
+    assert_true(gta_personality_deactivate(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_false(gta_personality_deactivate(h_ctx, &errinfo));
+    assert_int_equal(GTA_ERROR_HANDLE_INVALID, errinfo);
+    errinfo = 0;
+
+    /* Try to use it */
+    istream_from_buf_init(&istream, test_input, strlen(test_input));
+    assert_false(gta_authenticate_data_detached(h_ctx, (gtaio_istream_t*)&istream, &ostream_null, &errinfo));
+    assert_int_equal(GTA_ERROR_HANDLE_INVALID, errinfo);
+    errinfo = 0;
+
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Activate the personality */
+    h_ctx = gta_context_open(test_params->h_inst,
+        "ec_pers_management",
+        "com.github.generic-trust-anchor-api.basic.tls",
+        &errinfo);
+
+    assert_non_null(h_ctx);
+    assert_int_equal(0, errinfo);
+
+    assert_true(gta_personality_activate(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_false(gta_personality_activate(h_ctx, &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_PARAMETER, errinfo);
+    errinfo = 0;
+
+    /* Try to use it */
+    istream_from_buf_init(&istream, test_input, strlen(test_input));
+    assert_true(gta_authenticate_data_detached(h_ctx, (gtaio_istream_t*)&istream, &ostream_null, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Remove the personality */
+    assert_true(gta_personality_remove(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_false(gta_personality_remove(h_ctx, &errinfo));
+    assert_int_equal(GTA_ERROR_HANDLE_INVALID, errinfo);
+    errinfo = 0;
+
+    /* Try to use it */
+    istream_from_buf_init(&istream, test_input, strlen(test_input));
+    assert_false(gta_authenticate_data_detached(h_ctx, (gtaio_istream_t*)&istream, &ostream_null, &errinfo));
+    assert_int_equal(GTA_ERROR_HANDLE_INVALID, errinfo);
+    errinfo = 0;
+
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+}
+
 static void devicestates(void ** state)
 {
     DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
@@ -2106,6 +2207,7 @@ int ts_gta_sw_provider(void)
         cmocka_unit_test(personality_enumerate),
         cmocka_unit_test(personality_enumerate_application),
         cmocka_unit_test(personality_attributes_enumerate),
+        cmocka_unit_test(personality_management),
         /* Tests for devicestate management functions */
         cmocka_unit_test(devicestates),
         /* Tests for access control */
