@@ -31,7 +31,6 @@ have been created up to the time being.
 | :---        |      :---   |
 | ./meson_options.txt | Project specific configuration options used by Meson build system |
 | ./cross-files | Configurations for cross compile targets in Meson |
-| ./doc | GTA API profile descriptions |
 | ./subprojects | External build dependencies that are used by Meson |
 | ./src | Implementation of the GTA API SW provider |
 | ./test      | Test suite for the GTA API SW provider |
@@ -39,21 +38,20 @@ have been created up to the time being.
 
 ## Supported Profiles
 The following table lists the profiles currently supported by the GTA API SW
-provider. Please note that the provider is still under development and more
-profiles will be added, while some of the existing profiles defined within
-this namespace may be modified and improved.
+provider. Please note that the provider is still under development and support
+for more profiles will be added.
 
-| Supported | Profile name| Short description |
-| :-------- | :---------- | :---------------- |
-| :x: (WIP) | [ch.iec.30168.basic.local_data_integrity_only](doc/profile_ch.iec.30168.basic.local_data_integrity_only.md) | Integrity protection of local data on the device |
-| :white_check_mark: | [ch.iec.30168.basic.local_data_protection](doc/profile_ch.iec.30168.basic.local_data_protection.md) | Integrity and confidentiality protection of local data on the device |
-| :x: (WIP) | [ch.iec.30168.basic.passcode](doc/profile_ch.iec.30168.basic.passcode.md) | Simple authentication method for personality derived access tokens |
-| :white_check_mark: | [com.github.generic-trust-anchor-api.basic.dilithium](doc/profile_com.github.generic-trust-anchor-api.basic.dilithium.md) | Creation of a Dilithium based personality |
-| :white_check_mark:| [com.github.generic-trust-anchor-api.basic.ec](doc/profile_com.github.generic-trust-anchor-api.basic.ec.md) | Creation of an Elliptic Curve based personality |
-| :x: (WIP)| [com.github.generic-trust-anchor-api.basic.enroll](doc/profile_com.github.generic-trust-anchor-api.basic.enroll.md) | Creation of a Certificate Signing Request (CSR) |
-| :white_check_mark:| [com.github.generic-trust-anchor-api.basic.jwt](doc/profile_com.github.generic-trust-anchor-api.basic.jwt.md) | Creation of signed JWT |
-| :white_check_mark:| [com.github.generic-trust-anchor-api.basic.rsa](doc/profile_com.github.generic-trust-anchor-api.basic.rsa.md) | Creation of a RSA based personality |
-| :white_check_mark:| [com.github.generic-trust-anchor-api.basic.tls](doc/profile_com.github.generic-trust-anchor-api.basic.tls.md) | Signature creation for authentication during TLS handshake |
+| Supported | Profile name | Reference | Short description |
+| :-------- | :----------- | :-------- | :---------------- |
+| :x: (WIP) | ch.iec.30168.basic.passcode | [ISO/IEC TS 30168](https://www.iso.org/standard/53288.html) Annex B.1 | Simple authentication method for personality derived access tokens |
+| :x: (WIP) | ch.iec.30168.basic.local_data_integrity_only | [ISO/IEC TS 30168](https://www.iso.org/standard/53288.html) Annex B.2 | Integrity protection of local data on the device |
+| :white_check_mark: | ch.iec.30168.basic.local_data_protection | [ISO/IEC TS 30168](https://www.iso.org/standard/53288.html) Annex B.3 | Integrity and confidentiality protection of local data on the device |
+| :white_check_mark: | com.github.generic-trust-anchor-api.basic.dilithium | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.dilithium.md) | Creation of a Dilithium based personality |
+| :white_check_mark:| com.github.generic-trust-anchor-api.basic.ec | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.ec.md) | Creation of an Elliptic Curve based personality |
+| :x: (WIP)| com.github.generic-trust-anchor-api.basic.enroll | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.enroll.md) | Creation of a Certificate Signing Request (CSR) |
+| :white_check_mark:| com.github.generic-trust-anchor-api.basic.jwt | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.jwt.md) | Creation of signed JWT |
+| :white_check_mark:| com.github.generic-trust-anchor-api.basic.rsa | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.rsa.md) | Creation of a RSA based personality |
+| :white_check_mark:| com.github.generic-trust-anchor-api.basic.tls | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.tls.md) | Signature creation for authentication during TLS handshake |
 
 ## Dependencies
 The build and test of the GTA API SW provider depend on the GTA API Core and
