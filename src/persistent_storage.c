@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /**********************************************************************
- * Copyright (c) 2024, Siemens AG
+ * Copyright (c) 2024-2025, Siemens AG
  **********************************************************************/
 
 #include <stdbool.h>
@@ -9,6 +9,7 @@
 #include <gta_api/gta_api.h>
 #include <gta_api/util/gta_list.h>
 #include <gta_api/util/gta_memset.h>
+#include "gta_sw_provider.h"
 
 #include "gta_debug.h"
 
@@ -59,7 +60,7 @@
 #define LABEL_AUTH_ADMIN_LIST "AuthAdminList"
 #define LABEL_AUTH_ITEM_TYPE "AuthItemType"
 #define LABEL_AUTH_PERS_FINGERPRINT "AuthPersFingerprint"
-#define LABEL_AUTH_PROFILE_NAME "AuthProfileName"
+#define LABEL_AUTH_DERIVATION_PROFILE_NAME "AuthDerivationProfileName"
 
 /* Labels used in CBOR Map - Attribute */
 #define LABEL_ATTRIBUTE_NAME "AttributeName"
@@ -77,10 +78,6 @@
 #define AES_256_KEY_LEN 32
 #define HMAC_256_KEY_LEN 32
 #define SHA256_SIZE 32
-
-/* Implementation specific boundary of profile name length */
-/* TODO: consolidate this macro, this is a redefinition from gta_api.c */
-#define PROFILE_NAME_LENGTH_MAX 1024
 
 typedef enum {
     SE_FILE_PERSONALITY,
@@ -218,10 +215,10 @@ static void auth_info_list_serialize(QCBOREncodeContext * p_encode_ctx,
             /* This map encodes pers_derived inside of auth_info_list_item_t */
             /* It is only included in case ofpersonality derived tokens */
             UsefulBufC fingerprint_data;
-            fingerprint_data.ptr = p_auth_item->pers_fingerprint;
+            fingerprint_data.ptr = p_auth_item->binding_personality_fingerprint;
             fingerprint_data.len = PERS_FINGERPRINT_LEN;
             QCBOREncode_AddBytesToMap(p_encode_ctx, LABEL_AUTH_PERS_FINGERPRINT, fingerprint_data);
-            QCBOREncode_AddSZStringToMap(p_encode_ctx, LABEL_AUTH_PROFILE_NAME, p_auth_item->profile_name);
+            QCBOREncode_AddSZStringToMap(p_encode_ctx, LABEL_AUTH_DERIVATION_PROFILE_NAME, p_auth_item->derivation_profile_name);
         }
         QCBOREncode_CloseMap(p_encode_ctx);
         p_auth_item = p_auth_item->p_next;
@@ -588,8 +585,8 @@ static bool auth_info_list_deserialize(gta_context_handle_t h_ctx,
     QCBORError qcbor_result;
     char fingerprint_buffer[PERS_FINGERPRINT_LEN];
     UsefulBufC fingerprint_data = {.ptr=(void*)fingerprint_buffer, .len=PERS_FINGERPRINT_LEN};
-    char profile_name_str_buffer[PROFILE_NAME_LENGTH_MAX];
-    UsefulBufC profile_name_str = {.ptr=(void*)profile_name_str_buffer, .len=PROFILE_NAME_LENGTH_MAX};
+    char profile_name_str_buffer[MAXLEN_PROFILE];
+    UsefulBufC profile_name_str = {.ptr=(void*)profile_name_str_buffer, .len=MAXLEN_PROFILE};
 
     while(1) {
         QCBORDecode_EnterMap(p_decode_ctx, &Item);
@@ -625,23 +622,23 @@ static bool auth_info_list_deserialize(gta_context_handle_t h_ctx,
                         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
                         goto err;
                     }
-                    memcpy(p_auth_item->pers_fingerprint,
+                    memcpy(p_auth_item->binding_personality_fingerprint,
                            fingerprint_data.ptr, fingerprint_data.len);
 
-                    /* Deserialize LABEL_AUTH_PROFILE_NAME */
+                    /* Deserialize LABEL_AUTH_DERIVATION_PROFILE_NAME */
                     QCBORDecode_GetTextStringInMapSZ(p_decode_ctx,
-                        LABEL_AUTH_PROFILE_NAME, &profile_name_str);
-                    p_auth_item->profile_name = gta_secmem_calloc(h_ctx,
+                        LABEL_AUTH_DERIVATION_PROFILE_NAME, &profile_name_str);
+                    p_auth_item->derivation_profile_name = gta_secmem_calloc(h_ctx,
                         1, profile_name_str.len + 1, p_errinfo);
-                    if (NULL == p_auth_item->profile_name) {
+                    if (NULL == p_auth_item->derivation_profile_name) {
                         /* Cleanup memory */
                         gta_secmem_free(h_ctx, p_auth_item, p_errinfo);
                         *p_errinfo = GTA_ERROR_MEMORY;
                         goto err;
                     }
-                    memcpy(p_auth_item->profile_name,
+                    memcpy(p_auth_item->derivation_profile_name,
                         profile_name_str.ptr, profile_name_str.len);
-                    p_auth_item->profile_name[profile_name_str.len] = '\0';
+                    p_auth_item->derivation_profile_name[profile_name_str.len] = '\0';
 
                     break;
                 default:

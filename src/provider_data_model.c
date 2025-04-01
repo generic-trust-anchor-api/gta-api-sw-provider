@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /**********************************************************************
- * Copyright (c) 2024, Siemens AG
+ * Copyright (c) 2024-2025, Siemens AG
  **********************************************************************/
 
 #include <gta_api/gta_api.h>
@@ -52,8 +52,8 @@ bool auth_info_list_item_free(gta_context_handle_t h_ctx,
 )
 {
     if (NULL != p_auth_info_item) {
-        if (NULL != p_auth_info_item->profile_name) {
-            gta_secmem_free(h_ctx, p_auth_info_item->profile_name, p_errinfo);
+        if (NULL != p_auth_info_item->derivation_profile_name) {
+            gta_secmem_free(h_ctx, p_auth_info_item->derivation_profile_name, p_errinfo);
         }
         gta_secmem_free(h_ctx, p_auth_info_item, p_errinfo);
     }
