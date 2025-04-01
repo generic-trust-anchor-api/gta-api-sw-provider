@@ -140,6 +140,7 @@ bool read_input_buffer (gtaio_istream_t * data, unsigned char ** pp_data, size_t
 
 struct profile_function_list_t {
     bool (*context_open)(struct gta_sw_provider_context_params_t *, gta_errinfo_t *);
+    bool (*personality_deploy)(struct gta_sw_provider_params_t *, gtaio_istream_t *, personality_secret_type_t *,unsigned char **, long *, gta_personality_fingerprint_t, struct personality_attribute_t **, gta_errinfo_t *);
     bool (*personality_create)(struct gta_sw_provider_params_t *, personality_secret_type_t *,unsigned char **, long *, gta_personality_fingerprint_t, struct personality_attribute_t **, gta_errinfo_t *);
     bool (*personality_enroll)(struct gta_sw_provider_context_params_t *, gtaio_ostream_t *, gta_errinfo_t *);
     bool personality_attribute_functions_supported;
