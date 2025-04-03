@@ -1676,7 +1676,7 @@ static bool personality_deploy_create
     gtaio_istream_t * personality_content,
     gta_access_policy_handle_t h_auth_use,
     gta_access_policy_handle_t h_auth_admin,
-    struct gta_protection_properties_t requested_protection_properties,
+    const struct gta_protection_properties_t requested_protection_properties,
     gta_errinfo_t * p_errinfo
 )
 {
@@ -1692,7 +1692,7 @@ static bool personality_deploy_create
     struct personality_attribute_t * p_pers_specific_attributes = NULL;
 
     unsigned char * p_secret_buffer = NULL;
-    long len = 0;
+    size_t len = 0;
 
     p_provider_params = gta_provider_get_params(h_inst, p_errinfo);
     if (!check_provider_params(p_provider_params, p_errinfo)) {
@@ -1726,7 +1726,7 @@ static bool personality_deploy_create
      *   personality_secret_type. The memory needs to be allocated by callee
      *   using OpenSSL_zalloc or similar. It is freed by caller using
      *   OPENSSL_clear_free.
-     * - long len with the length of the data in p_secret_buffer
+     * - size_t len with the length of the data in p_secret_buffer
      * - gta_personality_fingerprint_t personality_fingerprint
      * - p_pers_specific_attributes optional list of profile specific
      *   personality attributes
@@ -1747,7 +1747,7 @@ static bool personality_deploy_create
         }
 
         /* call profile specific implementation */
-        if (!supported_profiles[prof].pFunction->personality_create(p_provider_params, &personality_secret_type, &p_secret_buffer, &len, personality_fingerprint, &p_pers_specific_attributes, p_errinfo)) {
+        if (!supported_profiles[prof].pFunction->personality_create(p_provider_params, personality_name, &personality_secret_type, &p_secret_buffer, &len, personality_fingerprint, &p_pers_specific_attributes, p_errinfo)) {
             goto err;
         }
     }
@@ -1760,7 +1760,7 @@ static bool personality_deploy_create
         }
 
         /* call profile specific implementation */
-        if (!supported_profiles[prof].pFunction->personality_deploy(p_provider_params, personality_content, &personality_secret_type, &p_secret_buffer, &len, personality_fingerprint, &p_pers_specific_attributes, p_errinfo)) {
+        if (!supported_profiles[prof].pFunction->personality_deploy(p_provider_params, personality_name, personality_content, &personality_secret_type, &p_secret_buffer, &len, personality_fingerprint, &p_pers_specific_attributes, p_errinfo)) {
             goto err;
         }
     }
