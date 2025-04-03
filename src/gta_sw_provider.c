@@ -330,7 +330,7 @@ bool find_matching_access_policy(void *p_item, void *p_item_crit) {
         if (PROF_INVALID == profile) {
             return false;
         }
-        if ((p_auth_info_list_item->binding_personality_fingerprint != p_provider_instance_auth_token->binding_personality_fingerprint)
+        if ((0 != memcmp(p_auth_info_list_item->binding_personality_fingerprint, p_provider_instance_auth_token->binding_personality_fingerprint, sizeof(gta_personality_fingerprint_t)))
             || (profile != p_provider_instance_auth_token->derivation_profile)) {
             return false;
         }
