@@ -515,41 +515,29 @@ static bool generate_access_token (struct provider_instance_auth_token_t * p_aut
 {
     EVP_MD_CTX * ctx = NULL;
     bool ret = false;
+    uint8_t count = 0;
 
     /* Compute and set basic_access_token (256 bit value) */
     ctx = EVP_MD_CTX_new();
     if (NULL == ctx) {
         goto err;
     }
-    if (!EVP_DigestInit_ex(ctx, EVP_sha256(), NULL)) {
-        goto err;
-    }
-
+    count += EVP_DigestInit_ex(ctx, EVP_sha256(), NULL);
     /* Note: do not include "p_auth_token_list_item->p_next", as this pointer can change */
-    if (!EVP_DigestUpdate(ctx, &(p_auth_token_list_item->target_personality_fingerprint), sizeof(p_auth_token_list_item->target_personality_fingerprint))) {
-        goto err;
-    }
-    if (!EVP_DigestUpdate(ctx, &(p_auth_token_list_item->type), sizeof(p_auth_token_list_item->type))) {
-        goto err;
-    }
-    if (!EVP_DigestUpdate(ctx, &(p_auth_token_list_item->usage), sizeof(p_auth_token_list_item->usage))) {
-        goto err;
-    }
-    if (!EVP_DigestUpdate(ctx, &(p_auth_token_list_item->freshness), sizeof(p_auth_token_list_item->freshness))) {
-        goto err;
-    }
-    if (!EVP_DigestUpdate(ctx, &(p_auth_token_list_item->binding_personality_fingerprint), sizeof(p_auth_token_list_item->binding_personality_fingerprint))) {
-        goto err;
-    }
-    if (!EVP_DigestUpdate(ctx, &(p_auth_token_list_item->derivation_profile), sizeof(p_auth_token_list_item->derivation_profile))) {
-        goto err;
-    }
+    count += EVP_DigestUpdate(ctx, &(p_auth_token_list_item->target_personality_fingerprint), sizeof(p_auth_token_list_item->target_personality_fingerprint));
+    count += EVP_DigestUpdate(ctx, &(p_auth_token_list_item->type), sizeof(p_auth_token_list_item->type));
+    count += EVP_DigestUpdate(ctx, &(p_auth_token_list_item->usage), sizeof(p_auth_token_list_item->usage));
+    count += EVP_DigestUpdate(ctx, &(p_auth_token_list_item->freshness), sizeof(p_auth_token_list_item->freshness));
+    count += EVP_DigestUpdate(ctx, &(p_auth_token_list_item->binding_personality_fingerprint), sizeof(p_auth_token_list_item->binding_personality_fingerprint));
+    count += EVP_DigestUpdate(ctx, &(p_auth_token_list_item->derivation_profile), sizeof(p_auth_token_list_item->derivation_profile));
 
 #if (GTA_ACCESS_TOKEN_LEN != 32)
 #error Size of access_token does not match used hash function
 #endif
 
-    if (!EVP_DigestFinal_ex(ctx, (unsigned char *)p_auth_token_list_item->access_token, NULL)) {
+    count += EVP_DigestFinal_ex(ctx, (unsigned char *)p_auth_token_list_item->access_token, NULL);
+    /* The previous functions incremented ret in case of success. Check result here. */
+    if(8 != count) {
         goto err;
     }
     ret = true;

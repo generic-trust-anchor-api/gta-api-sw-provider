@@ -34,6 +34,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_deploy,
 ))
 {
     EVP_MD_CTX * ctx = NULL;
+    uint8_t ret = 0;
     unsigned char digest[SHA256_DIGEST_LENGTH] = { 0 };
 
     /* Read personality content into buffer */
@@ -63,7 +64,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_deploy,
     memset(pers_fingerprint, 0x00, sizeof(gta_personality_fingerprint_t));
 
     pers_fingerprint[0] = 0x01;
-    if (1 != RAND_bytes((unsigned char*)&pers_fingerprint[1], 32)) {
+    if (!RAND_bytes((unsigned char*)&pers_fingerprint[1], 32)) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
@@ -74,26 +75,17 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_deploy,
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
-    if (!EVP_DigestInit_ex(ctx, EVP_sha3_256(), NULL)) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
-    }
+    ret += EVP_DigestInit_ex(ctx, EVP_sha3_256(), NULL);
     /* Hash the first 40 bytes of the fingerprint */
-    if (!EVP_DigestUpdate(ctx, pers_fingerprint, 40)) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
-    }
+    ret += EVP_DigestUpdate(ctx, pers_fingerprint, 40);
     /* Hash the personality name w/o the terminating '\0' */
-    if (!EVP_DigestUpdate(ctx, personality_name, strnlen(personality_name, PERSONALITY_NAME_LENGTH_MAX))) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
-    }
+    ret += EVP_DigestUpdate(ctx, personality_name, strnlen(personality_name, PERSONALITY_NAME_LENGTH_MAX));
     /* Hash the passcode w/o the terminating '\0' */
-    if (!EVP_DigestUpdate(ctx, data, len-1)) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
-    }
-    if (!EVP_DigestFinal_ex(ctx, digest, NULL)) {
+    ret += EVP_DigestUpdate(ctx, data, len-1);
+
+    ret += EVP_DigestFinal_ex(ctx, digest, NULL);
+    /* The previous functions incremented ret in case of success. Check result here. */
+    if (5 != ret) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
