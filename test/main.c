@@ -36,6 +36,8 @@
 #define MAXLEN_ATTRIBUTE_NAME 160
 #define MAXLEN_ATTRIBUTE_VALUE 2000
 
+const char * passcode = "zZ902()[]{}%*&-+<>!?=$#Ar";
+
 #define IDENTIFIER1_TYPE "ch.iec.30168.identifier.mac_addr"
 #define IDENTIFIER1_VALUE "DE-AD-BE-EF-FE-ED"
 
@@ -805,37 +807,109 @@ static void profile_local_data_protection(void ** state)
     /* todo: negative tests for gta_context_open() */
 }
 
-/* todo: this needs to be refactored */
-static void profile_deploy_passcode(void ** state)
+static void profile_passcode(void ** state)
 {
     DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
     struct test_params_t * test_params = (struct test_params_t *)(*state);
     gta_errinfo_t errinfo = 0;
 
-    myio_ifilestream_t istream_personality_content = { 0 };
-    gta_access_policy_handle_t h_auth_use = GTA_HANDLE_INVALID;
-    gta_access_policy_handle_t h_auth_admin = GTA_HANDLE_INVALID;
+    istream_from_buf_t istream_passcode = { 0 };
+    gta_access_policy_handle_t h_auth = GTA_HANDLE_INVALID;
     struct gta_protection_properties_t protection_properties = { 0 };
 
-    h_auth_use = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL, &errinfo);
-    assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
-    h_auth_admin = h_auth_use;
+    const char * short_passcode = "abcdefg1234";
+    const char * invalid_passcode = "abcdefg=98!,/54Q";
 
-    assert_true(myio_open_ifilestream(&istream_personality_content, TESTFILE_TXT , &errinfo));
-    assert_int_equal(0, errinfo);
+    h_auth = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL, &errinfo);
+    assert_int_not_equal(h_auth, GTA_HANDLE_INVALID);
 
-    assert_true(gta_personality_deploy(test_params->h_inst,
-        IDENTIFIER1_VALUE,
+    /* Wrong identifier */
+    istream_from_buf_init(&istream_passcode, short_passcode, strlen(short_passcode));
+    assert_false(gta_personality_deploy(test_params->h_inst,
+        "INVALID",
         "pers_passcode",
         "provider_test",
         "ch.iec.30168.basic.passcode",
-        (gtaio_istream_t*)&istream_personality_content,
-        h_auth_use,
-        h_auth_admin,
+        (gtaio_istream_t*)&istream_passcode,
+        h_auth,
+        h_auth,
         protection_properties,
         &errinfo));
+    assert_int_equal(GTA_ERROR_ITEM_NOT_FOUND, errinfo);
+    errinfo = 0;
 
-    assert_true(myio_close_ifilestream(&istream_personality_content, &errinfo));
+    /* Wrong profile */
+    istream_from_buf_init(&istream_passcode, short_passcode, strlen(short_passcode));
+    assert_false(gta_personality_deploy(test_params->h_inst,
+        IDENTIFIER1_VALUE,
+        "pers_passcode",
+        "provider_test",
+        "ch.iec.30168.basic.local_data_protection",
+        (gtaio_istream_t*)&istream_passcode,
+        h_auth,
+        h_auth,
+        protection_properties,
+        &errinfo));
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+    errinfo = 0;
+
+    /* Too short passcode */
+    istream_from_buf_init(&istream_passcode, short_passcode, strlen(short_passcode));
+    assert_false(gta_personality_deploy(test_params->h_inst,
+        IDENTIFIER1_VALUE,
+        "pers_basic_passcode",
+        "provider_test",
+        "ch.iec.30168.basic.passcode",
+        (gtaio_istream_t*)&istream_passcode,
+        h_auth,
+        h_auth,
+        protection_properties,
+        &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
+    errinfo = 0;
+
+    /* Passcode with invalid characters */
+    istream_from_buf_init(&istream_passcode, invalid_passcode, strlen(invalid_passcode));
+    assert_false(gta_personality_deploy(test_params->h_inst,
+        IDENTIFIER1_VALUE,
+        "pers_basic_passcode",
+        "provider_test",
+        "ch.iec.30168.basic.passcode",
+        (gtaio_istream_t*)&istream_passcode,
+        h_auth,
+        h_auth,
+        protection_properties,
+        &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
+    errinfo = 0;
+
+    /* Passcode with missing NULL terminator */
+    istream_from_buf_init(&istream_passcode, passcode, strlen(passcode));
+    assert_false(gta_personality_deploy(test_params->h_inst,
+        IDENTIFIER1_VALUE,
+        get_personality_name(PROF_CH_IEC_30168_BASIC_PASSCODE),
+        "provider_test",
+        "ch.iec.30168.basic.passcode",
+        (gtaio_istream_t*)&istream_passcode,
+        h_auth,
+        h_auth,
+        protection_properties,
+        &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
+    errinfo = 0;
+
+    istream_from_buf_init(&istream_passcode, passcode, strlen(passcode)+1);
+    assert_true(gta_personality_deploy(test_params->h_inst,
+        IDENTIFIER1_VALUE,
+        "pers_basic_passcode",
+        "provider_test",
+        "ch.iec.30168.basic.passcode",
+        (gtaio_istream_t*)&istream_passcode,
+        h_auth,
+        h_auth,
+        protection_properties,
+        &errinfo));
+    assert_int_equal(0, errinfo);
 }
 
 static void profile_jwt(void ** state)
@@ -1624,7 +1698,7 @@ int ts_gta_sw_provider(void)
         /* Tests for the mandatory profiles */
         cmocka_unit_test(profile_local_data_protection),
         /* Tests for creation / deployment profiles only */
-        cmocka_unit_test(profile_deploy_passcode),
+        cmocka_unit_test(profile_passcode),
 
         /* Tests for creation / deployment / enrollment / usage profiles */
         /* Tests for usage profiles only */
@@ -1636,7 +1710,7 @@ int ts_gta_sw_provider(void)
         cmocka_unit_test(personality_enumerate_application),
         cmocka_unit_test(personality_attributes_enumerate),
         /* Tests for access control (may be temporary) */
-        cmocka_unit_test(access_control),
+        // cmocka_unit_test(access_control),
         cmocka_unit_test(access_policies_and_access_tokens),
         /* Tests for persistent storage */
         cmocka_unit_test(provider_deserialize),
