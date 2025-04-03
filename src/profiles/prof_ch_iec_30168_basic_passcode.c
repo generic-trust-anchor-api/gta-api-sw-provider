@@ -68,40 +68,35 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_deploy,
      * be used, we define our own way here.
      */
     pers_fingerprint[0] = 0x01;
-    if (1 != RAND_bytes((unsigned char*)&pers_fingerprint[1], 32)) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+    if (!RAND_bytes((unsigned char*)&pers_fingerprint[1], 32)) {
+        goto internal_err;
     }
 
     /* Compute hash */
     ctx = EVP_MD_CTX_new();
     if (NULL == ctx) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
-    if (!EVP_DigestInit_ex(ctx, EVP_sha3_256(), NULL)) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+    if (1 != EVP_DigestInit_ex(ctx, EVP_sha3_256(), NULL)) {
+        goto internal_err;
     }
     /* Hash the first 40 bytes of the fingerprint */
-    if (!EVP_DigestUpdate(ctx, pers_fingerprint, 40)) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+    if (1 != EVP_DigestUpdate(ctx, pers_fingerprint, 40)) {
+        goto internal_err;
     }
     /* Hash the personality name w/o the terminating '\0' */
-    if (!EVP_DigestUpdate(ctx, personality_name, strnlen(personality_name, PERSONALITY_NAME_LENGTH_MAX))) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+    if (1 != EVP_DigestUpdate(ctx, personality_name, strnlen(personality_name, PERSONALITY_NAME_LENGTH_MAX))) {
+        goto internal_err;
     }
     /* Hash the passcode w/o the terminating '\0' */
-    if (!EVP_DigestUpdate(ctx, data, len-1)) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+    if (1 != EVP_DigestUpdate(ctx, data, len-1)) {
+        goto internal_err;
     }
-    if (!EVP_DigestFinal_ex(ctx, digest, NULL)) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+
+    if (1 != EVP_DigestFinal_ex(ctx, digest, NULL)) {
+        goto internal_err;
     }
+
     /* Copy the first 24 bytes of digest to the fingerprint */
     memcpy(&pers_fingerprint[40], digest, 24);
     EVP_MD_CTX_free(ctx);
@@ -111,6 +106,8 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_deploy,
 
     return true;
 
+internal_err:
+    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
 err:
     OPENSSL_clear_free(data, len);
     *p_pers_secret_buffer = NULL;
