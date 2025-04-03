@@ -2736,13 +2736,34 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_verify,
     gta_errinfo_t * p_errinfo
     ))
 {
-    bool ret = false;
+    struct gta_sw_provider_context_params_t * p_context_params = NULL;
+    struct gta_sw_provider_params_t * p_provider_params = NULL;
 
-    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    p_context_params = gta_context_get_params(h_ctx, p_errinfo);
+    if (!p_context_params) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        return false;
+    }
 
-    /* ... */
+    p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
+        return false;
+    }
 
-    return ret;
+    /* check whether function is supported by profile */
+    if (NULL == supported_profiles[p_context_params->profile].pFunction->verify) {
+        DEBUG_PRINT(("gta_sw_provider_gta_verify: Profile not supported\n"));
+        *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        return false;
+    }
+
+    /* check access condition */
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_USE, p_errinfo)) {
+        return false;
+    }
+
+    /* call profile specific implementation */
+    return supported_profiles[p_context_params->profile].pFunction->verify(p_context_params, claim, p_errinfo);
 }
 
 
