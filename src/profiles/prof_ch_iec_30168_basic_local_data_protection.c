@@ -11,7 +11,7 @@
 #define LOCAL_DATA_PROTECTION_IV_LEN 12
 #define LOCAL_DATA_PROTECTION_TAG_LEN 16
 
-GTA_DEFINE_FUNCTION(bool, context_open,
+GTA_SWP_DEFINE_FUNCTION(bool, context_open,
 (
     struct gta_sw_provider_context_params_t * p_context_params,
     gta_errinfo_t * p_errinfo
