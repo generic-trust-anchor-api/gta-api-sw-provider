@@ -836,7 +836,7 @@ static void profile_passcode(void ** state)
         "INVALID",
         get_personality_name(PROF_CH_IEC_30168_BASIC_PASSCODE),
         "provider_test",
-        "ch.iec.30168.basic.passcode",
+        supported_profiles[PROF_CH_IEC_30168_BASIC_PASSCODE],
         (gtaio_istream_t*)&istream_passcode,
         h_auth,
         h_auth,
@@ -851,7 +851,7 @@ static void profile_passcode(void ** state)
         IDENTIFIER1_VALUE,
         get_personality_name(PROF_CH_IEC_30168_BASIC_PASSCODE),
         "provider_test",
-        "ch.iec.30168.basic.local_data_protection",
+        supported_profiles[PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION],
         (gtaio_istream_t*)&istream_passcode,
         h_auth,
         h_auth,
@@ -866,7 +866,7 @@ static void profile_passcode(void ** state)
         IDENTIFIER1_VALUE,
         get_personality_name(PROF_CH_IEC_30168_BASIC_PASSCODE),
         "provider_test",
-        "ch.iec.30168.basic.passcode",
+        supported_profiles[PROF_CH_IEC_30168_BASIC_PASSCODE],
         (gtaio_istream_t*)&istream_passcode,
         h_auth,
         h_auth,
@@ -881,7 +881,7 @@ static void profile_passcode(void ** state)
         IDENTIFIER1_VALUE,
         get_personality_name(PROF_CH_IEC_30168_BASIC_PASSCODE),
         "provider_test",
-        "ch.iec.30168.basic.passcode",
+        supported_profiles[PROF_CH_IEC_30168_BASIC_PASSCODE],
         (gtaio_istream_t*)&istream_passcode,
         h_auth,
         h_auth,
@@ -896,7 +896,7 @@ static void profile_passcode(void ** state)
         IDENTIFIER1_VALUE,
         get_personality_name(PROF_CH_IEC_30168_BASIC_PASSCODE),
         "provider_test",
-        "ch.iec.30168.basic.passcode",
+        supported_profiles[PROF_CH_IEC_30168_BASIC_PASSCODE],
         (gtaio_istream_t*)&istream_passcode,
         h_auth,
         h_auth,
@@ -910,7 +910,7 @@ static void profile_passcode(void ** state)
         IDENTIFIER1_VALUE,
         get_personality_name(PROF_CH_IEC_30168_BASIC_PASSCODE),
         "provider_test",
-        "ch.iec.30168.basic.passcode",
+        supported_profiles[PROF_CH_IEC_30168_BASIC_PASSCODE],
         (gtaio_istream_t*)&istream_passcode,
         h_auth,
         h_auth,
@@ -921,7 +921,7 @@ static void profile_passcode(void ** state)
     /* Open a context */
     h_ctx = gta_context_open(test_params->h_inst,
         get_personality_name(PROF_CH_IEC_30168_BASIC_PASSCODE),
-        "ch.iec.30168.basic.passcode",
+        supported_profiles[PROF_CH_IEC_30168_BASIC_PASSCODE],
         &errinfo);
 
     assert_non_null(h_ctx);
@@ -1437,7 +1437,7 @@ static void access_policies_and_access_tokens(void ** state)
     /* get a pers derived access token */
     h_ctx = gta_context_open(test_params->h_inst,
         get_personality_name(PROF_CH_IEC_30168_BASIC_PASSCODE),
-        "ch.iec.30168.basic.passcode",
+        supported_profiles[PROF_CH_IEC_30168_BASIC_PASSCODE],
         &errinfo);
     assert_non_null(h_ctx);
     assert_int_equal(0, errinfo);
@@ -1451,12 +1451,12 @@ static void access_policies_and_access_tokens(void ** state)
 
     /* create complex access policy including policies for negative tests */
     h_auth_use = gta_access_policy_create(test_params->h_inst, &errinfo);
-    gta_access_policy_add_pers_derived_access_token_descriptor(h_auth_use, fingerprint, "ch.iec.30168.basic.passcode", &errinfo);
+    gta_access_policy_add_pers_derived_access_token_descriptor(h_auth_use, fingerprint, supported_profiles[PROF_CH_IEC_30168_BASIC_PASSCODE], &errinfo);
     gta_access_policy_add_pers_derived_access_token_descriptor(h_auth_use, fingerprint, "ch.iec.30168.basic.passcod", &errinfo);
-    gta_access_policy_add_pers_derived_access_token_descriptor(h_auth_use, fingerprint, "ch.iec.30168.basic.local_data_protection", &errinfo);
+    gta_access_policy_add_pers_derived_access_token_descriptor(h_auth_use, fingerprint, supported_profiles[PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION], &errinfo);
     fingerprint[0] = 'x';
     fingerprint[1] = 'x';
-    gta_access_policy_add_pers_derived_access_token_descriptor(h_auth_use, fingerprint, "ch.iec.30168.basic.passcode", &errinfo);
+    gta_access_policy_add_pers_derived_access_token_descriptor(h_auth_use, fingerprint, supported_profiles[PROF_CH_IEC_30168_BASIC_PASSCODE], &errinfo);
     assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
     assert_int_equal(0, errinfo);
 
@@ -1469,7 +1469,7 @@ static void access_policies_and_access_tokens(void ** state)
                                         IDENTIFIER2_VALUE,
                                         "local_data_prot_access_control",
                                         "local_data_protection",
-                                        "ch.iec.30168.basic.local_data_protection",
+                                        supported_profiles[PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION],
                                         h_auth_use,
                                         h_auth_admin,
                                         protection_properties,
@@ -1482,7 +1482,7 @@ static void access_policies_and_access_tokens(void ** state)
                                        IDENTIFIER2_VALUE,
                                        "local_data_prot_access_control",
                                        "local_data_protection",
-                                       "ch.iec.30168.basic.local_data_protection",
+                                       supported_profiles[PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION],
                                        h_auth_use,
                                        h_auth_admin,
                                        protection_properties,
@@ -1506,7 +1506,7 @@ static void access_policies_and_access_tokens(void ** state)
     /* get a pers derived access token */
     h_ctx = gta_context_open(test_params->h_inst,
         get_personality_name(PROF_CH_IEC_30168_BASIC_PASSCODE),
-        "ch.iec.30168.basic.passcode",
+        supported_profiles[PROF_CH_IEC_30168_BASIC_PASSCODE],
         &errinfo);
     assert_non_null(h_ctx);
     assert_int_equal(0, errinfo);
@@ -1541,7 +1541,7 @@ static void access_policies_and_access_tokens(void ** state)
 
     h_ctx = gta_context_open(test_params->h_inst,
         "local_data_prot_access_control",
-        "ch.iec.30168.basic.local_data_protection",
+        supported_profiles[PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION],
         &errinfo);
 
     assert_non_null(h_ctx);
@@ -1612,7 +1612,7 @@ static void access_policies_and_access_tokens(void ** state)
                                        IDENTIFIER2_VALUE,
                                        "ec_access_control",
                                        "access control",
-                                       "com.github.generic-trust-anchor-api.basic.ec",
+                                       supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC],
                                        h_auth_use,
                                        h_auth_admin,
                                        protection_properties,
@@ -1622,7 +1622,7 @@ static void access_policies_and_access_tokens(void ** state)
 
     h_ctx = gta_context_open(test_params->h_inst,
         "ec_access_control",
-        "com.github.generic-trust-anchor-api.basic.tls",
+        supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS],
         &errinfo);
 
     assert_non_null(h_ctx);
