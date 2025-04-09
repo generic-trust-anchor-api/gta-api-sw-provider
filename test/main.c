@@ -73,11 +73,12 @@ enum profile_t {
 #endif
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS,
+    PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL,
 };
 #ifdef ENABLE_PQC
-#define NUM_PROFILES 9
+#define NUM_PROFILES 10
 #else
-#define NUM_PROFILES 8
+#define NUM_PROFILES 9
 #endif
 static char supported_profiles[NUM_PROFILES][MAXLEN_PROFILE] = {
     [PROF_INVALID] = "INVALID",
@@ -91,6 +92,7 @@ static char supported_profiles[NUM_PROFILES][MAXLEN_PROFILE] = {
 #endif
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT] = "com.github.generic-trust-anchor-api.basic.jwt",
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = "com.github.generic-trust-anchor-api.basic.tls",
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL] = "com.github.generic-trust-anchor-api.basic.enroll",
 };
 
 static bool profile_creation_supported[NUM_PROFILES] = {
@@ -105,6 +107,7 @@ static bool profile_creation_supported[NUM_PROFILES] = {
 #endif
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT] = false,
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = false,
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL] = false,
 };
 
 extern const struct gta_function_list_t * gta_sw_provider_init(gta_context_handle_t, gtaio_istream_t *, gtaio_ostream_t *, void **, void(**)(void *),  gta_errinfo_t *);
@@ -982,6 +985,188 @@ static void profile_passcode(void ** state)
     assert_int_equal(0, errinfo);
 }
 
+static void parse_subject_rdn_negative_tests(gta_instance_handle_t h_inst)
+{
+    gta_errinfo_t errinfo = 0;
+    gta_context_handle_t h_ctx = GTA_HANDLE_INVALID;
+
+    istream_from_buf_t istream;
+
+    const char too_long_value[2001] = { 0 };
+    const char *subj_rdn = "CN=Dummy Product Name,O=Dummy Organization,OU=Dummy Organizational Unit";
+    const char * invalid_subject_rdn[] = {
+        "CN=John Doe,", /* trailing comma */
+        "OU=Engineering,DC=example,DC=com,", /* trailing comma */
+        "C=US,ST=California,L=San Francisco=", /* trailing '=' */
+        "serialNumber=12345678+", /* trailing '+' */
+        "emailAddress=johndoe@example.com,", /* trailing comma */
+        "CN=John Doe,=example", /* missing attribute type */
+        "CN=John Doe,DC=example,DC=", /* missing attribute value */
+        "CN=John Doe,DC=example=com", /* multiple '=' */
+    };
+
+    h_ctx = gta_context_open(h_inst,
+                             get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC),
+                             supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL],
+                             &errinfo);
+    assert_non_null(h_ctx);
+
+    /* try to set an attribute which is too long */
+    istream_from_buf_init(&istream, too_long_value, sizeof(too_long_value));
+    assert_false(gta_context_set_attribute(h_ctx, "com.github.generic-trust-anchor-api.enroll.subject_rdn", (gtaio_istream_t*)&istream, &errinfo));
+    assert_int_equal(errinfo, GTA_ERROR_INVALID_ATTRIBUTE);
+
+    /* try to set an attribute without Null-terminator */
+    istream_from_buf_init(&istream, subj_rdn, strlen(subj_rdn));
+    assert_false(gta_context_set_attribute(h_ctx, "com.github.generic-trust-anchor-api.enroll.subject_rdn", (gtaio_istream_t*)&istream, &errinfo));
+    assert_int_equal(errinfo, GTA_ERROR_INVALID_ATTRIBUTE);
+
+    /* try to set an attribute with wrong type */
+    istream_from_buf_init(&istream, subj_rdn, strlen(subj_rdn)+1);
+    assert_false(gta_context_set_attribute(h_ctx, "com.github.generic-trust-anchor-api.enroll.subject_rdnn", (gtaio_istream_t*)&istream, &errinfo));
+    assert_int_equal(errinfo, GTA_ERROR_INVALID_ATTRIBUTE);
+
+    istream_from_buf_init(&istream, subj_rdn, strlen(subj_rdn)+1);
+    assert_true(gta_context_set_attribute(h_ctx, "com.github.generic-trust-anchor-api.enroll.subject_rdn", (gtaio_istream_t*)&istream, &errinfo));
+    /* try to set the same attribute for a second time */
+    assert_false(gta_context_set_attribute(h_ctx, "com.github.generic-trust-anchor-api.enroll.subject_rdn", (gtaio_istream_t*)&istream, &errinfo));
+    assert_int_equal(errinfo, GTA_ERROR_INVALID_ATTRIBUTE);
+    errinfo = 0;
+
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Loop through invalid Subject RDNs */
+    for (unsigned long i=0; i<sizeof(invalid_subject_rdn)/sizeof(invalid_subject_rdn[0]); i++) {
+        h_ctx = gta_context_open(h_inst,
+                                 get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC),
+                                 supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL],
+                                 &errinfo);
+        assert_non_null(h_ctx);
+
+        istream_from_buf_init(&istream, invalid_subject_rdn[i], strlen(invalid_subject_rdn[i])+1);
+        assert_false(gta_context_set_attribute(h_ctx, "com.github.generic-trust-anchor-api.enroll.subject_rdn", (gtaio_istream_t*)&istream, &errinfo));
+        assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
+        errinfo = 0;
+
+        assert_true(gta_context_close(h_ctx, &errinfo));
+        assert_int_equal(0, errinfo);
+    }
+}
+
+static void profile_enroll(void ** state)
+{
+    DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
+    struct test_params_t * test_params = (struct test_params_t *)(*state);
+    gta_errinfo_t errinfo = 0;
+    gta_context_handle_t h_ctx = GTA_HANDLE_INVALID;
+
+    /* Create a personality */
+    gta_access_policy_handle_t h_auth_use = GTA_HANDLE_INVALID;
+    gta_access_policy_handle_t h_auth_admin = GTA_HANDLE_INVALID;
+    struct gta_protection_properties_t protection_properties = { 0 };
+
+    h_auth_use = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL, &errinfo);
+    assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
+    h_auth_admin = h_auth_use;
+
+    // Creation should not be available for this profile
+    assert_false(gta_personality_create(test_params->h_inst,
+                                       IDENTIFIER2_VALUE,
+                                       "pers_basic_enroll",
+                                       "provider_test",
+                                       supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL],
+                                       h_auth_use,
+                                       h_auth_admin,
+                                       protection_properties,
+                                       &errinfo));
+    assert_int_equal(errinfo, GTA_ERROR_PROFILE_UNSUPPORTED);
+    errinfo = 0;
+
+    // Negative tests for subject rdn
+    parse_subject_rdn_negative_tests(test_params->h_inst);
+
+    const char *subj_rdn = "CN=Dummy Product Name,O=Dummy Organization,OU=Dummy Organizational Unit";
+
+    istream_from_buf_t istream;
+    gtaio_ostream_t * ostream;
+
+#ifdef LOG_TEST_OUTPUT
+    myio_ofilestream_t ofilestream = { 0 };
+    ofilestream.write = (gtaio_stream_write_t)myio_ofilestream_write;
+    ofilestream.finish = (gtaio_stream_finish_t)myio_ofilestream_finish;
+    ofilestream.file = stdout;
+    ostream = (gtaio_ostream_t *)&ofilestream;
+#else
+    gtaio_ostream_t ostream_null = { 0 };
+    ostream_null.write = (gtaio_stream_write_t)ostream_null_write;
+    ostream_null.finish = (gtaio_stream_finish_t)ostream_finish;
+    ostream = &ostream_null;
+#endif
+
+    /* Test with first personality */
+    DEBUG_PRINT(("\nTest with EC:\n"));
+    h_ctx = gta_context_open(test_params->h_inst,
+                             get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC),
+                             supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL],
+                             &errinfo);
+
+    assert_non_null(h_ctx);
+
+    /* call enroll without additional attributes */
+    DEBUG_PRINT(("\nPKCS#10 without additional attributes:\n"));
+    assert_true(gta_personality_enroll(h_ctx, ostream, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    istream_from_buf_init(&istream, subj_rdn, strlen(subj_rdn)+1);
+    assert_true(gta_context_set_attribute(h_ctx, "com.github.generic-trust-anchor-api.enroll.subject_rdn", (gtaio_istream_t*)&istream, &errinfo));
+
+    DEBUG_PRINT(("\nPKCS#10 with additional attributes:\n"));
+    assert_true(gta_personality_enroll(h_ctx, ostream, &errinfo));
+    assert_int_equal(0, errinfo);
+    DEBUG_PRINT(("\n\n"));
+
+    /* Add a new attribute */
+    const char * dummy_ee_cert = "Dummy EE Certificate";
+
+    pers_add_attribute_negative_tests(h_ctx);
+    istream_from_buf_init(&istream, dummy_ee_cert, strlen(dummy_ee_cert));
+    assert_true(gta_personality_add_attribute(h_ctx, "ch.iec.30168.trustlist.certificate.self.x509", "Dummy EE Cert", (gtaio_istream_t *)&istream, &errinfo));
+    assert_int_equal(0, errinfo);
+    istream_from_buf_init(&istream, dummy_ee_cert, strlen(dummy_ee_cert));
+    assert_false(gta_personality_add_attribute(h_ctx, "ch.iec.30168.trustlist.certificate.self.x509", "Dummy EE Cert", (gtaio_istream_t *)&istream, &errinfo));
+    assert_int_equal(GTA_ERROR_NAME_ALREADY_EXISTS, errinfo);
+    errinfo = 0;
+
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Test with second personality */
+    DEBUG_PRINT(("\nTest with RSA:\n"));
+    h_ctx = gta_context_open(test_params->h_inst,
+                             get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA),
+                             supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL],
+                             &errinfo);
+
+    assert_non_null(h_ctx);
+
+    /* call enroll without additional attributes */
+    DEBUG_PRINT(("\nPKCS#10 without additional attributes:\n"));
+    assert_true(gta_personality_enroll(h_ctx, ostream, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    istream_from_buf_init(&istream, subj_rdn, strlen(subj_rdn)+1);
+    assert_true(gta_context_set_attribute(h_ctx, "com.github.generic-trust-anchor-api.enroll.subject_rdn", (gtaio_istream_t*)&istream, &errinfo));
+
+    DEBUG_PRINT(("\nPKCS#10 with additional attributes:\n"));
+    assert_true(gta_personality_enroll(h_ctx, ostream, &errinfo));
+    assert_int_equal(0, errinfo);
+    DEBUG_PRINT(("\n\n"));
+
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+}
+
 static void profile_jwt(void ** state)
 {
     DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
@@ -1055,6 +1240,11 @@ static void profile_jwt(void ** state)
     assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
     errinfo = 0;
 
+    /* Negative test for gta_context_set_attribute */
+    assert_false(gta_context_set_attribute(h_ctx, "dummy", (gtaio_istream_t*)&istream_data_to_seal, &errinfo));
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+    errinfo = 0;
+
     pers_get_attribute_negative_tests(h_ctx);
     pers_get_attribute(h_ctx, "ch.iec.30168.fingerprint", 1);
     pers_get_attribute(h_ctx, "ch.iec.30168.identifier_value", 0);
@@ -1063,6 +1253,7 @@ static void profile_jwt(void ** state)
     assert_true(myio_open_ifilestream(&istream_data_to_seal, TEST_JWT_INPUT , &errinfo));
     assert_int_equal(0, errinfo);
 
+    DEBUG_PRINT(("\nJWT with EC:\n"));
     assert_true(gta_seal_data(h_ctx,
                               (gtaio_istream_t*)&istream_data_to_seal,
                               ostream,
@@ -1746,6 +1937,7 @@ int ts_gta_sw_provider(void)
         cmocka_unit_test(profile_passcode),
 
         /* Tests for creation / deployment / enrollment / usage profiles */
+        cmocka_unit_test(profile_enroll),
         /* Tests for usage profiles only */
         cmocka_unit_test(profile_jwt),
         cmocka_unit_test(profile_tls),
