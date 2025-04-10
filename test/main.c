@@ -430,6 +430,7 @@ static void ostream_to_buf_init
     ostream->buf = buf;
     ostream->buf_size = buf_size;
     ostream->buf_pos = 0;
+    memset(buf, 0x00, buf_size);
 }
 
 static void get_pubkey(gta_context_handle_t h_ctx)
