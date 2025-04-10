@@ -1,0 +1,58 @@
+#;**********************************************************************;
+# SPDX-License-Identifier: MPL-2.0
+#
+# Copyright (c) 2025, Siemens AG
+#
+#;**********************************************************************;
+
+name: JWT
+on: 
+  push:
+    branches:
+      - main
+jobs:
+  test_jwt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y libcmocka-dev meson ninja-build build-essential libssl-dev cmake pkg-config git valgrind
+          wget https://github.com/mike-engel/jwt-cli/releases/download/6.2.0/jwt-linux.tar.gz
+          tar -xf jwt-linux.tar.gz
+          sudo cp ./jwt /usr/local/bin
+      - name: Checkout gta-api-core
+        uses: actions/checkout@v4
+        with:
+          repository: 'generic-trust-anchor-api/gta-api-core'
+          ref: 'main'
+      - name: Build and install gta-api-core
+        run: |
+          meson setup build
+          sudo ninja -C build install
+      - name: Checkout gta-api-sw-provider
+        uses: actions/checkout@v4
+      - name: Build and install gta-api-sw-provider
+        run: |
+          meson setup build
+          sudo ninja -C build install
+      - name: Checkout gta-cli
+        uses: actions/checkout@v4
+        with:
+          repository: 'generic-trust-anchor-api/gta-cli'
+          ref: 'main'
+      - name: Build and install gta-cli
+        run: |
+          meson setup build
+          sudo ninja -C build install
+      - name: Generate and verify JWT with RSA and EC
+        run: |
+          sudo ldconfig
+          gta-cli identifier_assign --id_type=ch.iec.30168.identifier.mac_addr --id_val=DE-AD-BE-EF-FE-ED
+          gta-cli personality_create --id_val=DE-AD-BE-EF-FE-ED --pers=rsa --app_name=jwt --prof=com.github.generic-trust-anchor-api.basic.rsa
+          gta-cli personality_create --id_val=DE-AD-BE-EF-FE-ED --pers=ec --app_name=jwt --prof=com.github.generic-trust-anchor-api.basic.ec
+          echo "{\"name\": \"John Doe\"}" | base64 -w0 | gta-cli seal_data --pers=rsa --prof=com.github.generic-trust-anchor-api.basic.jwt > ./signed_JWT.txt
+          gta-cli personality_enroll --pers=rsa --prof=com.github.generic-trust-anchor-api.basic.jwt > ./public_key.pem
+          cat ./signed_JWT.txt | jwt decode --ignore-exp -S @./public_key.pem -
+          echo "{\"name\": \"John Doe\"}" | base64 -w0 | gta-cli seal_data --pers=ec --prof=com.github.generic-trust-anchor-api.basic.jwt > ./signed_JWT.txt
+          gta-cli personality_enroll --pers=ec --prof=com.github.generic-trust-anchor-api.basic.jwt > ./public_key.pem
+          cat ./signed_JWT.txt | jwt decode --ignore-exp -S @./public_key.pem -
