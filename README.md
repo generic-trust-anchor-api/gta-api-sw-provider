@@ -43,7 +43,7 @@ for more profiles will be added.
 
 | Supported | Profile name | Reference | Short description |
 | :-------- | :----------- | :-------- | :---------------- |
-| :x: (WIP) | ch.iec.30168.basic.passcode | [ISO/IEC TS 30168](https://www.iso.org/standard/53288.html) Annex B.1 | Simple authentication method for personality derived access tokens |
+| :white_check_mark: | ch.iec.30168.basic.passcode | [ISO/IEC TS 30168](https://www.iso.org/standard/53288.html) Annex B.1 | Simple authentication method for personality derived access tokens |
 | :x: (WIP) | ch.iec.30168.basic.local_data_integrity_only | [ISO/IEC TS 30168](https://www.iso.org/standard/53288.html) Annex B.2 | Integrity protection of local data on the device |
 | :white_check_mark: | ch.iec.30168.basic.local_data_protection | [ISO/IEC TS 30168](https://www.iso.org/standard/53288.html) Annex B.3 | Integrity and confidentiality protection of local data on the device |
 | :white_check_mark: | com.github.generic-trust-anchor-api.basic.dilithium | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.dilithium.md) | Creation of a Dilithium based personality |

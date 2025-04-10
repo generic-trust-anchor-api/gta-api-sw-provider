@@ -36,6 +36,8 @@
 #define MAXLEN_ATTRIBUTE_NAME 160
 #define MAXLEN_ATTRIBUTE_VALUE 2000
 
+const char * passcode = "zZ902()[]{}%*&-+<>!?=$#Ar";
+
 #define IDENTIFIER1_TYPE "ch.iec.30168.identifier.mac_addr"
 #define IDENTIFIER1_VALUE "DE-AD-BE-EF-FE-ED"
 
@@ -769,6 +771,11 @@ static void profile_local_data_protection(void ** state)
     /* Negative tests for personality attribute functions */
     pers_attribute_functions_unsupported(h_ctx);
 
+    /* Negative test for gta_verify */
+    assert_false(gta_verify(h_ctx, (gtaio_istream_t *)&istream, &errinfo));
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+    errinfo = 0;
+
     assert_true(myio_open_ifilestream(&istream_data_to_seal, TEST_DATA_PAYLOAD, &errinfo));
     assert_int_equal(0, errinfo);
     ostream_to_buf_init(&ostream, protected_data, protected_data_size);
@@ -805,37 +812,170 @@ static void profile_local_data_protection(void ** state)
     /* todo: negative tests for gta_context_open() */
 }
 
-/* todo: this needs to be refactored */
-static void profile_deploy_passcode(void ** state)
+static void profile_passcode(void ** state)
 {
     DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
     struct test_params_t * test_params = (struct test_params_t *)(*state);
     gta_errinfo_t errinfo = 0;
+    gta_context_handle_t h_ctx = GTA_HANDLE_INVALID;
+    gta_access_token_t access_token = { 0 };
 
-    myio_ifilestream_t istream_personality_content = { 0 };
-    gta_access_policy_handle_t h_auth_use = GTA_HANDLE_INVALID;
-    gta_access_policy_handle_t h_auth_admin = GTA_HANDLE_INVALID;
+    istream_from_buf_t istream_passcode = { 0 };
+    gta_access_policy_handle_t h_auth = GTA_HANDLE_INVALID;
     struct gta_protection_properties_t protection_properties = { 0 };
 
-    h_auth_use = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL, &errinfo);
-    assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
-    h_auth_admin = h_auth_use;
+    const char * short_passcode = "abcdefg1234";
+    const char * invalid_passcode = "abcdefg=98!,/54Q";
 
-    assert_true(myio_open_ifilestream(&istream_personality_content, TESTFILE_TXT , &errinfo));
-    assert_int_equal(0, errinfo);
+    h_auth = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL, &errinfo);
+    assert_int_not_equal(h_auth, GTA_HANDLE_INVALID);
 
-    assert_true(gta_personality_deploy(test_params->h_inst,
-        IDENTIFIER1_VALUE,
-        "pers_passcode",
+    /* Wrong identifier */
+    istream_from_buf_init(&istream_passcode, short_passcode, strlen(short_passcode)+1);
+    assert_false(gta_personality_deploy(test_params->h_inst,
+        "INVALID",
+        get_personality_name(PROF_CH_IEC_30168_BASIC_PASSCODE),
         "provider_test",
-        "ch.iec.30168.basic.passcode",
-        (gtaio_istream_t*)&istream_personality_content,
-        h_auth_use,
-        h_auth_admin,
+        supported_profiles[PROF_CH_IEC_30168_BASIC_PASSCODE],
+        (gtaio_istream_t*)&istream_passcode,
+        h_auth,
+        h_auth,
         protection_properties,
         &errinfo));
+    assert_int_equal(GTA_ERROR_ITEM_NOT_FOUND, errinfo);
+    errinfo = 0;
 
-    assert_true(myio_close_ifilestream(&istream_personality_content, &errinfo));
+    /* Wrong profile */
+    istream_from_buf_init(&istream_passcode, short_passcode, strlen(short_passcode)+1);
+    assert_false(gta_personality_deploy(test_params->h_inst,
+        IDENTIFIER1_VALUE,
+        get_personality_name(PROF_CH_IEC_30168_BASIC_PASSCODE),
+        "provider_test",
+        supported_profiles[PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION],
+        (gtaio_istream_t*)&istream_passcode,
+        h_auth,
+        h_auth,
+        protection_properties,
+        &errinfo));
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+    errinfo = 0;
+
+    /* Too short passcode */
+    istream_from_buf_init(&istream_passcode, short_passcode, strlen(short_passcode)+1);
+    assert_false(gta_personality_deploy(test_params->h_inst,
+        IDENTIFIER1_VALUE,
+        get_personality_name(PROF_CH_IEC_30168_BASIC_PASSCODE),
+        "provider_test",
+        supported_profiles[PROF_CH_IEC_30168_BASIC_PASSCODE],
+        (gtaio_istream_t*)&istream_passcode,
+        h_auth,
+        h_auth,
+        protection_properties,
+        &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
+    errinfo = 0;
+
+    /* Passcode with invalid characters */
+    istream_from_buf_init(&istream_passcode, invalid_passcode, strlen(invalid_passcode)+1);
+    assert_false(gta_personality_deploy(test_params->h_inst,
+        IDENTIFIER1_VALUE,
+        get_personality_name(PROF_CH_IEC_30168_BASIC_PASSCODE),
+        "provider_test",
+        supported_profiles[PROF_CH_IEC_30168_BASIC_PASSCODE],
+        (gtaio_istream_t*)&istream_passcode,
+        h_auth,
+        h_auth,
+        protection_properties,
+        &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
+    errinfo = 0;
+
+    /* Passcode with missing NULL terminator */
+    istream_from_buf_init(&istream_passcode, passcode, strlen(passcode));
+    assert_false(gta_personality_deploy(test_params->h_inst,
+        IDENTIFIER1_VALUE,
+        get_personality_name(PROF_CH_IEC_30168_BASIC_PASSCODE),
+        "provider_test",
+        supported_profiles[PROF_CH_IEC_30168_BASIC_PASSCODE],
+        (gtaio_istream_t*)&istream_passcode,
+        h_auth,
+        h_auth,
+        protection_properties,
+        &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
+    errinfo = 0;
+
+    istream_from_buf_init(&istream_passcode, passcode, strlen(passcode)+1);
+    assert_true(gta_personality_deploy(test_params->h_inst,
+        IDENTIFIER1_VALUE,
+        get_personality_name(PROF_CH_IEC_30168_BASIC_PASSCODE),
+        "provider_test",
+        supported_profiles[PROF_CH_IEC_30168_BASIC_PASSCODE],
+        (gtaio_istream_t*)&istream_passcode,
+        h_auth,
+        h_auth,
+        protection_properties,
+        &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Open a context */
+    h_ctx = gta_context_open(test_params->h_inst,
+        get_personality_name(PROF_CH_IEC_30168_BASIC_PASSCODE),
+        supported_profiles[PROF_CH_IEC_30168_BASIC_PASSCODE],
+        &errinfo);
+
+    assert_non_null(h_ctx);
+    assert_int_equal(0, errinfo);
+
+    /* Wrong passcode (short) */
+    istream_from_buf_init(&istream_passcode, passcode, strlen(passcode));
+    assert_false(gta_verify(h_ctx, (gtaio_istream_t *)&istream_passcode, &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
+    errinfo = 0;
+
+    /* Wrong passcode */
+    istream_from_buf_init(&istream_passcode, short_passcode, strlen(short_passcode)+1);
+    assert_false(gta_verify(h_ctx, (gtaio_istream_t *)&istream_passcode, &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
+    errinfo = 0;
+
+    /* Try to get an access token */
+    assert_false(gta_access_token_get_pers_derived(
+        h_ctx,
+        get_personality_name(PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION),
+        GTA_ACCESS_TOKEN_USAGE_USE,
+        &access_token,
+        &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+
+    /* Wrong passcode (long) */
+    size_t passcode_len = strlen(passcode);
+    char longer_passcode[passcode_len + 2];
+    memcpy(longer_passcode, passcode, passcode_len);
+    longer_passcode[passcode_len] = 'x';
+    longer_passcode[passcode_len + 1] = '\0';
+    istream_from_buf_init(&istream_passcode, longer_passcode, strlen(longer_passcode)+1);
+    assert_false(gta_verify(h_ctx, (gtaio_istream_t *)&istream_passcode, &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
+    errinfo = 0;
+
+    /* Correct passcode */
+    istream_from_buf_init(&istream_passcode, passcode, strlen(passcode)+1);
+    assert_true(gta_verify(h_ctx, (gtaio_istream_t *)&istream_passcode, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Try to get an access token */
+    assert_true(gta_access_token_get_pers_derived(
+        h_ctx,
+        get_personality_name(PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION),
+        GTA_ACCESS_TOKEN_USAGE_USE,
+        &access_token,
+        &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
 }
 
 static void profile_jwt(void ** state)
@@ -1281,97 +1421,6 @@ static void personality_attributes_enumerate(void ** state)
     }
 }
 
-/*
- * todo: this needs to be refactored. Currently only some basic aspects are
- * tested (e.g., serialization of access policies).
- */
-static void access_control(void ** state)
-{
-    struct test_params_t * test_params = (struct test_params_t *)(*state);
-    gta_errinfo_t errinfo = 0;
-
-    myio_ifilestream_t istream_personality_content = { 0 };
-    gta_access_policy_handle_t h_auth_use = GTA_HANDLE_INVALID;
-    gta_access_policy_handle_t h_auth_admin = GTA_HANDLE_INVALID;
-    struct gta_protection_properties_t protection_properties = { 0 };
-    gta_context_handle_t h_ctx = GTA_HANDLE_INVALID;
-
-    gta_personality_fingerprint_t fingerprint_1 = {
-       0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf,
-       0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf,
-       0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf,
-       0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf
-    };
-
-    gta_personality_fingerprint_t fingerprint_2 = {
-       0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
-       0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
-       0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
-       0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f
-    };
-
-    gta_personality_fingerprint_t fingerprint_3 = {
-       0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f,
-       0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f,
-       0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f,
-       0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f
-    };
-
-    h_auth_use = gta_access_policy_create(test_params->h_inst, &errinfo);
-    gta_access_policy_add_pers_derived_access_token_descriptor(h_auth_use, fingerprint_1, "test.profile.1", &errinfo);
-    gta_access_policy_add_pers_derived_access_token_descriptor(h_auth_use, fingerprint_2, "test.profile.1", &errinfo);
-    gta_access_policy_add_basic_access_token_descriptor(h_auth_use, &errinfo);
-    assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
-
-    h_auth_admin = gta_access_policy_create(test_params->h_inst, &errinfo);
-    gta_access_policy_add_pers_derived_access_token_descriptor(h_auth_admin, fingerprint_3, "test.profile.1", &errinfo);
-    gta_access_policy_add_pers_derived_access_token_descriptor(h_auth_admin, fingerprint_2, "test.profile.1", &errinfo);
-    gta_access_policy_add_pers_derived_access_token_descriptor(h_auth_admin, fingerprint_1, "test.profile.2", &errinfo);
-    assert_int_not_equal(h_auth_admin, GTA_HANDLE_INVALID);
-
-    assert_true(myio_open_ifilestream(&istream_personality_content, TESTFILE_TXT , &errinfo));
-
-    assert_true(gta_personality_deploy(test_params->h_inst,
-        IDENTIFIER1_VALUE,
-        "pers_passcode_with_access_token",
-        "provider_test",
-        "ch.iec.30168.basic.passcode",
-        (gtaio_istream_t*)&istream_personality_content,
-        h_auth_use,
-        h_auth_admin,
-        protection_properties,
-        &errinfo));
-
-    assert_true(gta_access_policy_destroy(h_auth_admin, &errinfo));
-    assert_true(gta_access_policy_destroy(h_auth_use, &errinfo));
-
-    gta_access_token_t access_token;
-
-    /* Open a context to get access personality_derived_access token (todo) */
-    assert_non_null(h_ctx = gta_context_open(test_params->h_inst,
-                            "pers_passcode_with_access_token",
-                            "ch.iec.30168.basic.passcode",
-                            &errinfo
-                        ));
-
-    assert_false(gta_access_token_get_pers_derived(
-                    h_ctx,
-                    "pers_passcode_with_access_token",
-                    GTA_ACCESS_TOKEN_USAGE_USE,
-                    &access_token,
-                    &errinfo
-                ));
-
-    assert_true(gta_context_auth_set_access_token(
-                    h_ctx,
-                    (char*) &access_token,
-                    &errinfo
-                ));
-
-    assert_true(myio_close_ifilestream(&istream_personality_content, &errinfo));
-    assert_true(gta_context_close(h_ctx, &errinfo));
-}
-
 static void access_policies_and_access_tokens(void ** state)
 {
     DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
@@ -1382,10 +1431,32 @@ static void access_policies_and_access_tokens(void ** state)
     gta_access_policy_handle_t h_auth_admin = GTA_HANDLE_INVALID;
     struct gta_protection_properties_t protection_properties = { 0 };
     gta_personality_fingerprint_t fingerprint = { 0 };
+    ostream_to_buf_t ostream = { 0 };
 
+    /* get fingerprint from basic passcode personality */
+    /* get a pers derived access token */
+    h_ctx = gta_context_open(test_params->h_inst,
+        get_personality_name(PROF_CH_IEC_30168_BASIC_PASSCODE),
+        supported_profiles[PROF_CH_IEC_30168_BASIC_PASSCODE],
+        &errinfo);
+    assert_non_null(h_ctx);
+    assert_int_equal(0, errinfo);
+
+    ostream_to_buf_init(&ostream, fingerprint, sizeof(fingerprint));
+    assert_true(gta_personality_get_attribute(h_ctx, "ch.iec.30168.fingerprint", (gtaio_ostream_t *)&ostream, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* create complex access policy including policies for negative tests */
     h_auth_use = gta_access_policy_create(test_params->h_inst, &errinfo);
-    gta_access_policy_add_basic_access_token_descriptor(h_auth_use, &errinfo);
-    gta_access_policy_add_pers_derived_access_token_descriptor(h_auth_use, fingerprint, "todo", &errinfo);
+    gta_access_policy_add_pers_derived_access_token_descriptor(h_auth_use, fingerprint, supported_profiles[PROF_CH_IEC_30168_BASIC_PASSCODE], &errinfo);
+    gta_access_policy_add_pers_derived_access_token_descriptor(h_auth_use, fingerprint, "ch.iec.30168.basic.passcod", &errinfo);
+    gta_access_policy_add_pers_derived_access_token_descriptor(h_auth_use, fingerprint, supported_profiles[PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION], &errinfo);
+    fingerprint[0] = 'x';
+    fingerprint[1] = 'x';
+    gta_access_policy_add_pers_derived_access_token_descriptor(h_auth_use, fingerprint, supported_profiles[PROF_CH_IEC_30168_BASIC_PASSCODE], &errinfo);
     assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
     assert_int_equal(0, errinfo);
 
@@ -1398,7 +1469,7 @@ static void access_policies_and_access_tokens(void ** state)
                                         IDENTIFIER2_VALUE,
                                         "local_data_prot_access_control",
                                         "local_data_protection",
-                                        "ch.iec.30168.basic.local_data_protection",
+                                        supported_profiles[PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION],
                                         h_auth_use,
                                         h_auth_admin,
                                         protection_properties,
@@ -1411,7 +1482,7 @@ static void access_policies_and_access_tokens(void ** state)
                                        IDENTIFIER2_VALUE,
                                        "local_data_prot_access_control",
                                        "local_data_protection",
-                                       "ch.iec.30168.basic.local_data_protection",
+                                       supported_profiles[PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION],
                                        h_auth_use,
                                        h_auth_admin,
                                        protection_properties,
@@ -1420,14 +1491,6 @@ static void access_policies_and_access_tokens(void ** state)
 
     assert_true(gta_access_policy_destroy(h_auth_use, &errinfo));
 
-    h_ctx = gta_context_open(test_params->h_inst,
-                             "local_data_prot_access_control",
-                             "ch.iec.30168.basic.local_data_protection",
-                             &errinfo);
-
-    assert_non_null(h_ctx);
-    assert_int_equal(0, errinfo);
-
     const char * test_input = "test";
     istream_from_buf_t istream = { 0 };
 
@@ -1435,15 +1498,36 @@ static void access_policies_and_access_tokens(void ** state)
     ostream_null.write = (gtaio_stream_write_t)ostream_null_write;
     ostream_null.finish = (gtaio_stream_finish_t)ostream_finish;
 
-    istream_from_buf_init(&istream, test_input, strlen(test_input));
-    assert_false(gta_seal_data(h_ctx, (gtaio_istream_t*)&istream, &ostream_null, &errinfo));
-    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
-    errinfo = 0;
-
     gta_access_token_t invalid_granting_token = { 0 };
     gta_access_token_t access_token = { 0 };
     gta_access_token_t invalid_access_token = { 0 };
+    gta_access_token_t pers_derived_access_token = { 0 };
 
+    /* get a pers derived access token */
+    h_ctx = gta_context_open(test_params->h_inst,
+        get_personality_name(PROF_CH_IEC_30168_BASIC_PASSCODE),
+        supported_profiles[PROF_CH_IEC_30168_BASIC_PASSCODE],
+        &errinfo);
+    assert_non_null(h_ctx);
+    assert_int_equal(0, errinfo);
+
+    istream_from_buf_init(&istream, passcode, strlen(passcode)+1);
+    assert_true(gta_verify(h_ctx, (gtaio_istream_t *)&istream, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_true(gta_access_token_get_pers_derived(
+        h_ctx,
+        "local_data_prot_access_control",
+        GTA_ACCESS_TOKEN_USAGE_USE,
+        &pers_derived_access_token,
+        &errinfo
+    ));
+    assert_int_equal(0, errinfo);
+
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Tests for basic access tokens */
     assert_false(gta_access_token_get_basic(test_params->h_inst, invalid_granting_token, "local_data_prot_access_control", GTA_ACCESS_TOKEN_USAGE_USE, access_token, &errinfo));
     assert_int_equal(GTA_ERROR_ACCESS, errinfo);
     errinfo = 0;
@@ -1454,6 +1538,20 @@ static void access_policies_and_access_tokens(void ** state)
 
     assert_true(gta_access_token_get_basic(test_params->h_inst, test_params->granting_token, "local_data_prot_access_control", GTA_ACCESS_TOKEN_USAGE_USE, access_token, &errinfo));
     assert_int_equal(0, errinfo);
+
+    h_ctx = gta_context_open(test_params->h_inst,
+        "local_data_prot_access_control",
+        supported_profiles[PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION],
+        &errinfo);
+
+    assert_non_null(h_ctx);
+    assert_int_equal(0, errinfo);
+
+    /* Missing access token */
+    istream_from_buf_init(&istream, test_input, strlen(test_input));
+    assert_false(gta_seal_data(h_ctx, (gtaio_istream_t*)&istream, &ostream_null, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
 
     /* Add valid, but unnecessary access token to context (increase coverage) */
     assert_true(gta_context_auth_set_access_token(h_ctx, test_params->physical_presence_token, &errinfo));
@@ -1468,7 +1566,17 @@ static void access_policies_and_access_tokens(void ** state)
     assert_int_equal(GTA_ERROR_ACCESS, errinfo);
     errinfo = 0;
 
+    /* Add invalid access token to context (increase coverage) */
     assert_true(gta_context_auth_set_access_token(h_ctx, access_token, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    istream_from_buf_init(&istream, test_input, strlen(test_input));
+    assert_false(gta_seal_data(h_ctx, (gtaio_istream_t*)&istream, &ostream_null, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+
+    /* Correct access token */
+    assert_true(gta_context_auth_set_access_token(h_ctx, pers_derived_access_token, &errinfo));
     assert_int_equal(0, errinfo);
 
     istream_from_buf_init(&istream, test_input, strlen(test_input));
@@ -1479,7 +1587,7 @@ static void access_policies_and_access_tokens(void ** state)
     assert_int_equal(GTA_ERROR_ACCESS, errinfo);
     errinfo = 0;
 
-    assert_true(gta_access_token_revoke(test_params->h_inst, access_token, &errinfo));
+    assert_true(gta_access_token_revoke(test_params->h_inst, pers_derived_access_token, &errinfo));
     assert_int_equal(0, errinfo);
 
     istream_from_buf_init(&istream, test_input, strlen(test_input));
@@ -1504,7 +1612,7 @@ static void access_policies_and_access_tokens(void ** state)
                                        IDENTIFIER2_VALUE,
                                        "ec_access_control",
                                        "access control",
-                                       "com.github.generic-trust-anchor-api.basic.ec",
+                                       supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC],
                                        h_auth_use,
                                        h_auth_admin,
                                        protection_properties,
@@ -1514,7 +1622,7 @@ static void access_policies_and_access_tokens(void ** state)
 
     h_ctx = gta_context_open(test_params->h_inst,
         "ec_access_control",
-        "com.github.generic-trust-anchor-api.basic.tls",
+        supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS],
         &errinfo);
 
     assert_non_null(h_ctx);
@@ -1624,7 +1732,7 @@ int ts_gta_sw_provider(void)
         /* Tests for the mandatory profiles */
         cmocka_unit_test(profile_local_data_protection),
         /* Tests for creation / deployment profiles only */
-        cmocka_unit_test(profile_deploy_passcode),
+        cmocka_unit_test(profile_passcode),
 
         /* Tests for creation / deployment / enrollment / usage profiles */
         /* Tests for usage profiles only */
@@ -1635,8 +1743,7 @@ int ts_gta_sw_provider(void)
         cmocka_unit_test(personality_enumerate),
         cmocka_unit_test(personality_enumerate_application),
         cmocka_unit_test(personality_attributes_enumerate),
-        /* Tests for access control (may be temporary) */
-        cmocka_unit_test(access_control),
+        /* Tests for access control */
         cmocka_unit_test(access_policies_and_access_tokens),
         /* Tests for persistent storage */
         cmocka_unit_test(provider_deserialize),
