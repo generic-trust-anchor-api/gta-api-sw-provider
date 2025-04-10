@@ -2584,8 +2584,10 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_attributes_enumerate,
         gta_errinfo_t errinfo = 0;
 
         attribute_type->write(attribute_type, pers_attr_type_strings[p_personality_attribute->type], strnlen(pers_attr_type_strings[p_personality_attribute->type], MAXLEN_PERSONALITY_ATTRIBUTE_TYPE), &errinfo);
+        attribute_type->write(attribute_type, "", 1, &errinfo);
         attribute_type->finish(attribute_type, 0, &errinfo);
         attribute_name->write(attribute_name, p_personality_attribute->p_name, strnlen(p_personality_attribute->p_name, MAXLEN_PERSONALITY_ATTRIBUTE_NAME), &errinfo);
+        attribute_name->write(attribute_name, "", 1, &errinfo);
         attribute_name->finish(attribute_name, 0, &errinfo);
 
         if (0 == errinfo) {
