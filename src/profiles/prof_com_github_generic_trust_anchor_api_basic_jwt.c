@@ -7,6 +7,7 @@
 #include "../gta_sw_provider.h"
 
 #define CURVENAME_LENGTH_MAX 64
+#define P256_COORDINATE_LEN 32
 
 /*
  * Helper function, returning the number of bits of a private key.
@@ -218,6 +219,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, seal_data,
     EVP_MD_CTX *mdctx = NULL;
     EVP_PKEY *evp_private_key = NULL;
     int32_t key_type = EVP_PKEY_NONE;
+    ECDSA_SIG * signatureRaw = NULL;
 
     /* get Personality of the Context */
     p_personality_content = p_context_params->p_personality_item->p_personality_content;
@@ -231,7 +233,6 @@ GTA_SWP_DEFINE_FUNCTION(bool, seal_data,
     p_secret_buffer = NULL;
     if (!evp_private_key)
     {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
 
@@ -242,28 +243,24 @@ GTA_SWP_DEFINE_FUNCTION(bool, seal_data,
     } else if (EVP_PKEY_EC == key_type) {
         header_base64 = jwt_header_es256;
     } else {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
 
     /* Create the Message Digest Context */
     if (!(mdctx = EVP_MD_CTX_new()))
     {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
 
     /* Initialise the DigestSign operation - SHA-256 has been selected as the message digest function in this example */
     if (1 != EVP_DigestSignInit(mdctx, NULL, EVP_sha256(), NULL, evp_private_key))
     {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
 
     /* add JWT Header */
     if (1 != EVP_DigestSignUpdate(mdctx, header_base64, strlen(header_base64)))
     {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
     protected_data->write(protected_data, header_base64, strlen(header_base64), p_errinfo);
@@ -271,7 +268,6 @@ GTA_SWP_DEFINE_FUNCTION(bool, seal_data,
     /* add "." JWT separator */
     if (1 != EVP_DigestSignUpdate(mdctx, ".", 1))
     {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
     protected_data->write(protected_data, ".", 1, p_errinfo);
@@ -279,41 +275,62 @@ GTA_SWP_DEFINE_FUNCTION(bool, seal_data,
     /* add JWT Payload */
     while (!data->eof(data, p_errinfo)) {
         size_t read_len = data->read(data, payload_chunk, CHUNK_LEN, p_errinfo);
-        /* Update with the data chunck */
+        /* Update with the data chunk */
         if(1 != EVP_DigestSignUpdate(mdctx, payload_chunk, read_len))
         {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
             goto err;
         }
-        /* Add data chunck as JWT paylod */
+        /* Add data chunk as JWT payload */
         protected_data->write(protected_data, payload_chunk, read_len, p_errinfo);
     }
 
     /* Obtain the length of the signature before being calculated */
     if (1 != EVP_DigestSignFinal(mdctx, NULL, &signature_len))
     {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
 
     /* Allocate memory for the signature based on size in signature_len */
     if (!(signature = OPENSSL_malloc(sizeof(unsigned char) * (signature_len))))
     {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
 
     /* Obtain the signature */
     if (1 != EVP_DigestSignFinal(mdctx, signature, &signature_len))
     {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
 
+    /* In case of EC, we need to convert the signature */
+    if (EVP_PKEY_EC == key_type) {
+        const unsigned char * ptmpData = signature;
+        const BIGNUM * pr = NULL;
+        const BIGNUM * ps = NULL;
+
+        signatureRaw = d2i_ECDSA_SIG(NULL, &ptmpData, signature_len);
+        if (NULL == signatureRaw) {
+            goto err;
+        }
+
+        ECDSA_SIG_get0(signatureRaw, &pr, &ps);
+        if ((NULL == pr) || (NULL == ps) || ((P256_COORDINATE_LEN * 2) > signature_len)) {
+            goto err;
+        }
+
+        if (P256_COORDINATE_LEN != BN_bn2binpad(pr, signature, P256_COORDINATE_LEN)) {
+            goto err;
+        }
+
+        if (P256_COORDINATE_LEN != BN_bn2binpad(ps, signature + P256_COORDINATE_LEN, P256_COORDINATE_LEN)) {
+            goto err;
+        }
+        signature_len = P256_COORDINATE_LEN * 2;
+    }
+
     signature_base64url = base64url_encode(p_context_params->h_ctx, signature, signature_len);
-    if (!signature_base64url)
+    if (NULL == signature_base64url)
     {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
 
@@ -323,12 +340,16 @@ GTA_SWP_DEFINE_FUNCTION(bool, seal_data,
     protected_data->finish(protected_data, 0, p_errinfo);
 
     ret = true;
+    goto cleanup;
 
 err:
+    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+cleanup:
     gta_secmem_free(p_context_params->h_ctx, signature_base64url, &errinfo_tmp);
     OPENSSL_free(signature);
     EVP_MD_CTX_free(mdctx);
     EVP_PKEY_free(evp_private_key);
+    ECDSA_SIG_free(signatureRaw);
 
     return ret;
 }
