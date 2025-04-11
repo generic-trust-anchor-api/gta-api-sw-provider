@@ -591,6 +591,9 @@ static void pers_attr_enumerate(gta_instance_handle_t h_inst, gta_personality_na
             DEBUG_PRINT(("\n[%zu]\n", count));
             DEBUG_PRINT(("Attribute Type:   %s\n", attribute_type));
             DEBUG_PRINT(("Attribute Name:   %s\n", attribute_name));
+            /* Check if name and type are Null-terminated */
+            assert_int_equal(attribute_name[ostream_attribute_name.buf_pos-1], '\0');
+            assert_int_equal(attribute_type[ostream_attribute_type.buf_pos-1], '\0');
             ++count;
         }
         else {
@@ -1317,6 +1320,9 @@ static void identifier_enumerate(void ** state)
             DEBUG_PRINT(("\n[%zu]\n", count));
             DEBUG_PRINT(("Identifier Type:   %s\n", identifier_type));
             DEBUG_PRINT(("Identifier Value:  %s\n", identifier_value));
+            /* Check if type and value are Null-terminated */
+            assert_int_equal(identifier_type[ostream_identifier_type.buf_pos-1], '\0');
+            assert_int_equal(identifier_value[ostream_identifier_value.buf_pos-1], '\0');
             ++count;
         }
         else {
@@ -1342,6 +1348,8 @@ static void pers_enumerate(gta_instance_handle_t h_inst, gta_identifier_value_t 
         if (gta_personality_enumerate(h_inst, identifier_value, &h_enum, flags, (gtaio_ostream_t*)&ostream_personality_name, &errinfo)) {
             DEBUG_PRINT(("\n[%zu]\n", count));
             DEBUG_PRINT(("Personality Name:   %s\n", personality_name));
+            /* Check if name is Null-terminated */
+            assert_int_equal(personality_name[ostream_personality_name.buf_pos-1], '\0');
             ++count;
         }
         else {
@@ -1385,6 +1393,8 @@ static void pers_enumerate_application(gta_instance_handle_t h_inst, gta_applica
         if (gta_personality_enumerate_application(h_inst, application_name, &h_enum, flags, (gtaio_ostream_t*)&ostream_personality_name, &errinfo)) {
             DEBUG_PRINT(("\n[%zu]\n", count));
             DEBUG_PRINT(("Personality Name:   %s\n", personality_name));
+            /* Check if name is Null-terminated */
+            assert_int_equal(personality_name[ostream_personality_name.buf_pos-1], '\0');
             ++count;
         }
         else {
