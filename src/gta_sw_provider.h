@@ -46,6 +46,7 @@
 #define MAXLEN_PROFILE 160
 #define MAXLEN_CTX_ATTRIBUTE_VALUE 2000
 #define PERSONALITY_NAME_LENGTH_MAX 1024
+#define CURVENAME_LENGTH_MAX 64
 #define CHUNK_LEN 512
 #define SERIALIZE_PATH_LEN_MAX 200
 
@@ -137,6 +138,21 @@ bool add_personality_attribute_list_item
     const bool b_trusted,
     gta_errinfo_t * p_errinfo
 );
+
+/*
+ * Helper function, returning the number of bits of a private key.
+ * It is intended to be used in order to check if the properties
+ * of a personality matches the expectations of a profile.
+ */
+int pkey_bits(const EVP_PKEY *evp_private_key);
+
+/*
+ * Helper function, returning the OpenSSL curve NID of an EC private key.
+ * It is intended to be used in order to check if the properties
+ * of a personality matches the expectations of a profile.
+ * Returns 0 in case of error.
+ */
+int pkey_ec_nid(const EVP_PKEY *evp_private_key);
 
 /* Helper function to read the whole input from gtaio_istream_t into a buffer */
 bool read_input_buffer (gtaio_istream_t * data, unsigned char ** pp_data, size_t * p_data_size, gta_errinfo_t * p_errinfo);

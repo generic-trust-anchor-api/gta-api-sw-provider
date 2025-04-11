@@ -187,6 +187,33 @@ static enum pers_attr_type_t get_pers_attr_type_enum(const char * attrtype)
     return PAT_INVALID;
 }
 
+/*
+ * Helper function, returning the number of bits of a private key.
+ * It is intended to be used in order to check if the properties
+ * of a personality matches the expectations of a profile.
+ */
+int pkey_bits(const EVP_PKEY *evp_private_key) {
+    return EVP_PKEY_bits(evp_private_key);
+}
+
+/*
+ * Helper function, returning the OpenSSL curve NID of an EC private key.
+ * It is intended to be used in order to check if the properties
+ * of a personality matches the expectations of a profile.
+ * Returns 0 in case of error.
+ */
+int pkey_ec_nid(const EVP_PKEY *evp_private_key) {
+    char curve_name[CURVENAME_LENGTH_MAX] = { 0 };
+    size_t len = 0;
+
+    if (!EVP_PKEY_get_utf8_string_param(evp_private_key, OSSL_PKEY_PARAM_GROUP_NAME,
+        curve_name, sizeof(curve_name), &len)) {
+            return 0;
+    }
+
+    return OBJ_sn2nid(curve_name);
+}
+
 void
 gta_sw_provider_free_params(void * p_params)
 {
