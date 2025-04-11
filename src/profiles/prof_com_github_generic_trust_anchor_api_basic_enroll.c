@@ -9,6 +9,7 @@
 #define CTX_ATTR_TYPE_SUBJECT_RDN "com.github.generic-trust-anchor-api.enroll.subject_rdn"
 
 struct pers_enroll_attributes_t {
+    char * subject_rdn;
     X509_NAME * x509_name;
 };
 
@@ -124,6 +125,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_open,
     }
     struct pers_enroll_attributes_t * pers_enroll_attributes = (struct pers_enroll_attributes_t *) p_context_params->context_attributes;
     pers_enroll_attributes->x509_name = NULL;
+    pers_enroll_attributes->subject_rdn = NULL;
     ret = true;
 
 err:
@@ -139,6 +141,45 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_close,
 {
     struct pers_enroll_attributes_t * pers_enroll_attributes = (struct pers_enroll_attributes_t *) p_context_params->context_attributes;
     X509_NAME_free(pers_enroll_attributes->x509_name);
+    return true;
+}
+
+GTA_SWP_DEFINE_FUNCTION(bool, context_get_attribute,
+(
+    struct gta_sw_provider_context_params_t * p_context_params,
+    gta_context_attribute_type_t attrtype,
+    gtaio_ostream_t * p_attrvalue,
+    gta_errinfo_t * p_errinfo
+))
+{
+    const struct pers_enroll_attributes_t * pers_enroll_attributes = (struct pers_enroll_attributes_t *) p_context_params->context_attributes;
+
+    /* check whether attribute type is supported by profile */
+    if (0 != strcmp(attrtype, CTX_ATTR_TYPE_SUBJECT_RDN)) {
+        /* attribute not supported by profile */
+        *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
+        return false;
+    }
+
+    /* check whether attribute has been set */
+    if (NULL == pers_enroll_attributes->subject_rdn) {
+        /* attribute not available */
+        *p_errinfo = GTA_ERROR_ITEM_NOT_FOUND;
+        return false;
+    }
+
+    /* write subject rdn */
+    size_t len = strnlen(pers_enroll_attributes->subject_rdn, MAXLEN_CTX_ATTRIBUTE_VALUE);
+    if (len != p_attrvalue->write(p_attrvalue, pers_enroll_attributes->subject_rdn, len, p_errinfo)) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        return false;
+    }
+    if (1 != p_attrvalue->write(p_attrvalue, "", 1, p_errinfo)) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        return false;
+    }
+    p_attrvalue->finish(p_attrvalue, 0, p_errinfo);
+
     return true;
 }
 
@@ -178,6 +219,15 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_set_attribute,
         return false;
     }
 
+    /* allocate memory for subject rdn */
+    pers_enroll_attributes->subject_rdn = gta_secmem_calloc(p_context_params->h_ctx, 1, read, p_errinfo);
+    if (NULL == pers_enroll_attributes->subject_rdn) {
+        *p_errinfo = GTA_ERROR_MEMORY;
+        X509_NAME_free(x509_name);
+        return false;
+    }
+
+    memcpy(pers_enroll_attributes->subject_rdn, attrval, read);
     pers_enroll_attributes->x509_name = x509_name;
 
     return true;
@@ -272,6 +322,7 @@ cleanup:
 const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_enroll = {
     .context_open = context_open,
     .context_close = context_close,
+    .context_get_attribute = context_get_attribute,
     .context_set_attribute = context_set_attribute,
     .personality_enroll = personality_enroll,
     .personality_attribute_functions_supported = true,
