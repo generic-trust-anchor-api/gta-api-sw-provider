@@ -44,7 +44,9 @@
 
 /* Implementation specific boundary of profile name length */
 #define MAXLEN_PROFILE 160
+#define MAXLEN_CTX_ATTRIBUTE_VALUE 2000
 #define PERSONALITY_NAME_LENGTH_MAX 1024
+#define CURVENAME_LENGTH_MAX 64
 #define CHUNK_LEN 512
 #define SERIALIZE_PATH_LEN_MAX 200
 
@@ -61,6 +63,7 @@ enum profile_t {
 #endif
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS,
+    PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL,
 };
 
 /*
@@ -115,6 +118,7 @@ struct gta_sw_provider_context_params_t {
     /* Profile specific condition to be fulfilled before a personality derived access token is issued */
     bool b_pers_derived_access_token_condition_fulfilled;
     enum profile_t profile;
+    void * context_attributes;
 };
 
 /*
@@ -135,11 +139,29 @@ bool add_personality_attribute_list_item
     gta_errinfo_t * p_errinfo
 );
 
+/*
+ * Helper function, returning the number of bits of a private key.
+ * It is intended to be used in order to check if the properties
+ * of a personality matches the expectations of a profile.
+ */
+int pkey_bits(const EVP_PKEY *evp_private_key);
+
+/*
+ * Helper function, returning the OpenSSL curve NID of an EC private key.
+ * It is intended to be used in order to check if the properties
+ * of a personality matches the expectations of a profile.
+ * Returns 0 in case of error.
+ */
+int pkey_ec_nid(const EVP_PKEY *evp_private_key);
+
 /* Helper function to read the whole input from gtaio_istream_t into a buffer */
 bool read_input_buffer (gtaio_istream_t * data, unsigned char ** pp_data, size_t * p_data_size, gta_errinfo_t * p_errinfo);
 
 struct profile_function_list_t {
     bool (*context_open)(struct gta_sw_provider_context_params_t *, gta_errinfo_t *);
+    bool (*context_close)(struct gta_sw_provider_context_params_t *, gta_errinfo_t *);
+    bool (*context_get_attribute)(struct gta_sw_provider_context_params_t *, gta_context_attribute_type_t, gtaio_ostream_t *, gta_errinfo_t *);
+    bool (*context_set_attribute)(struct gta_sw_provider_context_params_t *, gta_context_attribute_type_t, gtaio_istream_t *, gta_errinfo_t *);
     bool (*personality_deploy)(struct gta_sw_provider_params_t *, gta_personality_name_t, gtaio_istream_t *, personality_secret_type_t *,unsigned char **, size_t *, gta_personality_fingerprint_t, struct personality_attribute_t **, gta_errinfo_t *);
     bool (*personality_create)(struct gta_sw_provider_params_t *, gta_personality_name_t, personality_secret_type_t *,unsigned char **, size_t *, gta_personality_fingerprint_t, struct personality_attribute_t **, gta_errinfo_t *);
     bool (*personality_enroll)(struct gta_sw_provider_context_params_t *, gtaio_ostream_t *, gta_errinfo_t *);
