@@ -72,7 +72,7 @@ enum profile_t {
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM,
 #endif
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT,
-    PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS,
+    PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL,
 };
 #ifdef ENABLE_PQC
@@ -91,7 +91,7 @@ static char supported_profiles[NUM_PROFILES][MAXLEN_PROFILE] = {
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM] = "com.github.generic-trust-anchor-api.basic.dilithium",
 #endif
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT] = "com.github.generic-trust-anchor-api.basic.jwt",
-    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = "com.github.generic-trust-anchor-api.basic.tls",
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE] = "com.github.generic-trust-anchor-api.basic.signature",
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL] = "com.github.generic-trust-anchor-api.basic.enroll",
 };
 
@@ -106,7 +106,7 @@ static bool profile_creation_supported[NUM_PROFILES] = {
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM] = true,
 #endif
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT] = false,
-    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = false,
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE] = false,
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL] = false,
 };
 
@@ -678,7 +678,6 @@ static void profile_spec_create(void ** state)
                                                h_auth_admin,
                                                protection_properties,
                                                &errinfo));
-            // ToDo: check why failing (seems errinfo is 0 for: invalid, integrity_only & tls)
             assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
             errinfo = 0;
         }
@@ -1309,7 +1308,7 @@ static void profile_jwt(void ** state)
     assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
 }
 
-static void profile_tls(void ** state)
+static void profile_signature(void ** state)
 {
     DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
     struct test_params_t * test_params = (struct test_params_t *)(*state);
@@ -1336,7 +1335,7 @@ static void profile_tls(void ** state)
     /* Test with first personality */
     h_ctx = gta_context_open(test_params->h_inst,
                              get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA),
-                             "com.github.generic-trust-anchor-api.basic.tls",
+                             "com.github.generic-trust-anchor-api.basic.signature",
                              &errinfo);
 
     assert_non_null(h_ctx);
@@ -1466,7 +1465,7 @@ static void profile_tls(void ** state)
     /* Test with second personality */
     h_ctx = gta_context_open(test_params->h_inst,
                              get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC),
-                             "com.github.generic-trust-anchor-api.basic.tls",
+                             "com.github.generic-trust-anchor-api.basic.signature",
                              &errinfo);
 
     assert_non_null(h_ctx);
@@ -1499,7 +1498,7 @@ static void profile_tls(void ** state)
 #ifdef ENABLE_PQC
     h_ctx = gta_context_open(test_params->h_inst,
                              get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM),
-                             "com.github.generic-trust-anchor-api.basic.tls",
+                             "com.github.generic-trust-anchor-api.basic.signature",
                              &errinfo);
 
     assert_non_null(h_ctx);
@@ -1857,7 +1856,7 @@ static void access_policies_and_access_tokens(void ** state)
 
     h_ctx = gta_context_open(test_params->h_inst,
         "ec_access_control",
-        supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS],
+        supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE],
         &errinfo);
 
     assert_non_null(h_ctx);
@@ -1973,7 +1972,7 @@ int ts_gta_sw_provider(void)
         cmocka_unit_test(profile_enroll),
         /* Tests for usage profiles only */
         cmocka_unit_test(profile_jwt),
-        cmocka_unit_test(profile_tls),
+        cmocka_unit_test(profile_signature),
         /* Additional tests for mandatory provider functions */
         cmocka_unit_test(identifier_enumerate),
         cmocka_unit_test(personality_enumerate),

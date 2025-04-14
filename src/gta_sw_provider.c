@@ -38,7 +38,7 @@ extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anc
 extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_dilithium;
 #endif
 extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_jwt;
-extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_tls;
+extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_signature;
 extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_enroll;
 
 struct profile_list_t {
@@ -63,7 +63,7 @@ static struct profile_list_t supported_profiles[NUM_PROFILES] = {
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM] = {"com.github.generic-trust-anchor-api.basic.dilithium", &fl_prof_com_github_generic_trust_anchor_api_basic_dilithium},
 #endif
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT] = {"com.github.generic-trust-anchor-api.basic.jwt", &fl_prof_com_github_generic_trust_anchor_api_basic_jwt},
-    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = {"com.github.generic-trust-anchor-api.basic.tls", &fl_prof_com_github_generic_trust_anchor_api_basic_tls},
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE] = {"com.github.generic-trust-anchor-api.basic.signature", &fl_prof_com_github_generic_trust_anchor_api_basic_signature},
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL] = {"com.github.generic-trust-anchor-api.basic.enroll", &fl_prof_com_github_generic_trust_anchor_api_basic_enroll},
 };
 

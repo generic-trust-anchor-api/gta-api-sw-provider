@@ -370,7 +370,7 @@ err:
     return ret;
 }
 
-const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_tls = {
+const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_signature = {
     .context_open = context_open,
     .personality_enroll = personality_enroll,
     .personality_attribute_functions_supported = true,

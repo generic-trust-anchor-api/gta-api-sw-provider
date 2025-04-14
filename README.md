@@ -51,7 +51,7 @@ for more profiles will be added.
 | :white_check_mark: | com.github.generic-trust-anchor-api.basic.enroll | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.enroll.md) | Creation of a Certificate Signing Request (CSR) |
 | :white_check_mark:| com.github.generic-trust-anchor-api.basic.jwt | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.jwt.md) | Creation of signed JWT |
 | :white_check_mark:| com.github.generic-trust-anchor-api.basic.rsa | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.rsa.md) | Creation of a RSA based personality |
-| :white_check_mark:| com.github.generic-trust-anchor-api.basic.tls | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.tls.md) | Signature creation for authentication during TLS handshake |
+| :white_check_mark:| com.github.generic-trust-anchor-api.basic.signature | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.signature.md) | Creation of a digital signature (e.g., for authentication during TLS handshake) |
 
 ## Dependencies
 The build and test of the GTA API SW provider depend on the GTA API Core and
