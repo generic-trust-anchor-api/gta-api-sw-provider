@@ -43,10 +43,41 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_open,
 ))
 {
     bool ret = false;
+    struct personality_t * p_personality_content = NULL;
+    EVP_PKEY * evp_private_key = NULL;
 
-    if (SECRET_TYPE_DER == p_context_params->p_personality_item->p_personality_content->secret_type)
-    {
-        /* here add further checks if required by profile: such as algorithms and minimum key length */
+    if (SECRET_TYPE_DER == p_context_params->p_personality_item->p_personality_content->secret_type) {
+        /* get the private key from the personality */
+        p_personality_content = p_context_params->p_personality_item->p_personality_content;
+        unsigned char * p_secret_buffer  = p_personality_content->secret_data;
+        /* Range check on p_personality_content->content_data_size */
+        if (p_personality_content->secret_data_size > LONG_MAX) {
+            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+            goto err;
+        }
+        evp_private_key = d2i_AutoPrivateKey(NULL,
+                                            (const unsigned char **) &p_secret_buffer,
+                                            (long)p_personality_content->secret_data_size);
+        /* clear pointer */
+        p_secret_buffer = NULL;
+        if (NULL == evp_private_key) {
+            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+            goto err;
+        }
+
+        int key_id = EVP_PKEY_base_id(evp_private_key);
+
+        /*
+        * Check profile restrictions on personality:
+        * Only RSA 2048 and ECC P-256 are allowed.
+        */
+        if (!(((EVP_PKEY_RSA == key_id) && (2048 == pkey_bits(evp_private_key)))
+            || ((EVP_PKEY_EC == key_id) && (NID_X9_62_prime256v1 == pkey_ec_nid(evp_private_key))))) {
+
+            DEBUG_PRINT(("gta_sw_provider_gta_context_open: Profile requirements not fulfilled \n"));
+            *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+            goto err;
+        }
         ret = true;
     }
 #ifdef ENABLE_PQC
@@ -60,6 +91,8 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_open,
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
     }
 
+err:
+    EVP_PKEY_free(evp_private_key);
     return ret;
 }
 
