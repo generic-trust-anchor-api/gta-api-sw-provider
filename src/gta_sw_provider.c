@@ -48,9 +48,9 @@ struct profile_list_t {
 
 /* Supported profiles */
 #ifdef ENABLE_PQC
-#define NUM_PROFILES 10
+#define NUM_PROFILES 11
 #else
-#define NUM_PROFILES 9
+#define NUM_PROFILES 10
 #endif
 static struct profile_list_t supported_profiles[NUM_PROFILES] = {
     [PROF_INVALID] = {"INVALID", &fl_null},
@@ -64,6 +64,8 @@ static struct profile_list_t supported_profiles[NUM_PROFILES] = {
 #endif
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT] = {"com.github.generic-trust-anchor-api.basic.jwt", &fl_prof_com_github_generic_trust_anchor_api_basic_jwt},
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE] = {"com.github.generic-trust-anchor-api.basic.signature", &fl_prof_com_github_generic_trust_anchor_api_basic_signature},
+    /* The following is only an alias of com.github.generic-trust-anchor-api.basic.signature and does not have its own implementation. */
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = {"com.github.generic-trust-anchor-api.basic.tls", &fl_prof_com_github_generic_trust_anchor_api_basic_signature},
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL] = {"com.github.generic-trust-anchor-api.basic.enroll", &fl_prof_com_github_generic_trust_anchor_api_basic_enroll},
 };
 
