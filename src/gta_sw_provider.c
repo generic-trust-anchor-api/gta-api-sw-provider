@@ -283,6 +283,35 @@ static bool check_provider_params
     return ret;
 }
 
+
+/*
+ * Helper function to check whether all context params are valid.
+ * - returns true, if context params are valid (personality is available and activated)
+ * - returns false, if context params are NULL or personality is missing (e.g.,
+ *   because it has been removed) or personality is deactivated
+ */
+static bool check_context_params
+(
+    const struct gta_sw_provider_context_params_t * p_context_params,
+    gta_errinfo_t * p_errinfo
+)
+{
+    bool ret = false;
+
+    if ((NULL == p_context_params) || (NULL == p_context_params->p_personality_item)) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    }
+    else if((!p_context_params->p_personality_item->activated) || (NULL == p_context_params->p_personality_item->p_personality_content)) {
+        *p_errinfo = GTA_ERROR_HANDLE_INVALID;
+    }
+    else {
+        ret = true;
+    }
+
+    return ret;
+}
+
+
 /* Helper function to get the fingerprint of a personality specified by name */
 static bool get_personality_fingerprint(
     struct personality_name_list_item_t * p_personality_name_list,
@@ -385,8 +414,9 @@ bool check_access_permission (
         p_auth_x_info_list = p_context_params->p_personality_item->p_personality_content->p_auth_admin_info_list;
     }
     else {
-        /* Todo: checks for recede here! */
-        p_auth_x_info_list = NULL;
+        /* Recede is not handled here */
+        *p_errinfo = GTA_ERROR_ACCESS;
+        return false;
     }
 
     /* None of the policy lists are allowed to be empty */
@@ -518,6 +548,7 @@ GTA_DEFINE_FUNCTION(const struct gta_function_list_t *, gta_sw_provider_init,
         }
 
         p_provider_params->p_devicestate_stack->p_next = NULL;
+        p_provider_params->p_devicestate_stack->p_auth_recede_info_list = NULL;
         p_provider_params->p_devicestate_stack->owner_lock_count = 0;
         p_provider_params->p_devicestate_stack->p_identifier_list = NULL;
         p_provider_params->p_devicestate_stack->p_personality_name_list = NULL;
@@ -601,8 +632,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_physical_presence
     gta_errinfo_t errinfo_tmp = 0;
 
     p_provider_params = gta_provider_get_params(h_inst, p_errinfo);
-    if (NULL == p_provider_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
         return false;
     }
 
@@ -671,8 +701,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_issuing,
     struct gta_sw_provider_params_t * p_provider_params = NULL;
 
     p_provider_params = gta_provider_get_params(h_inst, p_errinfo);
-    if (NULL == p_provider_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
         return false;
     }
 
@@ -704,8 +733,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_basic,
     gta_errinfo_t errinfo_tmp = 0;
 
     p_provider_params = gta_provider_get_params(h_inst, p_errinfo);
-    if (NULL == p_provider_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
         return false;
     }
 
@@ -789,14 +817,12 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_get_pers_derived,
     gta_errinfo_t errinfo_tmp = 0;
 
     p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
-    if (NULL == p_provider_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
         return false;
     }
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (NULL == p_context_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_context_params(p_context_params, p_errinfo)) {
         goto err;
     }
 
@@ -874,8 +900,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_access_token_revoke,
     struct provider_instance_auth_token_t * p_auth_token_list_item = NULL;
 
     p_provider_params = gta_provider_get_params(h_inst, p_errinfo);
-    if (NULL == p_provider_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
         return false;
     }
 
@@ -914,8 +939,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_context_auth_set_access_token,
     bool ret = false;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (NULL == p_context_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_context_params(p_context_params, p_errinfo)) {
         goto err;
     }
 
@@ -980,8 +1004,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_context_get_attribute,
     const struct gta_sw_provider_params_t * p_provider_params = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (!p_context_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_context_params(p_context_params, p_errinfo)) {
         return false;
     }
 
@@ -1014,8 +1037,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_context_set_attribute,
     const struct gta_sw_provider_params_t * p_provider_params = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (!p_context_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_context_params(p_context_params, p_errinfo)) {
         return false;
     }
 
@@ -1069,12 +1091,11 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_provider_context_open,
         }
     }
 
-    if (NULL == p_personality_item ) {
+    /* Check if personality exists and its content has not been deleted */
+    if ((NULL == p_personality_item) || (NULL == p_personality_item->p_personality_content)) {
         *p_errinfo = GTA_ERROR_ITEM_NOT_FOUND;
         goto err;
     }
-
-    /* TODO: load / initialize personality -- something to do here? */
 
     /* initialize context parameters */
     p_context_params = gta_secmem_calloc(h_ctx, 1, sizeof(struct gta_sw_provider_context_params_t), p_errinfo);
@@ -1113,6 +1134,13 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_provider_context_open,
     }
 #endif
 
+    /* Increase reference count in personality if not max already */
+    if (SIZE_MAX == p_personality_item->refcount) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        goto err;
+    }
+    p_personality_item->refcount++;
+
     return true;
 
 err:
@@ -1132,10 +1160,18 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_provider_context_close,
 ))
 {
     struct gta_sw_provider_context_params_t * p_context_params = NULL;
-    bool ret = true;
+    struct gta_sw_provider_params_t * p_provider_params = NULL;
+    gta_errinfo_t errinfo_tmp = 0;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (NULL == p_context_params) {
+    /* We don't use the helper function here, and do checks manually */
+    if (( NULL == p_context_params) || (NULL == p_context_params->p_personality_item)) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        return false;
+    }
+
+    p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
         return false;
     }
 
@@ -1145,12 +1181,148 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_provider_context_close,
      * to do.
      */
     if (NULL != supported_profiles[p_context_params->profile].pFunction->context_close) {
-        ret = supported_profiles[p_context_params->profile].pFunction->context_close(p_context_params, p_errinfo);
+        /* Ignore the return code */
+        supported_profiles[p_context_params->profile].pFunction->context_close(p_context_params, p_errinfo);
     }
 
-    return ret;
+    /* Decrease reference count in personality */
+    p_context_params->p_personality_item->refcount--;
+
+    /* In case refcount == 0 and personality content == NULL we free the memory */
+    if ((NULL == p_context_params->p_personality_item->p_personality_content)
+        && (0 == p_context_params->p_personality_item->refcount)) {
+
+        personality_name_list_item_free(p_provider_params->h_ctx, p_context_params->p_personality_item, &errinfo_tmp);
+    }
+
+    return true;
 }
 
+/* Helper function to create a new device state. Serialization is done by callee */
+static bool create_new_devicestate(struct gta_sw_provider_params_t * p_provider_params, gta_errinfo_t * p_errinfo)
+{
+    struct devicestate_stack_item_t * p_devicestate_stack_item = NULL;
+
+    p_devicestate_stack_item = gta_secmem_calloc(p_provider_params->h_ctx, 1, sizeof(struct devicestate_stack_item_t), p_errinfo);
+    if (NULL == p_devicestate_stack_item) {
+        *p_errinfo = GTA_ERROR_MEMORY;
+        return false;
+    }
+
+    p_devicestate_stack_item->p_next = NULL;
+    p_devicestate_stack_item->p_auth_recede_info_list = NULL;
+    p_devicestate_stack_item->owner_lock_count = 0;
+    p_devicestate_stack_item->p_identifier_list = NULL;
+    p_devicestate_stack_item->p_personality_name_list = NULL;
+    list_append_front((struct list_t **)(&(p_provider_params->p_devicestate_stack)), p_devicestate_stack_item);
+    return true;
+}
+
+
+/* Helper routine that performs the copy operation of authentication information to
+ * the access policy data structure. Memory allocation and error checks are performed. */
+static bool policy_copy_helper(gta_context_handle_t h_ctx,
+                            gta_access_policy_handle_t h_auth,
+                            struct auth_info_list_item_t ** p_auth_info_list,
+                            bool b_recede_policy,
+                            gta_errinfo_t * p_errinfo
+) {
+    gta_enum_handle_t h_enum = GTA_HANDLE_ENUM_FIRST;
+    gta_errinfo_t errinfo_tmp = 0;
+    gta_access_descriptor_handle_t h_access_descriptor = GTA_HANDLE_INVALID;
+    struct auth_info_list_item_t * p_auth_info_list_current = NULL;
+    gta_access_descriptor_type_t access_descriptor_type;
+    const char * p_attr = NULL;
+    size_t attr_len;
+
+    /* Enumerate access policies */
+    while (gta_access_policy_enumerate(h_auth, &h_enum, &h_access_descriptor, &errinfo_tmp)) {
+
+        /* Try to get access descriptor type, proceed when successful */
+        if (gta_access_policy_get_access_descriptor_type(h_auth,
+                h_access_descriptor, &access_descriptor_type, p_errinfo)) {
+            /* Now we allocate memory for the new list element and append it to the list */
+            if (NULL != (p_auth_info_list_current = gta_secmem_calloc(h_ctx,
+                          1, sizeof(struct auth_info_list_item_t), p_errinfo))) {
+                p_auth_info_list_current->p_next = NULL;
+                p_auth_info_list_current->type = access_descriptor_type;
+
+                switch (access_descriptor_type) {
+                    case GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL:
+                    case GTA_ACCESS_DESCRIPTOR_TYPE_BASIC_TOKEN:
+                        if (b_recede_policy) {
+                            /* initial and basic not allowed for recede */
+                            *p_errinfo = GTA_ERROR_ACCESS_POLICY;
+                            goto err;
+                        }
+                        /* all ok, nothing more to do */
+                        break;
+                    case GTA_ACCESS_DESCRIPTOR_TYPE_PHYSICAL_PRESENCE_TOKEN:
+                        if (!b_recede_policy) {
+                            /* physical precende only allowed for recede */
+                            *p_errinfo = GTA_ERROR_ACCESS_POLICY;
+                            goto err;
+                        }
+                        /* all ok, nothing more to do */
+                        break;
+                    case GTA_ACCESS_DESCRIPTOR_TYPE_PERS_DERIVED_TOKEN:
+                        /* Copy fingerprint */
+                        if (gta_access_policy_get_access_descriptor_attribute(
+                            h_access_descriptor, GTA_ACCESS_DESCRIPTOR_ATTR_PERS_FINGERPRINT,
+                            &p_attr, &attr_len, p_errinfo )) {
+                            if (PERS_FINGERPRINT_LEN == attr_len) {
+                                memcpy( p_auth_info_list_current->binding_personality_fingerprint,
+                                    p_attr, attr_len );
+                            }
+                            else {
+                                *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+                                goto err;
+                            }
+                        }
+                        else {
+                            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+                            goto err;
+                        }
+
+                        /* Copy profile name */
+                        if (gta_access_policy_get_access_descriptor_attribute(
+                            h_access_descriptor, GTA_ACCESS_DESCRIPTOR_ATTR_PROFILE_NAME,
+                            &p_attr, &attr_len, p_errinfo )) {
+                            /* NOTE: attr_len does not include the string termination! */
+                            if (NULL != (
+                                p_auth_info_list_current->derivation_profile_name =
+                                gta_secmem_calloc(h_ctx, 1, attr_len + 1, p_errinfo)
+                            )){
+                                memcpy(p_auth_info_list_current->derivation_profile_name,
+                                        p_attr, attr_len);
+                                p_auth_info_list_current->derivation_profile_name[attr_len] = '\0';
+                            }
+                            else {
+                                *p_errinfo = GTA_ERROR_MEMORY;
+                                goto err;
+                            }
+                        }
+                        else {
+                            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+                            goto err;
+                        }
+                        break;
+                    default:
+                        break;
+               }
+               list_append((struct list_t **)p_auth_info_list, p_auth_info_list_current);
+            }
+            else {
+                *p_errinfo = GTA_ERROR_MEMORY;
+                goto err;
+            }
+        }
+    }
+    return true;
+err:
+    gta_secmem_free(h_ctx, p_auth_info_list_current, p_errinfo);
+    return false;
+}
 
 GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_devicestate_transition,
 (
@@ -1158,15 +1330,84 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_devicestate_transition,
     gta_access_policy_handle_t h_auth_recede,
     size_t owner_lock_count,
     gta_errinfo_t * p_errinfo
-    ))
+))
 {
-    bool ret = false;
+    bool b_ret = false;
+    struct gta_sw_provider_params_t * p_provider_params = NULL;
+    struct devicestate_stack_item_t * p_devicestate_stack_item = NULL;
+    gta_errinfo_t errinfo_tmp = GTA_ERROR_INTERNAL_ERROR;
 
-    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    p_provider_params = gta_provider_get_params(h_inst, p_errinfo);
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
+        return false;
+    }
 
-    /* ... */
+    p_devicestate_stack_item = p_provider_params->p_devicestate_stack;
+    if (NULL == p_devicestate_stack_item) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        return false;
+    }
 
-    return ret;
+    /* Check if we are already in a transition state */
+    if (NULL != p_devicestate_stack_item->p_auth_recede_info_list) {
+        /* todo: check return code */
+        *p_errinfo = GTA_ERROR_INVALID_PARAMETER;
+        return false;
+    }
+
+    /* Implementation specific boundary for owner_lock_count */
+    if (UINT8_MAX <= owner_lock_count) {
+        *p_errinfo = GTA_ERROR_ACCESS_POLICY;
+        goto err;
+    }
+
+    /* Assign recede policy to the device state */
+    if (!policy_copy_helper(p_provider_params->h_ctx, h_auth_recede, &(p_devicestate_stack_item->p_auth_recede_info_list), true, p_errinfo)) {
+        goto err;
+    }
+
+    /* Check if h_auth_recede contains physical presence */
+    struct auth_info_list_item_t * auth_info_list_item = p_devicestate_stack_item->p_auth_recede_info_list;
+    bool b_auth_recede_with_physical_presence = false;
+    while (NULL != auth_info_list_item) {
+        if (GTA_ACCESS_DESCRIPTOR_TYPE_PHYSICAL_PRESENCE_TOKEN == auth_info_list_item->type) {
+            b_auth_recede_with_physical_presence = true;
+            break;
+        }
+        auth_info_list_item = auth_info_list_item->p_next;
+    }
+
+    /* Check and assign owner lock count */
+    /* Check if we are not in the first owner state */
+    if (NULL != p_devicestate_stack_item->p_next) {
+        /*
+         * If auth_recede contains physical presence condition, the new owner
+         * lock count is allowed to be <= the previous one. Otherwise, it must
+         * be < the previous one.
+         */
+        if (((b_auth_recede_with_physical_presence) && (owner_lock_count > (p_devicestate_stack_item->p_next)->owner_lock_count))
+            || ((!b_auth_recede_with_physical_presence) && (owner_lock_count >= (p_devicestate_stack_item->p_next)->owner_lock_count))) {
+
+            *p_errinfo = GTA_ERROR_ACCESS_POLICY;
+            goto err;
+        }
+    }
+    /* Range check already done */
+    p_devicestate_stack_item->owner_lock_count = (uint8_t)owner_lock_count;
+
+    /* Serialize */
+    b_ret = provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack);
+    if (!b_ret) {
+        goto err;
+    }
+    return true;
+
+err:
+    /* Cleanup recede policy in p_devicestate_stack_item */
+    auth_info_list_destroy(p_provider_params->h_ctx, p_devicestate_stack_item->p_auth_recede_info_list, &errinfo_tmp);
+    p_devicestate_stack_item->p_auth_recede_info_list = NULL;
+    p_devicestate_stack_item->owner_lock_count = 0;
+    return false;
 }
 
 
@@ -1175,15 +1416,87 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_devicestate_recede,
     gta_instance_handle_t h_inst,
     gta_access_token_t access_token,
     gta_errinfo_t * p_errinfo
-    ))
+))
 {
-    bool ret = false;
+    bool b_ret = false;
+    struct gta_sw_provider_params_t * p_provider_params = NULL;
+    struct devicestate_stack_item_t * p_devicestate_stack_item = NULL;
+    struct personality_name_list_item_t * p_pers_list_item = NULL;
+    gta_errinfo_t errinfo_tmp = GTA_ERROR_INTERNAL_ERROR;
 
-    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    p_provider_params = gta_provider_get_params(h_inst, p_errinfo);
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
+        return false;
+    }
 
-    /* ... */
+    if (NULL == p_provider_params->p_devicestate_stack) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        return false;
+    }
 
-    return ret;
+    /* Check access token in case we are in a transition state */
+    if (NULL != p_provider_params->p_devicestate_stack->p_auth_recede_info_list) {
+        if (NULL == access_token) {
+            *p_errinfo = GTA_ERROR_ACCESS;
+            return false;
+        }
+        /* Find the auth token for the access token */
+        struct provider_instance_auth_token_t * p_auth_token = NULL;
+        p_auth_token = list_find((struct list_t *)p_provider_params->p_auth_token_list, access_token, find_access_token);
+        if ((NULL == p_auth_token)
+            /* Only physical presence and personality derived access tokens are allowed */
+            || (GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL == p_auth_token->type) || (GTA_ACCESS_DESCRIPTOR_TYPE_BASIC_TOKEN == p_auth_token->type)
+            /* Check if usage matches */
+            || (GTA_ACCESS_TOKEN_USAGE_RECEDE != p_auth_token->usage)
+            /* Now we look for a policy which can be fulfilled by this token */
+            || (NULL == list_find((struct list_t *)&(p_provider_params->p_devicestate_stack->p_auth_recede_info_list), p_auth_token, find_matching_access_policy))) {
+
+            *p_errinfo = GTA_ERROR_ACCESS;
+            return false;
+        }
+    }
+
+    /* Remove device state */
+    p_devicestate_stack_item = list_remove_front((struct list_t **)(&(p_provider_params->p_devicestate_stack)));
+    if (NULL == p_devicestate_stack_item) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        return false;
+    }
+
+    /*
+     * Iterate over list of personalities in device state, free content for all
+     * of them, but keep name list item for those with refcount != 0
+     */
+    p_pers_list_item = list_remove_front((struct list_t **)&(p_devicestate_stack_item->p_personality_name_list));
+    while (NULL != p_pers_list_item) {
+        if (0 == p_pers_list_item->refcount) {
+            /* Free all */
+            personality_name_list_item_free(p_provider_params->h_ctx, p_pers_list_item, &errinfo_tmp);
+        }
+        else {
+            /* Free personality content */
+            personality_content_free(p_provider_params->h_ctx, p_pers_list_item->p_personality_content, &errinfo_tmp);
+            p_pers_list_item->p_personality_content = NULL;
+        }
+
+        /* Next item in list */
+        p_pers_list_item = list_remove_front((struct list_t **)&(p_devicestate_stack_item->p_personality_name_list));
+    }
+
+    /* Free devicestate */
+    devicestate_stack_list_item_free(p_provider_params->h_ctx, p_devicestate_stack_item, &errinfo_tmp);
+
+    /* In case the first device state is removed, we need to create a new, empty one. */
+    if ((NULL == p_provider_params->p_devicestate_stack)
+        && (!create_new_devicestate(p_provider_params, p_errinfo))) {
+
+        return false;
+    }
+
+    /* Serialize */
+    b_ret = provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack);
+
+    return b_ret;
 }
 
 
@@ -1218,8 +1531,14 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_identifier_assign,
     size_t identifier_value_length = 0;
     gta_errinfo_t errinfo_tmp = GTA_ERROR_INTERNAL_ERROR;
 
-    const struct gta_sw_provider_params_t * p_provider_params = gta_provider_get_params(h_inst, p_errinfo);
+    struct gta_sw_provider_params_t * p_provider_params = gta_provider_get_params(h_inst, p_errinfo);
     if (!check_provider_params(p_provider_params, p_errinfo)) {
+        goto err;
+    }
+
+    /* If we are in a transition state, we need to create a new device state */
+    if ((NULL != p_provider_params->p_devicestate_stack->p_auth_recede_info_list)
+        && (!create_new_devicestate(p_provider_params, p_errinfo))) {
         goto err;
     }
 
@@ -1629,116 +1948,6 @@ err:
     return false;
 }
 
-/* Helper routine that performs the copy operation of authentication information to
- * the access policy data structure. Memory allocation and error checks are performed. */
-bool policy_copy_helper(gta_context_handle_t h_ctx,
-                            gta_access_policy_handle_t h_auth,
-                            struct auth_info_list_item_t ** p_auth_info_list,
-                            gta_errinfo_t * p_errinfo
-) {
-    gta_enum_handle_t h_enum = GTA_HANDLE_ENUM_FIRST;
-    gta_access_descriptor_handle_t h_access_descriptor = GTA_HANDLE_INVALID;
-    struct auth_info_list_item_t * p_auth_info_list_current = NULL;
-    gta_access_descriptor_type_t access_descriptor_type;
-    const char * p_attr = NULL;
-    size_t attr_len;
-
-    /* Enumerate access policies */
-    while (gta_access_policy_enumerate(h_auth, &h_enum, &h_access_descriptor, p_errinfo)) {
-
-        /* Try to get access descriptor type, proceed when successful */
-        if (gta_access_policy_get_access_descriptor_type(h_auth,
-                h_access_descriptor, &access_descriptor_type, p_errinfo)) {
-            /* Now we allocate memory for the new list element and append it to the list */
-            if (NULL != (p_auth_info_list_current = gta_secmem_calloc(h_ctx,
-                          1, sizeof(struct auth_info_list_item_t), p_errinfo))) {
-                p_auth_info_list_current->p_next = NULL;
-                p_auth_info_list_current->type = access_descriptor_type;
-
-                switch (access_descriptor_type) {
-                    case GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL:
-                    case GTA_ACCESS_DESCRIPTOR_TYPE_BASIC_TOKEN:
-                        /* Nothing to do */
-                        break;
-                    case GTA_ACCESS_DESCRIPTOR_TYPE_PHYSICAL_PRESENCE_TOKEN:
-                        /* Cleanup memory */
-                        gta_secmem_free(h_ctx, p_auth_info_list_current, p_errinfo);
-                        p_auth_info_list_current = NULL;
-                        /* Access policy invalid */
-                        *p_errinfo = GTA_ERROR_ACCESS_POLICY;
-                        goto err;
-                        break;
-                    case GTA_ACCESS_DESCRIPTOR_TYPE_PERS_DERIVED_TOKEN:
-                        /* Copy fingerprint */
-                        if (gta_access_policy_get_access_descriptor_attribute(
-                            h_access_descriptor, GTA_ACCESS_DESCRIPTOR_ATTR_PERS_FINGERPRINT,
-                            &p_attr, &attr_len, p_errinfo )) {
-                            if (PERS_FINGERPRINT_LEN == attr_len) {
-                                memcpy( p_auth_info_list_current->binding_personality_fingerprint,
-                                    p_attr, attr_len );
-                            }
-                            else {
-                                /* Cleanup memory */
-                                gta_secmem_free(h_ctx, p_auth_info_list_current, p_errinfo);
-                                p_auth_info_list_current = NULL;
-                                *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-                                goto err;
-                            }
-                        }
-                        else {
-                            /* Cleanup memory */
-                            gta_secmem_free(h_ctx, p_auth_info_list_current, p_errinfo);
-                            p_auth_info_list_current = NULL;
-                            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-                            goto err;
-                        }
-
-                        /* Copy profile name */
-                        if (gta_access_policy_get_access_descriptor_attribute(
-                            h_access_descriptor, GTA_ACCESS_DESCRIPTOR_ATTR_PROFILE_NAME,
-                            &p_attr, &attr_len, p_errinfo )) {
-                            /* NOTE: attr_len does not include the string termination! */
-                            if (NULL != (
-                                p_auth_info_list_current->derivation_profile_name =
-                                gta_secmem_calloc(h_ctx, 1, attr_len + 1, p_errinfo)
-                            )){
-                                memcpy(p_auth_info_list_current->derivation_profile_name,
-                                        p_attr, attr_len);
-                                p_auth_info_list_current->derivation_profile_name[attr_len] = '\0';
-                            }
-                            else {
-                                /* Cleanup memory */
-                                gta_secmem_free(h_ctx, p_auth_info_list_current, p_errinfo);
-                                p_auth_info_list_current = NULL;
-                                *p_errinfo = GTA_ERROR_MEMORY;
-                                goto err;
-                            }
-                        }
-                        else {
-                            /* Cleanup memory */
-                            gta_secmem_free(h_ctx, p_auth_info_list_current, p_errinfo);
-                            p_auth_info_list_current = NULL;
-                            *p_errinfo = GTA_ERROR_MEMORY;
-                            goto err;
-                        }
-                        break;
-                    default:
-                        break;
-               }
-               list_append((struct list_t **)p_auth_info_list, p_auth_info_list_current);
-            }
-            else {
-                /* List element allocation failed, therefore, no cleanup required */
-                *p_errinfo = GTA_ERROR_MEMORY;
-                goto err;
-            }
-        }
-    }
-    return true;
-err:
-    return false;
-}
-
 
 /* Helper function for gta_personality_deploy and gta_personality_create */
 static bool personality_deploy_create
@@ -1771,6 +1980,12 @@ static bool personality_deploy_create
 
     p_provider_params = gta_provider_get_params(h_inst, p_errinfo);
     if (!check_provider_params(p_provider_params, p_errinfo)) {
+        goto err;
+    }
+
+    /* If we are in a transition state, we need to create a new device state */
+    if ((NULL != p_provider_params->p_devicestate_stack->p_auth_recede_info_list)
+        && (!create_new_devicestate(p_provider_params, p_errinfo))) {
         goto err;
     }
 
@@ -1913,11 +2128,11 @@ static bool personality_deploy_create
 
     errinfo_tmp = *p_errinfo;
     /* Access policy management: get policy information from policy handle and copy to personality */
-    if (!policy_copy_helper(p_provider_params->h_ctx, h_auth_use, &(p_personality_name_list_item->p_personality_content->p_auth_use_info_list), p_errinfo)) {
+    if (!policy_copy_helper(p_provider_params->h_ctx, h_auth_use, &(p_personality_name_list_item->p_personality_content->p_auth_use_info_list), false, p_errinfo)) {
         goto err;
     }
 
-    if (!policy_copy_helper(p_provider_params->h_ctx, h_auth_admin, &(p_personality_name_list_item->p_personality_content->p_auth_admin_info_list), p_errinfo)) {
+    if (!policy_copy_helper(p_provider_params->h_ctx, h_auth_admin, &(p_personality_name_list_item->p_personality_content->p_auth_admin_info_list), false, p_errinfo)) {
         goto err;
     }
 
@@ -2071,12 +2286,12 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_enroll,
     struct gta_sw_provider_params_t * p_provider_params = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (NULL == p_context_params) {
+    if (!check_context_params(p_context_params, p_errinfo)) {
         return false;
     }
 
     p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
-    if (NULL == p_provider_params) {
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
         return false;
     }
 
@@ -2138,14 +2353,53 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_remove,
 (
     gta_context_handle_t h_ctx,
     gta_errinfo_t * p_errinfo
-    ))
+))
 {
     bool ret = false;
+    struct gta_sw_provider_params_t * p_provider_params = NULL;
+    struct gta_sw_provider_context_params_t * p_context_params = NULL;
+    struct personality_name_list_item_t * p_personality_item = NULL;
+    struct devicestate_stack_item_t * p_devicestate_stack_item = NULL;
+    gta_errinfo_t errinfo_tmp = GTA_ERROR_INTERNAL_ERROR;
 
-    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    p_context_params = gta_context_get_params(h_ctx, p_errinfo);
+    if (!check_context_params(p_context_params, p_errinfo)) {
+        goto err;
+    }
 
-    /* ... */
+    p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
+        goto err;
+    }
 
+    /* check access condition */
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_ADMIN, p_errinfo)) {
+        goto err;
+    }
+
+    /* Remove the personality from device states personality list */
+    p_devicestate_stack_item = p_provider_params->p_devicestate_stack;
+    while (NULL != p_devicestate_stack_item) {
+        /* Instead of searching by name, we could search by pointer... */
+        p_personality_item = list_remove((struct list_t **)(&p_devicestate_stack_item->p_personality_name_list),
+            p_context_params->p_personality_item->personality_name, personality_list_item_cmp_name);
+        if (NULL == p_personality_item ) {
+            p_devicestate_stack_item = p_devicestate_stack_item->p_next;
+        } else {
+            /* Personality found and unlinked from list. Free only the content as the refcount can never be zero */
+            personality_content_free(p_provider_params->h_ctx, p_personality_item->p_personality_content, &errinfo_tmp);
+            p_personality_item->p_personality_content = NULL;
+            break;
+        }
+    }
+
+    /* Serialize the new device state */
+    if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        goto err;
+    }
+    ret = true;
+err:
     return ret;
 }
 
@@ -2154,14 +2408,45 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_deactivate,
 (
     gta_context_handle_t h_ctx,
     gta_errinfo_t * p_errinfo
-    ))
+))
 {
     bool ret = false;
 
-    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    struct gta_sw_provider_params_t * p_provider_params = NULL;
+    struct gta_sw_provider_context_params_t * p_context_params = NULL;
 
-    /* ... */
+    p_context_params = gta_context_get_params(h_ctx, p_errinfo);
+    if (!check_context_params(p_context_params, p_errinfo)) {
+        goto err;
+    }
 
+    p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
+        goto err;
+    }
+
+    /* Check whether function is supported by profile */
+    if (!supported_profiles[p_context_params->profile].pFunction->personality_activate_deactivate_supported) {
+        DEBUG_PRINT(("gta_sw_provider_gta_personality_deactivate: Profile not supported\n"));
+        *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        goto err;
+    }
+
+    /* Check access condition */
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_ADMIN, p_errinfo)) {
+        goto err;
+    }
+
+    p_context_params->p_personality_item->activated = false;
+
+    /* Serialize the new device state */
+    if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        goto err;
+    }
+    ret = true;
+
+err:
     return ret;
 }
 
@@ -2170,14 +2455,57 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_activate,
 (
     gta_context_handle_t h_ctx,
     gta_errinfo_t * p_errinfo
-    ))
+))
 {
     bool ret = false;
 
-    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    struct gta_sw_provider_params_t * p_provider_params = NULL;
+    struct gta_sw_provider_context_params_t * p_context_params = NULL;
 
-    /* ... */
+    p_context_params = gta_context_get_params(h_ctx, p_errinfo);
+    /* We don't use the helper function here, but check the context params manually */
+    if ((NULL == p_context_params) || (NULL == p_context_params->p_personality_item)) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        goto err;
+    }
+    else if (NULL == p_context_params->p_personality_item->p_personality_content) {
+        *p_errinfo = GTA_ERROR_HANDLE_INVALID;
+        goto err;
+    }
 
+    p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
+        goto err;
+    }
+
+    /* Check whether function is supported by profile */
+    if (!supported_profiles[p_context_params->profile].pFunction->personality_activate_deactivate_supported) {
+        DEBUG_PRINT(("gta_sw_provider_gta_personality_activate: Profile not supported\n"));
+        *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        goto err;
+    }
+
+    /* Check whether personality is already activated */
+    if (p_context_params->p_personality_item->activated) {
+        *p_errinfo = GTA_ERROR_INVALID_PARAMETER;
+        goto err;
+    }
+
+    /* Check access condition */
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_ADMIN, p_errinfo)) {
+        goto err;
+    }
+
+    p_context_params->p_personality_item->activated = true;
+
+    /* Serialize the new device state */
+    if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        goto err;
+    }
+    ret = true;
+
+err:
     return ret;
 }
 
@@ -2261,8 +2589,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_add_trusted_attribute,
     struct gta_sw_provider_context_params_t * p_context_params = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (NULL == p_context_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_context_params(p_context_params, p_errinfo)) {
         return false;
     }
     p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
@@ -2306,8 +2633,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_add_attribute,
     struct gta_sw_provider_context_params_t * p_context_params = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (NULL == p_context_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_context_params(p_context_params, p_errinfo)) {
         return false;
     }
     p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
@@ -2345,8 +2671,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_get_attribute, (
     const struct personality_attribute_t * p_attribute = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (NULL == p_context_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_context_params(p_context_params, p_errinfo)) {
         goto err;
     }
 
@@ -2425,8 +2750,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_remove_attribute,
     gta_errinfo_t errinfo_tmp = GTA_ERROR_INTERNAL_ERROR;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (NULL == p_context_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_context_params(p_context_params, p_errinfo)) {
         goto err;
     }
 
@@ -2491,8 +2815,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_deactivate_attribute,
     struct personality_attribute_t * p_attribute = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (NULL == p_context_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_context_params(p_context_params, p_errinfo)) {
         goto err;
     }
 
@@ -2545,8 +2868,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_personality_activate_attribute,
     struct personality_attribute_t * p_attribute = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (NULL == p_context_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_context_params(p_context_params, p_errinfo)) {
         goto err;
     }
 
@@ -2738,14 +3060,12 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_seal_data,
     struct gta_sw_provider_params_t * p_provider_params = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (!p_context_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_context_params(p_context_params, p_errinfo)) {
         return false;
     }
 
     p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
-    if (!p_provider_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
         return false;
     }
 
@@ -2778,14 +3098,12 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_unseal_data,
     struct gta_sw_provider_params_t * p_provider_params = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (!p_context_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_context_params(p_context_params, p_errinfo)) {
         return false;
     }
 
     p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
-    if (!p_provider_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
         return false;
     }
 
@@ -2817,8 +3135,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_verify,
     struct gta_sw_provider_params_t * p_provider_params = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (!p_context_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    if (!check_context_params(p_context_params, p_errinfo)) {
         return false;
     }
 
@@ -2856,12 +3173,12 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_authenticate_data_detached,
     struct gta_sw_provider_params_t * p_provider_params = NULL;
 
     p_context_params = gta_context_get_params(h_ctx, p_errinfo);
-    if (!p_context_params) {
+    if (!check_context_params(p_context_params, p_errinfo)) {
         return false;
     }
 
     p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
-    if (!p_provider_params) {
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
         return false;
     }
 
