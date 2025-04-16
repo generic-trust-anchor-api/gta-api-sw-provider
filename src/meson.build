@@ -17,7 +17,7 @@ gta_sw_provider_files = files (
   'profiles/prof_com_github_generic_trust_anchor_api_basic_ec.c',
   'profiles/prof_com_github_generic_trust_anchor_api_basic_dilithium.c',
   'profiles/prof_com_github_generic_trust_anchor_api_basic_jwt.c',
-  'profiles/prof_com_github_generic_trust_anchor_api_basic_tls.c',
+  'profiles/prof_com_github_generic_trust_anchor_api_basic_signature.c',
   'profiles/prof_com_github_generic_trust_anchor_api_basic_enroll.c'
   )
 
