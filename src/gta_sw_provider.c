@@ -39,6 +39,7 @@ extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anc
 #endif
 extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_jwt;
 extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_tls;
+extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_enroll;
 
 struct profile_list_t {
     const char name[MAXLEN_PROFILE];
@@ -47,9 +48,9 @@ struct profile_list_t {
 
 /* Supported profiles */
 #ifdef ENABLE_PQC
-#define NUM_PROFILES 9
+#define NUM_PROFILES 10
 #else
-#define NUM_PROFILES 8
+#define NUM_PROFILES 9
 #endif
 static struct profile_list_t supported_profiles[NUM_PROFILES] = {
     [PROF_INVALID] = {"INVALID", &fl_null},
@@ -63,6 +64,7 @@ static struct profile_list_t supported_profiles[NUM_PROFILES] = {
 #endif
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT] = {"com.github.generic-trust-anchor-api.basic.jwt", &fl_prof_com_github_generic_trust_anchor_api_basic_jwt},
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = {"com.github.generic-trust-anchor-api.basic.tls", &fl_prof_com_github_generic_trust_anchor_api_basic_tls},
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL] = {"com.github.generic-trust-anchor-api.basic.enroll", &fl_prof_com_github_generic_trust_anchor_api_basic_enroll},
 };
 
 struct provider_instance_auth_token_t {
@@ -183,6 +185,33 @@ static enum pers_attr_type_t get_pers_attr_type_enum(const char * attrtype)
         }
     }
     return PAT_INVALID;
+}
+
+/*
+ * Helper function, returning the number of bits of a private key.
+ * It is intended to be used in order to check if the properties
+ * of a personality matches the expectations of a profile.
+ */
+int pkey_bits(const EVP_PKEY *evp_private_key) {
+    return EVP_PKEY_bits(evp_private_key);
+}
+
+/*
+ * Helper function, returning the OpenSSL curve NID of an EC private key.
+ * It is intended to be used in order to check if the properties
+ * of a personality matches the expectations of a profile.
+ * Returns 0 in case of error.
+ */
+int pkey_ec_nid(const EVP_PKEY *evp_private_key) {
+    char curve_name[CURVENAME_LENGTH_MAX] = { 0 };
+    size_t len = 0;
+
+    if (!EVP_PKEY_get_utf8_string_param(evp_private_key, OSSL_PKEY_PARAM_GROUP_NAME,
+        curve_name, sizeof(curve_name), &len)) {
+            return 0;
+    }
+
+    return OBJ_sn2nid(curve_name);
 }
 
 void
@@ -947,13 +976,29 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_context_get_attribute,
     gta_errinfo_t * p_errinfo
     ))
 {
-    bool ret = false;
+    struct gta_sw_provider_context_params_t * p_context_params = NULL;
+    const struct gta_sw_provider_params_t * p_provider_params = NULL;
 
-    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    p_context_params = gta_context_get_params(h_ctx, p_errinfo);
+    if (!p_context_params) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        return false;
+    }
 
-    /* ... */
+    p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
+        return false;
+    }
 
-    return ret;
+    /* check whether function is supported by profile */
+    if (NULL == supported_profiles[p_context_params->profile].pFunction->context_get_attribute) {
+        DEBUG_PRINT(("gta_sw_provider_gta_context_get_attribute: Profile not supported\n"));
+        *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        return false;
+    }
+
+    /* call profile specific implementation */
+    return supported_profiles[p_context_params->profile].pFunction->context_get_attribute(p_context_params, attrtype, p_attrvalue, p_errinfo);
 }
 
 
@@ -965,13 +1010,29 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_context_set_attribute,
     gta_errinfo_t * p_errinfo
     ))
 {
-    bool ret = false;
+    struct gta_sw_provider_context_params_t * p_context_params = NULL;
+    const struct gta_sw_provider_params_t * p_provider_params = NULL;
 
-    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    p_context_params = gta_context_get_params(h_ctx, p_errinfo);
+    if (!p_context_params) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        return false;
+    }
 
-    /* ... */
+    p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
+        return false;
+    }
 
-    return ret;
+    /* check whether function is supported by profile */
+    if (NULL == supported_profiles[p_context_params->profile].pFunction->context_set_attribute) {
+        DEBUG_PRINT(("gta_sw_provider_gta_context_set_attribute: Profile not supported\n"));
+        *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        return false;
+    }
+
+    /* call profile specific implementation */
+    return supported_profiles[p_context_params->profile].pFunction->context_set_attribute(p_context_params, attrtype, p_attrvalue, p_errinfo);
 }
 
 
@@ -1029,6 +1090,7 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_provider_context_open,
     p_context_params->b_pers_derived_access_token_condition_fulfilled = false;
     p_context_params->profile = get_profile_enum(profile);
     p_context_params->p_access_token_list = NULL;
+    p_context_params->context_attributes = NULL;
 
     /* check whether function is supported by profile */
     if (NULL == supported_profiles[p_context_params->profile].pFunction->context_open) {
@@ -1069,11 +1131,24 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_provider_context_close,
     gta_errinfo_t * p_errinfo
 ))
 {
+    struct gta_sw_provider_context_params_t * p_context_params = NULL;
+    bool ret = true;
+
+    p_context_params = gta_context_get_params(h_ctx, p_errinfo);
+    if (NULL == p_context_params) {
+        return false;
+    }
+
     /*
-     * Memory allocated with gta_secmem will be automatically freed. There
-     * is currently nothing else to do.
+     * Memory allocated with gta_secmem will be automatically freed. We only
+     * need to call profile specific code in case there is something special
+     * to do.
      */
-    return true;
+    if (NULL != supported_profiles[p_context_params->profile].pFunction->context_close) {
+        ret = supported_profiles[p_context_params->profile].pFunction->context_close(p_context_params, p_errinfo);
+    }
+
+    return ret;
 }
 
 

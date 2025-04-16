@@ -6,35 +6,7 @@
 #include <gta_api/gta_api.h>
 #include "../gta_sw_provider.h"
 
-#define CURVENAME_LENGTH_MAX 64
 #define P256_COORDINATE_LEN 32
-
-/*
- * Helper function, returning the number of bits of a private key.
- * It is intended to be used in order to check if the properties
- * of a personality matches the expectations of a profile.
- */
-static int pkey_bits(const EVP_PKEY *evp_private_key) {
-    return EVP_PKEY_bits(evp_private_key);
-}
-
-/*
- * Helper function, returning the OpenSSL curve NID of an EC private key.
- * It is intended to be used in order to check if the properties
- * of a personality matches the expectations of a profile.
- * Returns 0 in case of error.
- */
-static int pkey_ec_nid(const EVP_PKEY *evp_private_key) {
-    char curve_name[CURVENAME_LENGTH_MAX] = { 0 };
-    size_t len = 0;
-
-    if (!EVP_PKEY_get_utf8_string_param(evp_private_key, OSSL_PKEY_PARAM_GROUP_NAME,
-        curve_name, sizeof(curve_name), &len)) {
-            return 0;
-    }
-
-    return OBJ_sn2nid(curve_name);
-}
 
 GTA_SWP_DEFINE_FUNCTION(bool, context_open,
 (
