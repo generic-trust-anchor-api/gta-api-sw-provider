@@ -28,19 +28,8 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_open,
 
     /* get the Private Key from the Personality */
     p_personality_content = p_context_params->p_personality_item->p_personality_content;
-    unsigned char * p_secret_buffer  = p_personality_content->secret_data;
-    /* Range check on p_personality_content->content_data_size */
-    if (p_personality_content->secret_data_size > LONG_MAX) {
-        goto err;
-    }
-    evp_private_key = d2i_AutoPrivateKey(NULL,
-                                         (const unsigned char **) &p_secret_buffer,
-                                         (long)p_personality_content->secret_data_size);
-    /* clear pointer */
-    p_secret_buffer = NULL;
-    if (!evp_private_key)
-    {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    evp_private_key = get_pkey_from_der(p_personality_content->secret_data, p_personality_content->secret_data_size, p_errinfo);
+    if (NULL == evp_private_key) {
         goto err;
     }
 
@@ -80,17 +69,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_enroll,
     p_personality_content = p_context_params->p_personality_item->p_personality_content;
 
     if (SECRET_TYPE_DER == p_personality_content->secret_type) {
-        /* range check on p_personality_content->content_data_size */
-        if (p_personality_content->secret_data_size > LONG_MAX) {
-            goto err;
-        }
-        /* get the key from the personality */
-        unsigned char * p_secret_buffer  = p_personality_content->secret_data;
-        p_key = d2i_AutoPrivateKey(NULL,
-            (const unsigned char **) &p_secret_buffer,
-            (long)p_personality_content->secret_data_size);
-
-        p_secret_buffer = NULL;
+        p_key = get_pkey_from_der(p_personality_content->secret_data, p_personality_content->secret_data_size, p_errinfo);
         if (NULL == p_key) {
             goto err;
         }
@@ -196,15 +175,8 @@ GTA_SWP_DEFINE_FUNCTION(bool, seal_data,
     /* get Personality of the Context */
     p_personality_content = p_context_params->p_personality_item->p_personality_content;
 
-    /* get the Private Key from the Personality */
-    unsigned char * p_secret_buffer  = p_personality_content->secret_data;
-    evp_private_key = d2i_AutoPrivateKey(NULL,
-                                        (const unsigned char **) &p_secret_buffer,
-                                        p_personality_content->secret_data_size);
-    /* clear pointer */
-    p_secret_buffer = NULL;
-    if (!evp_private_key)
-    {
+    evp_private_key = get_pkey_from_der(p_personality_content->secret_data, p_personality_content->secret_data_size, p_errinfo);
+    if (NULL == evp_private_key) {
         goto err;
     }
 

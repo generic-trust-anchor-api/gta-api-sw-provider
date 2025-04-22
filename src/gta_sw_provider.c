@@ -216,6 +216,27 @@ int pkey_ec_nid(const EVP_PKEY *evp_private_key) {
     return OBJ_sn2nid(curve_name);
 }
 
+/* Helper function, returning an OpenSSL EVP_PKEY from DER encoded buffer. */
+EVP_PKEY * get_pkey_from_der(unsigned char * p_der_content, const size_t der_size, gta_errinfo_t * p_errinfo) {
+    EVP_PKEY * evp_private_key = NULL;
+
+    unsigned char * p_secret_buffer = p_der_content;
+    /* Range check on p_personality_content->content_data_size */
+    if (der_size > LONG_MAX) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        return NULL;
+    }
+    evp_private_key = d2i_AutoPrivateKey(NULL,
+                                        (const unsigned char **) &p_secret_buffer,
+                                        (long)der_size);
+    /* clear pointer */
+    p_secret_buffer = NULL;
+    if (NULL == evp_private_key) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    }
+    return evp_private_key;
+}
+
 void
 gta_sw_provider_free_params(void * p_params)
 {
