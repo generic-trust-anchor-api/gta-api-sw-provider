@@ -62,6 +62,7 @@ enum profile_t {
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM,
 #endif
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT,
+    PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL,
 };
@@ -153,6 +154,9 @@ int pkey_bits(const EVP_PKEY *evp_private_key);
  * Returns 0 in case of error.
  */
 int pkey_ec_nid(const EVP_PKEY *evp_private_key);
+
+/* Helper function, returning an OpenSSL EVP_PKEY from DER encoded buffer. */
+EVP_PKEY * get_pkey_from_der(unsigned char * p_der_content, const size_t der_size, gta_errinfo_t * p_errinfo);
 
 /* Helper function to read the whole input from gtaio_istream_t into a buffer */
 bool read_input_buffer (gtaio_istream_t * data, unsigned char ** pp_data, size_t * p_data_size, gta_errinfo_t * p_errinfo);

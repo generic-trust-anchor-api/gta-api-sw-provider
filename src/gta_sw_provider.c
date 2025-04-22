@@ -38,7 +38,7 @@ extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anc
 extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_dilithium;
 #endif
 extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_jwt;
-extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_tls;
+extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_signature;
 extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_enroll;
 
 struct profile_list_t {
@@ -48,9 +48,9 @@ struct profile_list_t {
 
 /* Supported profiles */
 #ifdef ENABLE_PQC
-#define NUM_PROFILES 10
+#define NUM_PROFILES 11
 #else
-#define NUM_PROFILES 9
+#define NUM_PROFILES 10
 #endif
 static struct profile_list_t supported_profiles[NUM_PROFILES] = {
     [PROF_INVALID] = {"INVALID", &fl_null},
@@ -63,7 +63,9 @@ static struct profile_list_t supported_profiles[NUM_PROFILES] = {
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM] = {"com.github.generic-trust-anchor-api.basic.dilithium", &fl_prof_com_github_generic_trust_anchor_api_basic_dilithium},
 #endif
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT] = {"com.github.generic-trust-anchor-api.basic.jwt", &fl_prof_com_github_generic_trust_anchor_api_basic_jwt},
-    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = {"com.github.generic-trust-anchor-api.basic.tls", &fl_prof_com_github_generic_trust_anchor_api_basic_tls},
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE] = {"com.github.generic-trust-anchor-api.basic.signature", &fl_prof_com_github_generic_trust_anchor_api_basic_signature},
+    /* The following is only an alias of com.github.generic-trust-anchor-api.basic.signature and does not have its own implementation. */
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = {"com.github.generic-trust-anchor-api.basic.tls", &fl_prof_com_github_generic_trust_anchor_api_basic_signature},
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL] = {"com.github.generic-trust-anchor-api.basic.enroll", &fl_prof_com_github_generic_trust_anchor_api_basic_enroll},
 };
 
@@ -212,6 +214,27 @@ int pkey_ec_nid(const EVP_PKEY *evp_private_key) {
     }
 
     return OBJ_sn2nid(curve_name);
+}
+
+/* Helper function, returning an OpenSSL EVP_PKEY from DER encoded buffer. */
+EVP_PKEY * get_pkey_from_der(unsigned char * p_der_content, const size_t der_size, gta_errinfo_t * p_errinfo) {
+    EVP_PKEY * evp_private_key = NULL;
+
+    unsigned char * p_secret_buffer = p_der_content;
+    /* Range check on p_personality_content->content_data_size */
+    if (der_size > LONG_MAX) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        return NULL;
+    }
+    evp_private_key = d2i_AutoPrivateKey(NULL,
+                                        (const unsigned char **) &p_secret_buffer,
+                                        (long)der_size);
+    /* clear pointer */
+    p_secret_buffer = NULL;
+    if (NULL == evp_private_key) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    }
+    return evp_private_key;
 }
 
 void

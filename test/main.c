@@ -72,13 +72,14 @@ enum profile_t {
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM,
 #endif
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT,
+    PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL,
 };
 #ifdef ENABLE_PQC
-#define NUM_PROFILES 10
+#define NUM_PROFILES 11
 #else
-#define NUM_PROFILES 9
+#define NUM_PROFILES 10
 #endif
 static char supported_profiles[NUM_PROFILES][MAXLEN_PROFILE] = {
     [PROF_INVALID] = "INVALID",
@@ -91,6 +92,7 @@ static char supported_profiles[NUM_PROFILES][MAXLEN_PROFILE] = {
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM] = "com.github.generic-trust-anchor-api.basic.dilithium",
 #endif
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT] = "com.github.generic-trust-anchor-api.basic.jwt",
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE] = "com.github.generic-trust-anchor-api.basic.signature",
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = "com.github.generic-trust-anchor-api.basic.tls",
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL] = "com.github.generic-trust-anchor-api.basic.enroll",
 };
@@ -106,6 +108,7 @@ static bool profile_creation_supported[NUM_PROFILES] = {
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM] = true,
 #endif
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT] = false,
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE] = false,
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = false,
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL] = false,
 };
@@ -678,7 +681,6 @@ static void profile_spec_create(void ** state)
                                                h_auth_admin,
                                                protection_properties,
                                                &errinfo));
-            // ToDo: check why failing (seems errinfo is 0 for: invalid, integrity_only & tls)
             assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
             errinfo = 0;
         }
@@ -1309,7 +1311,7 @@ static void profile_jwt(void ** state)
     assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
 }
 
-static void profile_tls(void ** state)
+static void profile_signature(void ** state)
 {
     DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
     struct test_params_t * test_params = (struct test_params_t *)(*state);
@@ -1332,11 +1334,22 @@ static void profile_tls(void ** state)
     ostream = &ostream_null;
 #endif
 
+    /* Negative test */
+    h_ctx = gta_context_open(test_params->h_inst,
+        get_personality_name(PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION),
+        supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE],
+        &errinfo);
+
+    assert_null(h_ctx);
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+    errinfo = 0;
+
+
     /* This profile is supposed to work with the following creation profiles: todo! */
     /* Test with first personality */
     h_ctx = gta_context_open(test_params->h_inst,
                              get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA),
-                             "com.github.generic-trust-anchor-api.basic.tls",
+                             supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE],
                              &errinfo);
 
     assert_non_null(h_ctx);
@@ -1466,7 +1479,7 @@ static void profile_tls(void ** state)
     /* Test with second personality */
     h_ctx = gta_context_open(test_params->h_inst,
                              get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC),
-                             "com.github.generic-trust-anchor-api.basic.tls",
+                             supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE],
                              &errinfo);
 
     assert_non_null(h_ctx);
@@ -1499,7 +1512,221 @@ static void profile_tls(void ** state)
 #ifdef ENABLE_PQC
     h_ctx = gta_context_open(test_params->h_inst,
                              get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM),
-                             "com.github.generic-trust-anchor-api.basic.tls",
+                             supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE],
+                             &errinfo);
+
+    assert_non_null(h_ctx);
+
+    assert_true(myio_open_ifilestream(&istream_data_to_seal, TEST_DATA_PAYLOAD , &errinfo));
+
+    DEBUG_PRINT(("\nSignature with Dilithium2\n"));
+    assert_true(gta_authenticate_data_detached(h_ctx,
+                              (gtaio_istream_t*)&istream_data_to_seal,
+                              ostream,
+                              &errinfo));
+    DEBUG_PRINT(("\n"));
+    assert_int_equal(0, errinfo);
+
+    get_pubkey(h_ctx);
+    pers_get_attribute(h_ctx, "com.github.generic-trust-anchor-api.keytype.openssl", 0);
+    DEBUG_PRINT(("\n"));
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_true(myio_close_ifilestream(&istream_data_to_seal, &errinfo));
+
+#endif
+}
+
+static void profile_tls(void ** state)
+{
+    DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
+    struct test_params_t * test_params = (struct test_params_t *)(*state);
+    gta_errinfo_t errinfo = 0;
+    gta_context_handle_t h_ctx = GTA_HANDLE_INVALID;
+
+    myio_ifilestream_t istream_data_to_seal = { 0 };
+    gtaio_ostream_t * ostream = NULL;
+
+#ifdef LOG_TEST_OUTPUT
+    myio_ofilestream_t ostream_hex = { 0 };
+    ostream_hex.write = (gtaio_stream_write_t)ostream_hex_write;
+    ostream_hex.finish = (gtaio_stream_finish_t)ostream_finish;
+    ostream_hex.file = stdout;
+    ostream = (gtaio_ostream_t *)&ostream_hex;
+#else
+    gtaio_ostream_t ostream_null = { 0 };
+    ostream_null.write = (gtaio_stream_write_t)ostream_null_write;
+    ostream_null.finish = (gtaio_stream_finish_t)ostream_finish;
+    ostream = &ostream_null;
+#endif
+
+    /* This profile is supposed to work with the following creation profiles: todo! */
+    /* Test with first personality */
+    h_ctx = gta_context_open(test_params->h_inst,
+                             get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA),
+                             supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS],
+                             &errinfo);
+
+    assert_non_null(h_ctx);
+
+    /* Some generic negative tests to increase code coverage */
+    gtaio_istream_t dummy_istream = { 0 };
+    assert_false(gta_seal_data(h_ctx, &dummy_istream, ostream, &errinfo));
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+    errinfo = 0;
+    assert_false(gta_unseal_data(h_ctx, &dummy_istream, ostream, &errinfo));
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+    errinfo = 0;
+
+    /* Read the public key */
+    get_pubkey(h_ctx);
+
+    /* Add a new attribute */
+    const char * dummy_ee_cert = "Dummy EE Certificate";
+    istream_from_buf_t istream = { 0 };
+
+    pers_add_attribute_negative_tests(h_ctx);
+    istream_from_buf_init(&istream, dummy_ee_cert, strlen(dummy_ee_cert));
+    assert_true(gta_personality_add_attribute(h_ctx, "ch.iec.30168.trustlist.certificate.self.x509", "Dummy EE Cert", (gtaio_istream_t *)&istream, &errinfo));
+    assert_int_equal(0, errinfo);
+    istream_from_buf_init(&istream, dummy_ee_cert, strlen(dummy_ee_cert));
+    assert_false(gta_personality_add_attribute(h_ctx, "ch.iec.30168.trustlist.certificate.self.x509", "Dummy EE Cert", (gtaio_istream_t *)&istream, &errinfo));
+    assert_int_equal(GTA_ERROR_NAME_ALREADY_EXISTS, errinfo);
+    errinfo = 0;
+
+    /* Add another attribute */
+    istream_from_buf_init(&istream, dummy_ee_cert, strlen(dummy_ee_cert));
+    assert_true(gta_personality_add_attribute(h_ctx, "ch.iec.30168.trustlist.certificate.self.x509", "Dummy EE Cert 3", (gtaio_istream_t *)&istream, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Add generic attribute as trusted */
+    istream_from_buf_init(&istream, dummy_ee_cert, strlen(dummy_ee_cert));
+    assert_false(gta_personality_add_trusted_attribute(h_ctx, "ch.iec.30168.trustlist.certificate.self.x509", "Dummy EE Cert not trusted", (gtaio_istream_t *)&istream, &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
+    errinfo = 0;
+
+    /* Add trusted attribute as trusted */
+    istream_from_buf_init(&istream, dummy_ee_cert, strlen(dummy_ee_cert));
+    assert_true(gta_personality_add_trusted_attribute(h_ctx, "ch.iec.30168.trustlist.certificate.trusted.x509v3", "Dummy EE Cert trusted", (gtaio_istream_t *)&istream, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Get generic attribute */
+    assert_true(gta_personality_get_attribute(h_ctx, "Dummy EE Cert", ostream, &errinfo));
+
+    /* Get trusted attribute */
+    assert_true(gta_personality_get_attribute(h_ctx, "Dummy EE Cert trusted", ostream, &errinfo));
+
+    /* Deactivate attribute */
+    assert_false(gta_personality_deactivate_attribute(h_ctx, "ch.iec.30168.identifier_value", &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
+    errinfo = 0;
+    assert_false(gta_personality_deactivate_attribute(h_ctx, "ch.iec.30168.fingerprint", &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
+    errinfo = 0;
+    assert_false(gta_personality_deactivate_attribute(h_ctx, "inexistent attribute", &errinfo));
+    assert_int_equal(GTA_ERROR_ITEM_NOT_FOUND, errinfo);
+    errinfo = 0;
+    assert_true(gta_personality_deactivate_attribute(h_ctx, "Dummy EE Cert 2", &errinfo));
+    assert_int_equal(0, errinfo);
+    assert_true(gta_personality_deactivate_attribute(h_ctx, "Dummy EE Cert trusted", &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Enumerate attributes */
+    pers_attr_enumerate(test_params->h_inst, get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA));
+
+    /* Get attribute */
+    pers_get_attribute(h_ctx, "Dummy EE Cert", 0);
+    assert_false(gta_personality_get_attribute(h_ctx, "Dummy EE Cert 2", ostream, &errinfo));
+    assert_int_equal(GTA_ERROR_ITEM_NOT_FOUND, errinfo);
+    errinfo = 0;
+
+    /* Get attribute */
+    pers_get_attribute(h_ctx, "Dummy EE Cert", 0);
+    assert_false(gta_personality_get_attribute(h_ctx, "Dummy EE Cert trusted", ostream, &errinfo));
+    assert_int_equal(GTA_ERROR_ITEM_NOT_FOUND, errinfo);
+    errinfo = 0;
+
+    /* Remove attribute */
+    assert_true(gta_personality_remove_attribute(h_ctx, "Dummy EE Cert", &errinfo));
+    assert_int_equal(0, errinfo);
+    assert_false(gta_personality_remove_attribute(h_ctx, "Dummy EE Cert", &errinfo));
+    assert_int_equal(GTA_ERROR_ITEM_NOT_FOUND, errinfo);
+    errinfo = 0;
+    assert_false(gta_personality_remove_attribute(h_ctx, "Dummy EE Cert 2", &errinfo));
+    assert_int_equal(GTA_ERROR_ITEM_NOT_FOUND, errinfo);
+    errinfo = 0;
+    assert_false(gta_personality_remove_attribute(h_ctx, "ch.iec.30168.identifier_value", &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
+    errinfo = 0;
+    assert_false(gta_personality_remove_attribute(h_ctx, "ch.iec.30168.fingerprint", &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
+    errinfo = 0;
+
+    /* Activate attribute */
+    assert_true(gta_personality_activate_attribute(h_ctx, "Dummy EE Cert 2", &errinfo));
+    assert_int_equal(0, errinfo);
+    assert_false(gta_personality_activate_attribute(h_ctx, "Dummy EE Cert 2", &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_PARAMETER, errinfo);
+    errinfo = 0;
+    assert_false(gta_personality_activate_attribute(h_ctx, "inexistent attribute", &errinfo));
+    assert_int_equal(GTA_ERROR_ITEM_NOT_FOUND, errinfo);
+    errinfo = 0;
+    assert_true(gta_personality_activate_attribute(h_ctx, "Dummy EE Cert trusted", &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Remove attribute */
+    assert_true(gta_personality_remove_attribute(h_ctx, "Dummy EE Cert trusted", &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_true(myio_open_ifilestream(&istream_data_to_seal, TEST_DATA_PAYLOAD , &errinfo));
+
+    DEBUG_PRINT(("\nSignature with RSA\n"));
+    assert_true(gta_authenticate_data_detached(h_ctx,
+                              (gtaio_istream_t*)&istream_data_to_seal,
+                              ostream,
+                              &errinfo));
+    DEBUG_PRINT(("\n"));
+    assert_int_equal(0, errinfo);
+
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_true(myio_close_ifilestream(&istream_data_to_seal, &errinfo));
+
+    /* Test with second personality */
+    h_ctx = gta_context_open(test_params->h_inst,
+                             get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC),
+                             supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS],
+                             &errinfo);
+
+    assert_non_null(h_ctx);
+
+    /* Get openssl keytype attribute attribute */
+    assert_true(gta_personality_get_attribute(h_ctx, "com.github.generic-trust-anchor-api.keytype.openssl", ostream, &errinfo));
+
+    assert_true(myio_open_ifilestream(&istream_data_to_seal, TEST_DATA_PAYLOAD , &errinfo));
+
+    DEBUG_PRINT(("\nSignature with EC\n"));
+    assert_true(gta_authenticate_data_detached(h_ctx,
+                              (gtaio_istream_t*)&istream_data_to_seal,
+                              ostream,
+                              &errinfo));
+    DEBUG_PRINT(("\n"));
+    assert_int_equal(0, errinfo);
+
+    /* Try to deactivate attribute */
+    assert_false(gta_personality_deactivate_attribute(h_ctx, "com.github.generic-trust-anchor-api.keytype.openssl", &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);
+    errinfo = 0;
+
+    get_pubkey(h_ctx);
+    pers_get_attribute(h_ctx, "com.github.generic-trust-anchor-api.keytype.openssl", 0);
+    DEBUG_PRINT(("\n"));
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_true(myio_close_ifilestream(&istream_data_to_seal, &errinfo));
+
+    /* Test with third personality */
+#ifdef ENABLE_PQC
+    h_ctx = gta_context_open(test_params->h_inst,
+                             get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM),
+                             supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS],
                              &errinfo);
 
     assert_non_null(h_ctx);
@@ -1857,7 +2084,7 @@ static void access_policies_and_access_tokens(void ** state)
 
     h_ctx = gta_context_open(test_params->h_inst,
         "ec_access_control",
-        supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS],
+        supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE],
         &errinfo);
 
     assert_non_null(h_ctx);
@@ -1973,6 +2200,7 @@ int ts_gta_sw_provider(void)
         cmocka_unit_test(profile_enroll),
         /* Tests for usage profiles only */
         cmocka_unit_test(profile_jwt),
+        cmocka_unit_test(profile_signature),
         cmocka_unit_test(profile_tls),
         /* Additional tests for mandatory provider functions */
         cmocka_unit_test(identifier_enumerate),

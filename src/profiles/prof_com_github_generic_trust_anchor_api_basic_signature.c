@@ -43,10 +43,30 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_open,
 ))
 {
     bool ret = false;
+    const struct personality_t * p_personality_content = NULL;
+    EVP_PKEY * evp_private_key = NULL;
 
-    if (SECRET_TYPE_DER == p_context_params->p_personality_item->p_personality_content->secret_type)
-    {
-        /* here add further checks if required by profile: such as algorithms and minimum key length */
+    if (SECRET_TYPE_DER == p_context_params->p_personality_item->p_personality_content->secret_type) {
+        /* get the private key from the personality */
+        p_personality_content = p_context_params->p_personality_item->p_personality_content;
+        evp_private_key = get_pkey_from_der(p_personality_content->secret_data, p_personality_content->secret_data_size, p_errinfo);
+        if (NULL == evp_private_key) {
+            goto err;
+        }
+
+        int key_id = EVP_PKEY_base_id(evp_private_key);
+
+        /*
+        * Check profile restrictions on personality:
+        * Only RSA 2048 and ECC P-256 are allowed.
+        */
+        if (!(((EVP_PKEY_RSA == key_id) && (2048 == pkey_bits(evp_private_key)))
+            || ((EVP_PKEY_EC == key_id) && (NID_X9_62_prime256v1 == pkey_ec_nid(evp_private_key))))) {
+
+            DEBUG_PRINT(("gta_sw_provider_gta_context_open: Profile requirements not fulfilled \n"));
+            *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+            goto err;
+        }
         ret = true;
     }
 #ifdef ENABLE_PQC
@@ -60,6 +80,8 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_open,
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
     }
 
+err:
+    EVP_PKEY_free(evp_private_key);
     return ret;
 }
 
@@ -91,17 +113,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_enroll,
     p_personality_content = p_context_params->p_personality_item->p_personality_content;
 
     if (SECRET_TYPE_DER == p_personality_content->secret_type) {
-        /* range check on p_personality_content->content_data_size */
-        if (p_personality_content->secret_data_size > LONG_MAX) {
-            goto err;
-        }
-        /* get the key from the personality */
-        unsigned char * p_secret_buffer  = p_personality_content->secret_data;
-        p_key = d2i_AutoPrivateKey(NULL,
-            (const unsigned char **) &p_secret_buffer,
-            (long)p_personality_content->secret_data_size);
-
-        p_secret_buffer = NULL;
+        p_key = get_pkey_from_der(p_personality_content->secret_data, p_personality_content->secret_data_size, p_errinfo);
         if (NULL == p_key) {
             goto err;
         }
@@ -248,9 +260,6 @@ GTA_SWP_DEFINE_FUNCTION(bool, authenticate_data_detached,
     /* get Personality of the Context */
     p_personality_content = p_context_params->p_personality_item->p_personality_content;
 
-    /* get the Private Key from the Personality */
-    unsigned char * p_secret_buffer  = p_personality_content->secret_data;
-
     /* Create the Message Digest Context */
     if (!(mdctx = EVP_MD_CTX_new()))
     {
@@ -259,18 +268,8 @@ GTA_SWP_DEFINE_FUNCTION(bool, authenticate_data_detached,
     }
 
     if (SECRET_TYPE_DER == p_personality_content->secret_type) {
-        /* Range check on p_personality_content->content_data_size */
-        if (p_personality_content->secret_data_size > LONG_MAX) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
-        }
-        evp_private_key = d2i_AutoPrivateKey(NULL,
-                                            (const unsigned char **) &p_secret_buffer,
-                                            (long)p_personality_content->secret_data_size);
-
-        p_secret_buffer = NULL;
-        if (!evp_private_key) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        evp_private_key = get_pkey_from_der(p_personality_content->secret_data, p_personality_content->secret_data_size, p_errinfo);
+        if (NULL == evp_private_key) {
             goto err;
         }
 
@@ -370,7 +369,7 @@ err:
     return ret;
 }
 
-const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_tls = {
+const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_signature = {
     .context_open = context_open,
     .personality_enroll = personality_enroll,
     .personality_attribute_functions_supported = true,
