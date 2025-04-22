@@ -1268,88 +1268,66 @@ static bool policy_copy_helper(gta_context_handle_t h_ctx,
     while (gta_access_policy_enumerate(h_auth, &h_enum, &h_access_descriptor, &errinfo_tmp)) {
 
         /* Try to get access descriptor type, proceed when successful */
-        if (gta_access_policy_get_access_descriptor_type(h_auth,
-                h_access_descriptor, &access_descriptor_type, p_errinfo)) {
-            /* Now we allocate memory for the new list element and append it to the list */
-            if (NULL != (p_auth_info_list_current = gta_secmem_calloc(h_ctx,
-                          1, sizeof(struct auth_info_list_item_t), p_errinfo))) {
-                p_auth_info_list_current->p_next = NULL;
-                p_auth_info_list_current->type = access_descriptor_type;
-
-                switch (access_descriptor_type) {
-                    case GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL:
-                    case GTA_ACCESS_DESCRIPTOR_TYPE_BASIC_TOKEN:
-                        if (b_recede_policy) {
-                            /* initial and basic not allowed for recede */
-                            *p_errinfo = GTA_ERROR_ACCESS_POLICY;
-                            goto err;
-                        }
-                        /* all ok, nothing more to do */
-                        break;
-                    case GTA_ACCESS_DESCRIPTOR_TYPE_PHYSICAL_PRESENCE_TOKEN:
-                        if (!b_recede_policy) {
-                            /* physical precende only allowed for recede */
-                            *p_errinfo = GTA_ERROR_ACCESS_POLICY;
-                            goto err;
-                        }
-                        /* all ok, nothing more to do */
-                        break;
-                    case GTA_ACCESS_DESCRIPTOR_TYPE_PERS_DERIVED_TOKEN:
-                        /* Copy fingerprint */
-                        if (gta_access_policy_get_access_descriptor_attribute(
-                            h_access_descriptor, GTA_ACCESS_DESCRIPTOR_ATTR_PERS_FINGERPRINT,
-                            &p_attr, &attr_len, p_errinfo )) {
-                            if (PERS_FINGERPRINT_LEN == attr_len) {
-                                memcpy( p_auth_info_list_current->binding_personality_fingerprint,
-                                    p_attr, attr_len );
-                            }
-                            else {
-                                *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-                                goto err;
-                            }
-                        }
-                        else {
-                            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-                            goto err;
-                        }
-
-                        /* Copy profile name */
-                        if (gta_access_policy_get_access_descriptor_attribute(
-                            h_access_descriptor, GTA_ACCESS_DESCRIPTOR_ATTR_PROFILE_NAME,
-                            &p_attr, &attr_len, p_errinfo )) {
-                            /* NOTE: attr_len does not include the string termination! */
-                            if (NULL != (
-                                p_auth_info_list_current->derivation_profile_name =
-                                gta_secmem_calloc(h_ctx, 1, attr_len + 1, p_errinfo)
-                            )){
-                                memcpy(p_auth_info_list_current->derivation_profile_name,
-                                        p_attr, attr_len);
-                                p_auth_info_list_current->derivation_profile_name[attr_len] = '\0';
-                            }
-                            else {
-                                *p_errinfo = GTA_ERROR_MEMORY;
-                                goto err;
-                            }
-                        }
-                        else {
-                            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-                            goto err;
-                        }
-                        break;
-                    default:
-                        break;
-               }
-               list_append((struct list_t **)p_auth_info_list, p_auth_info_list_current);
-            }
-            else {
-                *p_errinfo = GTA_ERROR_MEMORY;
-                goto err;
-            }
+        if (!gta_access_policy_get_access_descriptor_type(h_auth, h_access_descriptor, &access_descriptor_type, p_errinfo)) {
+            goto internal_err;
         }
+        /* Now we allocate memory for the new list element and append it to the list */
+        if (NULL == (p_auth_info_list_current = gta_secmem_calloc(h_ctx, 1, sizeof(struct auth_info_list_item_t), p_errinfo))) {
+            *p_errinfo = GTA_ERROR_MEMORY;
+            goto err;
+        }
+        p_auth_info_list_current->p_next = NULL;
+        p_auth_info_list_current->type = access_descriptor_type;
+
+        switch (access_descriptor_type) {
+            case GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL:
+            case GTA_ACCESS_DESCRIPTOR_TYPE_BASIC_TOKEN:
+                if (b_recede_policy) {
+                    /* initial and basic not allowed for recede */
+                    *p_errinfo = GTA_ERROR_ACCESS_POLICY;
+                    goto err;
+                }
+                /* all ok, nothing more to do */
+                break;
+            case GTA_ACCESS_DESCRIPTOR_TYPE_PHYSICAL_PRESENCE_TOKEN:
+                if (!b_recede_policy) {
+                    /* physical presence only allowed for recede */
+                    *p_errinfo = GTA_ERROR_ACCESS_POLICY;
+                    goto err;
+                }
+                /* all ok, nothing more to do */
+                break;
+            case GTA_ACCESS_DESCRIPTOR_TYPE_PERS_DERIVED_TOKEN:
+                /* Copy fingerprint */
+                if (!gta_access_policy_get_access_descriptor_attribute(h_access_descriptor, GTA_ACCESS_DESCRIPTOR_ATTR_PERS_FINGERPRINT, &p_attr, &attr_len, p_errinfo )) {
+                    goto internal_err;
+                }
+                if (PERS_FINGERPRINT_LEN != attr_len) {
+                    goto internal_err;
+                }
+                memcpy( p_auth_info_list_current->binding_personality_fingerprint, p_attr, attr_len );
+
+                /* Copy profile name */
+                if (!gta_access_policy_get_access_descriptor_attribute(h_access_descriptor, GTA_ACCESS_DESCRIPTOR_ATTR_PROFILE_NAME, &p_attr, &attr_len, p_errinfo )) {
+                    goto internal_err;
+                }
+                /* NOTE: attr_len does not include the string termination! */
+                if (NULL == (p_auth_info_list_current->derivation_profile_name = gta_secmem_calloc(h_ctx, 1, attr_len + 1, p_errinfo))){
+                    *p_errinfo = GTA_ERROR_MEMORY;
+                    goto err;
+                }
+                memcpy(p_auth_info_list_current->derivation_profile_name, p_attr, attr_len);
+                p_auth_info_list_current->derivation_profile_name[attr_len] = '\0';
+                break;
+        }
+        list_append((struct list_t **)p_auth_info_list, p_auth_info_list_current);
     }
     return true;
+
+internal_err:
+    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
 err:
-    gta_secmem_free(h_ctx, p_auth_info_list_current, p_errinfo);
+    gta_secmem_free(h_ctx, p_auth_info_list_current, &errinfo_tmp);
     return false;
 }
 
