@@ -301,6 +301,7 @@ cleanup:
 const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_jwt = {
     .context_open = context_open,
     .personality_enroll = personality_enroll,
+    .personality_activate_deactivate_supported = true,
     .personality_attribute_functions_supported = true,
     .seal_data = seal_data,
 };
