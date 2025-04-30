@@ -1883,6 +1883,185 @@ static void personality_attributes_enumerate(void ** state)
     }
 }
 
+static void devicestates(void ** state)
+{
+    DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
+    struct test_params_t * test_params = (struct test_params_t *)(*state);
+    gta_errinfo_t errinfo = 0;
+    gta_context_handle_t h_ctx = GTA_HANDLE_INVALID;
+    gta_context_handle_t h_ctx_2 = GTA_HANDLE_INVALID;
+    gta_access_policy_handle_t h_auth_use = GTA_HANDLE_INVALID;
+    gta_access_policy_handle_t h_auth_admin = GTA_HANDLE_INVALID;
+    gta_access_policy_handle_t h_auth_recede = GTA_HANDLE_INVALID;
+    struct gta_protection_properties_t protection_properties = { 0 };
+    gta_personality_fingerprint_t fingerprint = { 0 };
+
+    /* Get a personality derived access token (used later) */
+    gta_access_token_t pers_derived_access_token_use = { 0 };
+    gta_access_token_t pers_derived_access_token_recede = { 0 };
+    istream_from_buf_t istream_passcode = { 0 };
+    h_ctx = gta_context_open(test_params->h_inst,
+        get_personality_name(PROF_CH_IEC_30168_BASIC_PASSCODE),
+        supported_profiles[PROF_CH_IEC_30168_BASIC_PASSCODE],
+        &errinfo);
+    assert_non_null(h_ctx);
+    assert_int_equal(0, errinfo);
+    istream_from_buf_init(&istream_passcode, passcode, strlen(passcode)+1);
+    assert_true(gta_verify(h_ctx, (gtaio_istream_t *)&istream_passcode, &errinfo));
+    assert_int_equal(0, errinfo);
+    assert_true(gta_access_token_get_pers_derived(
+        h_ctx,
+        get_personality_name(PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION),
+        GTA_ACCESS_TOKEN_USAGE_USE,
+        &pers_derived_access_token_use,
+        &errinfo));
+    assert_int_equal(0, errinfo);
+    assert_true(gta_access_token_get_pers_derived(
+        h_ctx,
+        get_personality_name(PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION),
+        GTA_ACCESS_TOKEN_USAGE_RECEDE,
+        &pers_derived_access_token_recede,
+        &errinfo));
+    assert_int_equal(0, errinfo);
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Clear current device state */
+    assert_true(gta_devicestate_recede(test_params->h_inst, NULL, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Assign identifier again */
+    assert_true(gta_identifier_assign(test_params->h_inst, IDENTIFIER1_TYPE, IDENTIFIER1_VALUE, &errinfo));
+
+    /* Device state transition */
+    h_auth_recede = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_BASIC_TOKEN, &errinfo);
+    assert_false(gta_devicestate_transition(test_params->h_inst, h_auth_recede, 5, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS_POLICY, errinfo);
+    errinfo = 0;
+
+    h_auth_recede = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_PHYSICAL_PRESENCE_TOKEN, &errinfo);
+    assert_false(gta_devicestate_transition(test_params->h_inst, h_auth_recede, 256, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS_POLICY, errinfo);
+    errinfo = 0;
+
+    assert_true(gta_devicestate_transition(test_params->h_inst, h_auth_recede, 5, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_false(gta_devicestate_transition(test_params->h_inst, h_auth_recede, 5, &errinfo));
+    assert_int_equal(GTA_ERROR_INVALID_PARAMETER, errinfo);
+    errinfo = 0;
+
+    /* Create a personality */
+    h_auth_use = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL, &errinfo);
+    h_auth_admin = h_auth_use;
+    assert_true(gta_personality_create(test_params->h_inst,
+                                       IDENTIFIER1_VALUE,
+                                       "local_data_prot_devicestate",
+                                       "local_data_protection",
+                                       "ch.iec.30168.basic.local_data_protection",
+                                       h_auth_use,
+                                       h_auth_admin,
+                                       protection_properties,
+                                       &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* More negative tests */
+    assert_false(gta_devicestate_transition(test_params->h_inst, h_auth_recede, 6, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS_POLICY, errinfo);
+    errinfo = 0;
+
+    /* Add another device state */
+    h_auth_recede = gta_access_policy_create(test_params->h_inst, &errinfo);
+    gta_access_policy_add_pers_derived_access_token_descriptor(h_auth_recede, fingerprint, "todo", &errinfo);
+    assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
+    assert_int_equal(0, errinfo);
+
+    assert_false(gta_devicestate_transition(test_params->h_inst, h_auth_recede, 5, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS_POLICY, errinfo);
+    errinfo = 0;
+
+    assert_true(gta_access_policy_destroy(h_auth_recede, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    h_auth_recede = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_PHYSICAL_PRESENCE_TOKEN, &errinfo);
+    assert_true(gta_devicestate_transition(test_params->h_inst, h_auth_recede, 5, &errinfo));
+    assert_int_equal(0, errinfo);
+    errinfo = 0;
+
+    /* Do something with the personality */
+    h_ctx = gta_context_open(test_params->h_inst,
+                             "local_data_prot_devicestate",
+                             "ch.iec.30168.basic.local_data_protection",
+                             &errinfo);
+
+    assert_non_null(h_ctx);
+    assert_int_equal(0, errinfo);
+
+    /* Open a second context with the same personality */
+    h_ctx_2 = gta_context_open(test_params->h_inst,
+        "local_data_prot_devicestate",
+        "ch.iec.30168.basic.local_data_protection",
+        &errinfo);
+
+    assert_non_null(h_ctx_2);
+    assert_int_equal(0, errinfo);
+
+    const char * test_input = "test";
+    istream_from_buf_t istream = { 0 };
+
+    gtaio_ostream_t ostream_null = { 0 };
+    ostream_null.write = (gtaio_stream_write_t)ostream_null_write;
+    ostream_null.finish = (gtaio_stream_finish_t)ostream_finish;
+
+    istream_from_buf_init(&istream, test_input, strlen(test_input));
+    assert_true(gta_seal_data(h_ctx, (gtaio_istream_t*)&istream, &ostream_null, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Now we remove the devicestate again */
+    /* First some negative tests with access tokens */
+    assert_false(gta_devicestate_recede(test_params->h_inst, NULL, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+
+    gta_access_token_t invalid_access_token = { 0 };
+    assert_false(gta_devicestate_recede(test_params->h_inst, invalid_access_token, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+
+    assert_true(gta_access_token_get_basic(test_params->h_inst,
+        test_params->granting_token, "local_data_prot_devicestate",
+        GTA_ACCESS_TOKEN_USAGE_USE, invalid_access_token, &errinfo));
+
+    assert_false(gta_devicestate_recede(test_params->h_inst, invalid_access_token, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+
+    assert_false(gta_devicestate_recede(test_params->h_inst, pers_derived_access_token_use, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+
+    assert_false(gta_devicestate_recede(test_params->h_inst, pers_derived_access_token_recede, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+
+    assert_true(gta_devicestate_recede(test_params->h_inst, test_params->physical_presence_token, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Try if the context still works */
+    istream_from_buf_init(&istream, test_input, strlen(test_input));
+    assert_false(gta_seal_data(h_ctx, (gtaio_istream_t*)&istream, &ostream_null, &errinfo));
+    assert_int_equal(GTA_ERROR_HANDLE_INVALID, errinfo);
+    errinfo = 0;
+
+    assert_true(gta_context_close(h_ctx_2, &errinfo));
+    assert_int_equal(0, errinfo);
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Assign an identifier */
+    assert_true(gta_identifier_assign(test_params->h_inst, IDENTIFIER2_TYPE, IDENTIFIER2_VALUE, &errinfo));
+}
+
 static void access_policies_and_access_tokens(void ** state)
 {
     DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
@@ -1894,6 +2073,24 @@ static void access_policies_and_access_tokens(void ** state)
     struct gta_protection_properties_t protection_properties = { 0 };
     gta_personality_fingerprint_t fingerprint = { 0 };
     ostream_to_buf_t ostream = { 0 };
+    istream_from_buf_t istream_passcode = { 0 };
+
+    h_auth_use = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL, &errinfo);
+    assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
+    h_auth_admin = h_auth_use;
+
+    /* deploy basic passcode */
+    istream_from_buf_init(&istream_passcode, passcode, strlen(passcode)+1);
+    assert_true(gta_personality_deploy(test_params->h_inst,
+                                       IDENTIFIER1_VALUE,
+                                       get_personality_name(PROF_CH_IEC_30168_BASIC_PASSCODE),
+                                       "provider_test",
+                                       supported_profiles[PROF_CH_IEC_30168_BASIC_PASSCODE],
+                                       (gtaio_istream_t*)&istream_passcode,
+                                       h_auth_use,
+                                       h_auth_admin,
+                                       protection_properties,
+                                       &errinfo));
 
     /* get fingerprint from basic passcode personality */
     /* get a pers derived access token */
@@ -1928,7 +2125,7 @@ static void access_policies_and_access_tokens(void ** state)
 
     /* Physical presence policy not allowed for personalities (auth_use, auth_admin) */
     assert_false(gta_personality_create(test_params->h_inst,
-                                        IDENTIFIER2_VALUE,
+                                        IDENTIFIER1_VALUE,
                                         "local_data_prot_access_control",
                                         "local_data_protection",
                                         supported_profiles[PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION],
@@ -1941,7 +2138,7 @@ static void access_policies_and_access_tokens(void ** state)
     h_auth_admin = h_auth_use;
 
     assert_true(gta_personality_create(test_params->h_inst,
-                                       IDENTIFIER2_VALUE,
+                                       IDENTIFIER1_VALUE,
                                        "local_data_prot_access_control",
                                        "local_data_protection",
                                        supported_profiles[PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION],
@@ -2071,7 +2268,7 @@ static void access_policies_and_access_tokens(void ** state)
     assert_int_equal(0, errinfo);
 
     assert_true(gta_personality_create(test_params->h_inst,
-                                       IDENTIFIER2_VALUE,
+                                       IDENTIFIER1_VALUE,
                                        "ec_access_control",
                                        "access control",
                                        supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC],
@@ -2207,6 +2404,8 @@ int ts_gta_sw_provider(void)
         cmocka_unit_test(personality_enumerate),
         cmocka_unit_test(personality_enumerate_application),
         cmocka_unit_test(personality_attributes_enumerate),
+        /* Tests for devicestate management functions */
+        cmocka_unit_test(devicestates),
         /* Tests for access control */
         cmocka_unit_test(access_policies_and_access_tokens),
         /* Tests for persistent storage */

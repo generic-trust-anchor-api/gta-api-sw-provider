@@ -35,6 +35,7 @@
 #define FILE_DEVICESTATES_STACK "DEVICESTATES_STACK"
 
 /* Labels used in CBOR Map - Device State */
+#define LABEL_AUTH_RECEDE_LIST "AuthRecedeList"
 #define LABEL_DEVICE_STATE_LOCK "LockCount"
 #define LABEL_IDENTIFIERS "Identifiers"
 #define LABEL_PERSONALITIES "Personalities"
@@ -389,6 +390,11 @@ bool provider_serialize(
 
         /* Map of a Device State */
         QCBOREncode_OpenMap(&encode_ctx);
+
+        /* Auth recede of the Device State */
+        QCBOREncode_OpenArrayInMap(&encode_ctx, LABEL_AUTH_RECEDE_LIST);
+        auth_info_list_serialize(&encode_ctx, p_devicestate_stack_item->p_auth_recede_info_list);
+        QCBOREncode_CloseArray(&encode_ctx);
 
         /* Scalars of the Device State */
         QCBOREncode_AddUInt64ToMap(&encode_ctx, LABEL_DEVICE_STATE_LOCK, p_devicestate_stack_item->owner_lock_count);
@@ -1002,6 +1008,9 @@ static bool decode_personalities(
             DEBUG_PRINT(("DESERIALIZATION Failed. QCBOR error: %d\n", qcbor_result));
             goto err;
         }
+
+        /* Set reference counter to zero */
+        p_personality_name_list_item->refcount = 0;
     }
 
     ret = true;
@@ -1051,6 +1060,11 @@ static bool decode_devicestates(
         }
 
         list_append_front((struct list_t **)(pp_devicestate_stack), p_devicestack_item);
+
+        /* Decode recede authentication list */
+        QCBORDecode_EnterArrayFromMapSZ(p_decode_ctx, LABEL_AUTH_RECEDE_LIST);
+        auth_info_list_deserialize(h_ctx, p_decode_ctx, &(p_devicestack_item->p_auth_recede_info_list), &errinfo);
+        QCBORDecode_ExitArray(p_decode_ctx);
 
         /* Decode Owner Lock Count */
         QCBORDecode_GetUInt64InMapSZ(p_decode_ctx, LABEL_DEVICE_STATE_LOCK, (uint64_t *)&p_devicestack_item->owner_lock_count);

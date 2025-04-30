@@ -20,6 +20,7 @@
 struct devicestate_stack_item_t {
     struct devicestate_stack_item_t * p_next;
 
+    struct auth_info_list_item_t * p_auth_recede_info_list;
     uint8_t owner_lock_count;
 
     /* List of identifiers and personalities related to this device state. */
@@ -36,6 +37,17 @@ struct personality_name_list_item_t {
     bool activated;
     struct personality_t * p_personality_content;
     struct identifier_list_item_t * p_identifier_list_item;
+
+    /*
+     * The `refcount` is a special variable, as it is not persisted and only
+     * needed during runtime. It is used to track the number of opened GTA API
+     * contexts referring to the personality. In case the personality is deleted
+     * either by gta_personality_remove or gta_devicestate_recede the memory for
+     * the corresponding personality_name_list_item_t is freed after the last
+     * context referring to the personality is closed and the refcount becomes
+     * zero.
+     */
+    size_t refcount;
 };
 
 /* single element of a linked list used for identifier management */
@@ -113,6 +125,12 @@ bool personality_attribute_list_destroy(gta_context_handle_t h_ctx,
                                         gta_errinfo_t * p_errinfo
 );
 
+/* free personality content */
+bool personality_content_free(gta_context_handle_t h_ctx,
+                              struct personality_t * p_personality_content,
+                              gta_errinfo_t * p_errinfo
+);
+
 /* free a Personality */
 bool personality_name_list_item_free(gta_context_handle_t h_ctx,
                                      struct personality_name_list_item_t * p_personality_name_item,
@@ -146,6 +164,12 @@ bool devicestate_stack_list_item_free(gta_context_handle_t h_ctx,
 bool devicestate_stack_list_destroy(gta_context_handle_t h_ctx,
                                     struct devicestate_stack_item_t * p_devicestate_stack_head,
                                     gta_errinfo_t * p_errinfo
+);
+
+/* free the list of auth info */
+bool auth_info_list_destroy(gta_context_handle_t h_ctx,
+                            struct auth_info_list_item_t * p_auth_info_list_head,
+                            gta_errinfo_t * p_errinfo
 );
 
 #endif /* PROVIDER_DATA_MODEL_H */
