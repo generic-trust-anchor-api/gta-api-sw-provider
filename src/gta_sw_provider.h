@@ -65,6 +65,7 @@ enum profile_t {
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL,
+    PROF_ORG_OPCFOUNDATION_ECC_NISTP256,
 };
 
 /*
@@ -85,7 +86,7 @@ enum pers_attr_type_t {
     PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3,
     PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_AUXILIARY_X509,
     PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_LIST_RFC8446,
-    PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL,
+    PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL,    
 };
 
 /* provider instance global data */
@@ -160,6 +161,12 @@ EVP_PKEY * get_pkey_from_der(unsigned char * p_der_content, const size_t der_siz
 
 /* Helper function to read the whole input from gtaio_istream_t into a buffer */
 bool read_input_buffer (gtaio_istream_t * data, unsigned char ** pp_data, size_t * p_data_size, gta_errinfo_t * p_errinfo);
+
+bool get_personality_identifier(
+    struct personality_t * p_personality,    
+    gta_identifier_value_t personality_identifier,
+    gta_errinfo_t * p_errinfo
+);
 
 struct profile_function_list_t {
     bool (*context_open)(struct gta_sw_provider_context_params_t *, gta_errinfo_t *);
