@@ -18,7 +18,8 @@ gta_sw_provider_files = files (
   'profiles/prof_com_github_generic_trust_anchor_api_basic_dilithium.c',
   'profiles/prof_com_github_generic_trust_anchor_api_basic_jwt.c',
   'profiles/prof_com_github_generic_trust_anchor_api_basic_signature.c',
-  'profiles/prof_com_github_generic_trust_anchor_api_basic_enroll.c'
+  'profiles/prof_com_github_generic_trust_anchor_api_basic_enroll.c',
+  'profiles/prof_org_opcfoundation_ecc_nistp256.c'
   )
 
 build_dep = [ dep_libcrypto,

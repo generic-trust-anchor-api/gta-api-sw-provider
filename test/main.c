@@ -17,6 +17,7 @@
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/core_names.h>
+#include <openssl/x509v3.h>
 
 #ifdef WINDOWS
 /* The following define needs to be set for all subprojects which should be monitored. */
@@ -35,6 +36,7 @@
 #define MAXLEN_ATTRIBUTE_TYPE 160
 #define MAXLEN_ATTRIBUTE_NAME 160
 #define MAXLEN_ATTRIBUTE_VALUE 2000
+#define MAXLEN_CTX_ATTRIBUTE_VALUE 2000
 
 const char * passcode = "zZ902()[]{}%*&-+<>!?=$#Ar";
 
@@ -75,11 +77,12 @@ enum profile_t {
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL,
+    PROF_ORG_OPCFOUNDATION_ECC_NISTP256,
 };
 #ifdef ENABLE_PQC
-#define NUM_PROFILES 11
+#define NUM_PROFILES 12
 #else
-#define NUM_PROFILES 10
+#define NUM_PROFILES 11
 #endif
 static char supported_profiles[NUM_PROFILES][MAXLEN_PROFILE] = {
     [PROF_INVALID] = "INVALID",
@@ -95,6 +98,7 @@ static char supported_profiles[NUM_PROFILES][MAXLEN_PROFILE] = {
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE] = "com.github.generic-trust-anchor-api.basic.signature",
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = "com.github.generic-trust-anchor-api.basic.tls",
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL] = "com.github.generic-trust-anchor-api.basic.enroll",
+    [PROF_ORG_OPCFOUNDATION_ECC_NISTP256] = "org.opcfoundation.ECC-nistP256",    
 };
 
 static bool profile_creation_supported[NUM_PROFILES] = {
@@ -111,6 +115,7 @@ static bool profile_creation_supported[NUM_PROFILES] = {
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE] = false,
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = false,
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL] = false,
+    [PROF_ORG_OPCFOUNDATION_ECC_NISTP256] = true,
 };
 
 extern const struct gta_function_list_t * gta_sw_provider_init(gta_context_handle_t, gtaio_istream_t *, gtaio_ostream_t *, void **, void(**)(void *),  gta_errinfo_t *);
@@ -724,7 +729,7 @@ static void identifier_assign(void ** state)
     assert_true(gta_identifier_assign(test_params->h_inst, IDENTIFIER1_TYPE, IDENTIFIER1_VALUE, &errinfo));
     assert_int_equal(0, errinfo);
     assert_true(gta_identifier_assign(test_params->h_inst, IDENTIFIER2_TYPE, IDENTIFIER2_VALUE, &errinfo));
-    assert_int_equal(0, errinfo);
+    assert_int_equal(0, errinfo);    
 
     assert_false(gta_identifier_assign(test_params->h_inst, IDENTIFIER2_TYPE, IDENTIFIER2_VALUE, &errinfo));
     assert_int_equal(GTA_ERROR_NAME_ALREADY_EXISTS, errinfo);
@@ -1760,6 +1765,249 @@ static void profile_tls(void ** state)
 #endif
 }
 
+static void profile_opc_ecc(void ** state)
+{
+    DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));    
+    struct test_params_t * test_params = (struct test_params_t *)(*state);
+    gta_errinfo_t errinfo = 0;    
+    gta_context_handle_t h_ctx = GTA_HANDLE_INVALID;  
+    
+    istream_from_buf_t istream;
+    gtaio_ostream_t * ostream;
+    
+#ifdef LOG_TEST_OUTPUT
+    myio_ofilestream_t ostream_hex = { 0 };
+    ostream_hex.write = (gtaio_stream_write_t)ostream_hex_write;
+    ostream_hex.finish = (gtaio_stream_finish_t)ostream_finish;
+    ostream_hex.file = stdout;
+    ostream = (gtaio_ostream_t *)&ostream_hex;    
+#else
+    gtaio_ostream_t ostream_null = { 0 };
+    ostream_null.write = (gtaio_stream_write_t)ostream_null_write;
+    ostream_null.finish = (gtaio_stream_finish_t)ostream_finish;
+    ostream = &ostream_null;
+#endif
+
+    /* negative tests */
+    /* try to open context with an rsa personality */
+    h_ctx = gta_context_open(test_params->h_inst,
+                             get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA),
+                             "org.opcfoundation.ECC-nistP256",
+                             &errinfo);
+    assert_null(h_ctx);
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+
+    /* try to open context with a secret_type (SECRET_TYPE_RAW_BYTES) not supported by the profile */
+    errinfo = 0; 
+    h_ctx = gta_context_open(test_params->h_inst,
+                             get_personality_name(PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION),
+                             "org.opcfoundation.ECC-nistP256",
+                             &errinfo);
+    assert_null(h_ctx);
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+
+    /* open context with correct ecc personality */
+    errinfo = 0; 
+    h_ctx = gta_context_open(test_params->h_inst,
+                             get_personality_name(PROF_ORG_OPCFOUNDATION_ECC_NISTP256),
+                             "org.opcfoundation.ECC-nistP256",
+                             &errinfo);
+    assert_non_null(h_ctx);
+    assert_int_equal(0, errinfo);
+
+    errinfo = 0; 
+    assert_false(gta_personality_activate(h_ctx, &errinfo));
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+
+    errinfo = 0; 
+    assert_false(gta_personality_deactivate(h_ctx, &errinfo));
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+
+    /* the attribute ch.iec.30168.identifier was already set internally by personality_create() and cannot be changed from extern */
+    /* check if identifier is set by calling gta_personality_get_attribute */
+    pers_get_attribute(h_ctx, "ch.iec.30168.identifier_value", 0);
+
+    /* call enroll without additional attributes */
+    /* should be ok as org.opcfoundation.csr.subject is optional */
+    DEBUG_PRINT(("\nPKCS#10 without additional attributes:\n"));
+    errinfo = 0; 
+    assert_true(gta_personality_enroll(h_ctx, ostream, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* negative tests */
+    /* try to read context attributes not set */
+    errinfo = 0; 
+    assert_false(gta_context_get_attribute(h_ctx, "org.opcfoundation.csr.subject", ostream, &errinfo));            
+    assert_int_equal(GTA_ERROR_ITEM_NOT_FOUND, errinfo);
+
+    errinfo = 0; 
+    assert_false(gta_context_get_attribute(h_ctx, "org.opcfoundation.csr.subjectAltName", ostream, &errinfo));            
+    assert_int_equal(GTA_ERROR_ITEM_NOT_FOUND, errinfo);
+    
+    /* try to read a context attribute with unknown type */
+    errinfo = 0;     
+    assert_false(gta_context_get_attribute(h_ctx, "unknown.attribute.type", ostream, &errinfo));            
+    assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);   
+    
+    /* try to set an attribute with an unknown type */
+    istream_from_buf_init(&istream, "invalid attribute", strlen("invalid attribute"));
+    assert_false(gta_context_set_attribute(h_ctx, "unknown.attribute.type", (gtaio_istream_t*)&istream, &errinfo));
+    assert_int_equal(errinfo, GTA_ERROR_INVALID_ATTRIBUTE);   
+
+    /* try to set subject attribute with dummy data */
+    errinfo = 0;
+    istream_from_buf_init(&istream, "dummy data", strlen("dummy data"));
+    assert_false(gta_context_set_attribute(h_ctx, "org.opcfoundation.csr.subject", (gtaio_istream_t*)&istream, &errinfo));
+    assert_int_equal(errinfo, GTA_ERROR_INTERNAL_ERROR); 
+
+    /* try to set subjectAltName attribute with dummy data */
+    errinfo = 0;
+    istream_from_buf_init(&istream, "dummy data", strlen("dummy data"));
+    assert_false(gta_context_set_attribute(h_ctx, "org.opcfoundation.csr.subjectAltName", (gtaio_istream_t*)&istream, &errinfo));
+    assert_int_equal(errinfo, GTA_ERROR_INTERNAL_ERROR); 
+
+    /* try to set attribute with long dummy data */
+    char long_attribute[MAXLEN_CTX_ATTRIBUTE_VALUE + 1] = { 0 };
+    for (size_t i=0; i<sizeof(long_attribute); ++i) {
+        long_attribute[i] = 'x';
+    }
+    errinfo = 0;
+    istream_from_buf_init(&istream, long_attribute, (MAXLEN_CTX_ATTRIBUTE_VALUE + 1));
+    assert_false(gta_context_set_attribute(h_ctx, "org.opcfoundation.csr.subject", (gtaio_istream_t*)&istream, &errinfo));
+    assert_int_equal(errinfo, GTA_ERROR_INVALID_ATTRIBUTE);     
+
+    /* call enroll again with additional attributes subject and subjectAltName */
+    /* Create a new X509_NAME object as to be set as subject */
+    X509_NAME *p_x509_name = X509_NAME_new();
+    assert_non_null(p_x509_name);    
+
+    X509_NAME_add_entry_by_txt(p_x509_name, "CN", MBSTRING_ASC,
+                            (unsigned char *)"Dummy Product Name", -1, -1, 0);
+    X509_NAME_add_entry_by_txt(p_x509_name, "O", MBSTRING_ASC,
+                            (unsigned char *)"Dummy Organization", -1, -1, 0);
+    X509_NAME_add_entry_by_txt(p_x509_name, "OU", MBSTRING_ASC,
+                            (unsigned char *)"Dummy Organizational Unit", -1, -1, 0);
+
+    /* serialize subject in DER */
+    unsigned char *p_subject_der = NULL;
+    int len = i2d_X509_NAME(p_x509_name, &p_subject_der);
+    assert_true(len > 0); 
+       
+    errinfo = 0;
+    istream_from_buf_init(&istream, (const char*) p_subject_der, len);
+    assert_true(gta_context_set_attribute(h_ctx, "org.opcfoundation.csr.subject", (gtaio_istream_t*)&istream, &errinfo));
+    assert_int_equal(0, errinfo);
+    
+    /* create general names as to be set as subjectAltName */
+    GENERAL_NAMES *san_names = sk_GENERAL_NAME_new_null();
+    assert_non_null(san_names); 
+    GENERAL_NAME *gen_name_dns = GENERAL_NAME_new();
+    assert_non_null(gen_name_dns); 
+
+    ASN1_IA5STRING *ia5 = ASN1_IA5STRING_new();
+    assert_non_null(ia5); 
+    ASN1_STRING_set(ia5, "example.com", strlen("example.com"));            
+    GENERAL_NAME_set0_value(gen_name_dns, GEN_DNS, ia5);
+    sk_GENERAL_NAME_push(san_names, gen_name_dns);
+    
+    GENERAL_NAME *gen_name_email = GENERAL_NAME_new();
+    assert_non_null(gen_name_email);
+    ASN1_IA5STRING *ia5_email = ASN1_IA5STRING_new();
+    assert_non_null(ia5_email);
+
+    ASN1_STRING_set(ia5_email, "user@example.com", strlen("user@example.com"));
+    GENERAL_NAME_set0_value(gen_name_email, GEN_EMAIL, ia5_email);
+    sk_GENERAL_NAME_push(san_names, gen_name_email);
+    
+    unsigned char *p_san_names_der = NULL;
+    
+    len = i2d_GENERAL_NAMES(san_names, &p_san_names_der); 
+    assert_true(len > 0);    
+
+    errinfo = 0;
+    istream_from_buf_init(&istream, (const char*) p_san_names_der, len);
+    assert_true(gta_context_set_attribute(h_ctx, "org.opcfoundation.csr.subjectAltName", (gtaio_istream_t*)&istream, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* try to set attributes already set */
+    errinfo = 0;
+    istream_from_buf_init(&istream, (const char*) p_subject_der, len);
+    assert_false(gta_context_set_attribute(h_ctx, "org.opcfoundation.csr.subject", (gtaio_istream_t*)&istream, &errinfo));
+    assert_int_equal(errinfo, GTA_ERROR_INVALID_ATTRIBUTE);  
+
+    errinfo = 0;
+    istream_from_buf_init(&istream, (const char*) p_san_names_der, len);
+    assert_false(gta_context_set_attribute(h_ctx, "org.opcfoundation.csr.subjectAltName", (gtaio_istream_t*)&istream, &errinfo));
+    assert_int_equal(errinfo, GTA_ERROR_INVALID_ATTRIBUTE);  
+
+    DEBUG_PRINT(("\nPKCS#10 with additional attributes:\n"));
+    errinfo = 0; 
+    assert_true(gta_personality_enroll(h_ctx, ostream, &errinfo));
+    assert_int_equal(0, errinfo);
+    DEBUG_PRINT(("\n"));
+
+    DEBUG_PRINT(("\nRead context attribute org.opcfoundation.csr.subject:\n"));
+    errinfo = 0; 
+    assert_true(gta_context_get_attribute(h_ctx, "org.opcfoundation.csr.subject", ostream, &errinfo));            
+    assert_int_equal(0, errinfo);
+    DEBUG_PRINT(("\n"));
+
+    DEBUG_PRINT(("\nRead context attribute org.opcfoundation.csr.subjectAltName:\n"));
+    errinfo = 0; 
+    assert_true(gta_context_get_attribute(h_ctx, "org.opcfoundation.csr.subjectAltName", ostream, &errinfo));            
+    assert_int_equal(0, errinfo);
+    DEBUG_PRINT(("\n"));
+     
+    /* Add a new attribute */
+    const char * dummy_ee_cert = "Dummy EE Certificate";
+
+    pers_add_attribute_negative_tests(h_ctx);
+    istream_from_buf_init(&istream, dummy_ee_cert, strlen(dummy_ee_cert));
+    assert_true(gta_personality_add_attribute(h_ctx, "ch.iec.30168.trustlist.certificate.self.x509", "Dummy EE Cert", (gtaio_istream_t *)&istream, &errinfo));
+    assert_int_equal(0, errinfo);
+    istream_from_buf_init(&istream, dummy_ee_cert, strlen(dummy_ee_cert));
+    assert_false(gta_personality_add_attribute(h_ctx, "ch.iec.30168.trustlist.certificate.self.x509", "Dummy EE Cert", (gtaio_istream_t *)&istream, &errinfo));
+    assert_int_equal(GTA_ERROR_NAME_ALREADY_EXISTS, errinfo);
+
+    pers_get_attribute(h_ctx, "Dummy EE Cert", 0);
+    DEBUG_PRINT(("\n"));
+
+    errinfo = 0; 
+    assert_true(gta_personality_remove_attribute(h_ctx, "Dummy EE Cert", &errinfo));
+    assert_int_equal(0, errinfo);
+
+    errinfo = 0; 
+    assert_false(gta_personality_remove_attribute(h_ctx, "Dummy EE Cert", &errinfo));
+    assert_int_equal(GTA_ERROR_ITEM_NOT_FOUND, errinfo);
+
+    myio_ifilestream_t istream_data_to_seal = { 0 };
+    assert_true(myio_open_ifilestream(&istream_data_to_seal, TEST_DATA_PAYLOAD , &errinfo));
+
+    errinfo = 0;
+    DEBUG_PRINT(("\nSignature with EC\n"));
+    assert_true(gta_authenticate_data_detached(h_ctx,
+                              (gtaio_istream_t*)&istream_data_to_seal,
+                              ostream,
+                              &errinfo));
+    DEBUG_PRINT(("\n"));
+    assert_int_equal(0, errinfo);
+    assert_true(myio_close_ifilestream(&istream_data_to_seal, &errinfo));
+      
+    errinfo = 0;
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+    
+    DEBUG_PRINT(("\n"));
+
+    /* Cleanup */           
+    X509_NAME_free(p_x509_name);
+    OPENSSL_free(p_subject_der); 
+    sk_GENERAL_NAME_pop_free(san_names, GENERAL_NAME_free);
+    OPENSSL_free(p_san_names_der);
+    EVP_cleanup();            
+
+}
+
 static void identifier_enumerate(void ** state)
 {
     DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
@@ -2565,6 +2813,7 @@ int ts_gta_sw_provider(void)
         cmocka_unit_test(profile_jwt),
         cmocka_unit_test(profile_signature),
         cmocka_unit_test(profile_tls),
+        cmocka_unit_test(profile_opc_ecc),        
         /* Additional tests for mandatory provider functions */
         cmocka_unit_test(identifier_enumerate),
         cmocka_unit_test(personality_enumerate),
