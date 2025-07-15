@@ -1804,14 +1804,25 @@ static void profile_opc_ecc(void ** state)
     assert_true(gta_personality_enroll(h_ctx, ostream, &errinfo));
     assert_int_equal(0, errinfo);
 
-    /* negative tests try to read context attributes not set */
+    /* negative tests */
+    /* try to read context attributes not set */
     errinfo = 0; 
     assert_false(gta_context_get_attribute(h_ctx, "org.opcfoundation.csr.subject", ostream, &errinfo));            
     assert_int_equal(GTA_ERROR_ITEM_NOT_FOUND, errinfo);
-    
+
     errinfo = 0; 
     assert_false(gta_context_get_attribute(h_ctx, "org.opcfoundation.csr.subjectAltName", ostream, &errinfo));            
-    assert_int_equal(GTA_ERROR_ITEM_NOT_FOUND, errinfo);    
+    assert_int_equal(GTA_ERROR_ITEM_NOT_FOUND, errinfo);
+    
+    /* try to read a context attribute with unknown type */
+    errinfo = 0;     
+    assert_false(gta_context_get_attribute(h_ctx, "unknown.attribute.type", ostream, &errinfo));            
+    assert_int_equal(GTA_ERROR_INVALID_ATTRIBUTE, errinfo);   
+    
+    /* try to set an attribute with an unknown type */
+    istream_from_buf_init(&istream, "invalid attribute", strlen("invalid attribute"));
+    assert_false(gta_context_set_attribute(h_ctx, "unknown.attribute.type", (gtaio_istream_t*)&istream, &errinfo));
+    assert_int_equal(errinfo, GTA_ERROR_INVALID_ATTRIBUTE);   
 
     /* call enroll again with additional attributes subject and subjectAltName */
     /* Create a new X509_NAME object as to be set as subject */

@@ -383,7 +383,7 @@ bool get_personality_identifier(
                                             (unsigned char *)PERS_ATTR_NAME_IDENTIFIER,
                                             attribute_list_item_cmp_name);
         if(NULL != p_personality_attribute) {
-            if ((NULL != personality_identifier) && (IDENTIFIER_VALUE_MAXLEN > strlen(personality_identifier))) {
+            if ((NULL != personality_identifier) && (IDENTIFIER_VALUE_MAXLEN > p_personality_attribute->data_size)) {
                 memcpy (personality_identifier, p_personality_attribute->p_data, p_personality_attribute->data_size);
             } else {
                 *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
