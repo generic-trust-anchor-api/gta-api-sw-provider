@@ -276,13 +276,10 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_enroll,
         goto internal_err;
     }
 
-    /* Enrollment attribute x509_name is optional */        
-    if (NULL != pers_enroll_attributes->x509_name) {
-        if (!X509_REQ_set_subject_name(x509_req, pers_enroll_attributes->x509_name)) {
+    /* Enrollment attribute x509_name is optional */       
+   if ((NULL != pers_enroll_attributes->x509_name) && (!X509_REQ_set_subject_name(x509_req, pers_enroll_attributes->x509_name))) {
             goto internal_err;
-        }
     }
-
        
     X509_EXTENSION *ext = NULL;
     STACK_OF(X509_EXTENSION) *exts = sk_X509_EXTENSION_new_null();
