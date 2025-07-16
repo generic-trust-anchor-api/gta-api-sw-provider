@@ -151,8 +151,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_get_attribute,
         /* serialize subjectname in DER */
         len = i2d_X509_NAME(pers_enroll_attributes->x509_name, &p_buffer_out);
         if (len < 0) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            return false;
+            goto internal_err;
         }
     } else if (0 == strcmp(attrtype, CTX_ATTR_TYPE_CSR_SUBJECTALTNAME_DER)) {
         /* check whether attribute has been set */
@@ -164,8 +163,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_get_attribute,
         /* serialize subjectAltName in DER */
         len = i2d_GENERAL_NAMES(pers_enroll_attributes->san_names, &p_buffer_out);
         if (len < 0) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            return false;
+            goto internal_err;
         }
     } else {
         /* attribute not supported by profile */
@@ -175,14 +173,15 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_get_attribute,
 
     size_t buffer_idx_out = (size_t)len;
     if (buffer_idx_out != p_attrvalue->write(p_attrvalue, (char *)p_buffer_out, buffer_idx_out, p_errinfo)) {
-    
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto cleanup;
+        goto internal_err;
     }
     p_attrvalue->finish(p_attrvalue, 0, p_errinfo);
 
     ret = true;
+    goto cleanup;
 
+internal_err: 
+    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
 cleanup:
     OPENSSL_free(p_buffer_out);
 
@@ -300,7 +299,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_enroll,
         if (!get_personality_identifier(p_personality_content, identifier_value, p_errinfo)) {
             goto cleanup;
         }
-        ASN1_STRING_set(ia5, identifier_value, (int) strlen(identifier_value));
+        ASN1_STRING_set(ia5, identifier_value, (int) strnlen(identifier_value,IDENTIFIER_VALUE_MAXLEN));
         GENERAL_NAME_set0_value(gen_name, GEN_DNS, ia5);
         sk_GENERAL_NAME_push(san_names, gen_name);        
         
@@ -331,10 +330,8 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_enroll,
     }
 
     size_t buffer_idx_out = (size_t)len;
-    if (buffer_idx_out != p_personality_enrollment_info->write(p_personality_enrollment_info, (char *)p_buffer_out, buffer_idx_out, p_errinfo)) {
-    
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        return false;
+    if (buffer_idx_out != p_personality_enrollment_info->write(p_personality_enrollment_info, (char *)p_buffer_out, buffer_idx_out, p_errinfo)) {    
+          goto internal_err;
     }
     p_personality_enrollment_info->finish(p_personality_enrollment_info, 0, p_errinfo);    
 
