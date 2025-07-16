@@ -1815,6 +1815,14 @@ static void profile_opc_ecc(void ** state)
     assert_non_null(h_ctx);
     assert_int_equal(0, errinfo);
 
+    errinfo = 0; 
+    assert_false(gta_personality_activate(h_ctx, &errinfo));
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+
+    errinfo = 0; 
+    assert_false(gta_personality_deactivate(h_ctx, &errinfo));
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+
     /* the attribute ch.iec.30168.identifier was already set internally by personality_create() and cannot be changed from extern */
     /* check if identifier is set by calling gta_personality_get_attribute */
     pers_get_attribute(h_ctx, "ch.iec.30168.identifier_value", 0);
@@ -1822,6 +1830,7 @@ static void profile_opc_ecc(void ** state)
     /* call enroll without additional attributes */
     /* should be ok as org.opcfoundation.csr.subject is optional */
     DEBUG_PRINT(("\nPKCS#10 without additional attributes:\n"));
+    errinfo = 0; 
     assert_true(gta_personality_enroll(h_ctx, ostream, &errinfo));
     assert_int_equal(0, errinfo);
 
@@ -1967,7 +1976,7 @@ static void profile_opc_ecc(void ** state)
     assert_int_equal(GTA_ERROR_NAME_ALREADY_EXISTS, errinfo);
 
     pers_get_attribute(h_ctx, "Dummy EE Cert", 0);
-    DEBUG_PRINT(("\n"));    
+    DEBUG_PRINT(("\n"));
 
     errinfo = 0; 
     assert_true(gta_personality_remove_attribute(h_ctx, "Dummy EE Cert", &errinfo));

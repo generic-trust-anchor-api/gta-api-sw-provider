@@ -377,68 +377,62 @@ GTA_SWP_DEFINE_FUNCTION(bool, authenticate_data_detached,
         goto internal_err;
     }
 
-    if (SECRET_TYPE_DER == p_personality_content->secret_type) {        
-        evp_private_key = get_pkey_from_der(p_personality_content->secret_data, p_personality_content->secret_data_size, p_errinfo);
-        if (NULL == evp_private_key) {            
-            goto cleanup;
-        }
-
-        /* Initialise the DigestSign operation - SHA-256 */
-        if (1 != EVP_DigestSignInit(mdctx, NULL, EVP_sha256(), NULL, evp_private_key)) {            
-            goto internal_err;
-        }
-
-        /* get Data to sign */
-        while (!data->eof(data, p_errinfo)) {
-            size_t read_len = data->read(data, payload_chunk, CHUNK_LEN, p_errinfo);
-            /* Update with the data chunck */
-            if(1 != EVP_DigestSignUpdate(mdctx, payload_chunk, read_len)) {
-                goto internal_err;
-            }
-        }
-
-        /* Obtain the length of the signature before being calculated */
-        if (1 != EVP_DigestSignFinal(mdctx, NULL, &signature_len)) {
-            goto internal_err;
-        }
-
-        /* Allocate memory for the signature based on size in signature_len */
-        if (!(signature = OPENSSL_malloc(sizeof(unsigned char) * (signature_len)))) {
-            goto internal_err;
-        }
-
-        /* Obtain the signature */
-        if (1 != EVP_DigestSignFinal(mdctx, signature, &signature_len)) {
-            goto internal_err;
-        }
-      
-        const unsigned char * ptmpData = signature;
-        const BIGNUM * pr = NULL;
-        const BIGNUM * ps = NULL;
-
-        signatureRaw = d2i_ECDSA_SIG(NULL, &ptmpData, signature_len);
-        if (NULL == signatureRaw) {
-            goto internal_err;
-        }
-
-        ECDSA_SIG_get0(signatureRaw, &pr, &ps);
-        if ((NULL == pr) || (NULL == ps) || ((P256_COORDINATE_LEN * 2) > signature_len)) {
-            goto internal_err;
-        }
-
-        if (P256_COORDINATE_LEN != BN_bn2binpad(pr, signature, P256_COORDINATE_LEN)) {
-            goto internal_err;
-        }
-
-        if (P256_COORDINATE_LEN != BN_bn2binpad(ps, signature + P256_COORDINATE_LEN, P256_COORDINATE_LEN)) {
-            goto internal_err;
-        }
-        signature_len = P256_COORDINATE_LEN * 2;
-        
+    evp_private_key = get_pkey_from_der(p_personality_content->secret_data, p_personality_content->secret_data_size, p_errinfo);
+    if (NULL == evp_private_key) {            
+        goto cleanup;
     }
-    else {
+
+    /* Initialise the DigestSign operation - SHA-256 */
+    if (1 != EVP_DigestSignInit(mdctx, NULL, EVP_sha256(), NULL, evp_private_key)) {            
         goto internal_err;
     }
+
+    /* get Data to sign */
+    while (!data->eof(data, p_errinfo)) {
+        size_t read_len = data->read(data, payload_chunk, CHUNK_LEN, p_errinfo);
+        /* Update with the data chunck */
+        if(1 != EVP_DigestSignUpdate(mdctx, payload_chunk, read_len)) {
+            goto internal_err;
+        }
+    }
+
+    /* Obtain the length of the signature before being calculated */
+    if (1 != EVP_DigestSignFinal(mdctx, NULL, &signature_len)) {
+        goto internal_err;
+    }
+
+    /* Allocate memory for the signature based on size in signature_len */
+    if (!(signature = OPENSSL_malloc(sizeof(unsigned char) * (signature_len)))) {
+        goto internal_err;
+    }
+
+    /* Obtain the signature */
+    if (1 != EVP_DigestSignFinal(mdctx, signature, &signature_len)) {
+        goto internal_err;
+    }
+    
+    const unsigned char * ptmpData = signature;
+    const BIGNUM * pr = NULL;
+    const BIGNUM * ps = NULL;
+
+    signatureRaw = d2i_ECDSA_SIG(NULL, &ptmpData, signature_len);
+    if (NULL == signatureRaw) {
+        goto internal_err;
+    }
+
+    ECDSA_SIG_get0(signatureRaw, &pr, &ps);
+    if ((NULL == pr) || (NULL == ps) || ((P256_COORDINATE_LEN * 2) > signature_len)) {
+        goto internal_err;
+    }
+
+    if (P256_COORDINATE_LEN != BN_bn2binpad(pr, signature, P256_COORDINATE_LEN)) {
+        goto internal_err;
+    }
+
+    if (P256_COORDINATE_LEN != BN_bn2binpad(ps, signature + P256_COORDINATE_LEN, P256_COORDINATE_LEN)) {
+        goto internal_err;
+    }
+    signature_len = P256_COORDINATE_LEN * 2;
 
     seal->write(seal, (const char*)signature, signature_len, p_errinfo);
     seal->finish(seal, 0, p_errinfo);
