@@ -201,15 +201,6 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_set_attribute,
     unsigned char attrval[MAXLEN_CTX_ATTRIBUTE_VALUE] = { 0 };    
     size_t read = 0;
 
-    /* check whether attribute type is supported by profile and not already set */
-    if (!((0 == strcmp(attrtype, CTX_ATTR_TYPE_CSR_SUBJECT_DER)) && (NULL == pers_enroll_attributes->x509_name)) &&
-        !((0 == strcmp(attrtype, CTX_ATTR_TYPE_CSR_SUBJECTALTNAME_DER)) && (NULL == pers_enroll_attributes->san_names))) {
-
-        /* attribute not supported by profile or already set */
-        *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
-        return false;
-    }
-
     /* read context attribute value into buffer */
     /* todo: should this be read in chunks? */
     read = p_attrvalue->read(p_attrvalue, (char*) attrval, MAXLEN_CTX_ATTRIBUTE_VALUE, p_errinfo);    
@@ -221,14 +212,15 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_set_attribute,
 
     const unsigned char *p = attrval;
 
-    if (0 == strcmp(attrtype, CTX_ATTR_TYPE_CSR_SUBJECT_DER)) {   
+    /* check whether attribute type is supported by profile and not already set */
+    if ((0 == strcmp(attrtype, CTX_ATTR_TYPE_CSR_SUBJECT_DER)) && (NULL == pers_enroll_attributes->x509_name)) {   
         /* set subjectname as an x509 object to enrollment attribute */
         pers_enroll_attributes->x509_name = d2i_X509_NAME(&pers_enroll_attributes->x509_name, &p, read); 
         if (NULL == pers_enroll_attributes->x509_name) {        
             *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
             return false;
         }
-    } else if (0 == strcmp(attrtype, CTX_ATTR_TYPE_CSR_SUBJECTALTNAME_DER)) {
+    } else if ((0 == strcmp(attrtype, CTX_ATTR_TYPE_CSR_SUBJECTALTNAME_DER)) && (NULL == pers_enroll_attributes->san_names)) {
         /* set subjectAltName as GENERAL_NAMES to enrollment attribute */
         pers_enroll_attributes->san_names = d2i_GENERAL_NAMES(&pers_enroll_attributes->san_names, &p, read); 
         if (NULL == pers_enroll_attributes->san_names) {        
@@ -283,12 +275,13 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_enroll,
         goto internal_err;
     }
 
-    /* Enrollment attribute x509_name is optional */    
+    /* Enrollment attribute x509_name is optional */        
     if (NULL != pers_enroll_attributes->x509_name) {
         if (!X509_REQ_set_subject_name(x509_req, pers_enroll_attributes->x509_name)) {
             goto internal_err;
         }
     }
+
        
     X509_EXTENSION *ext = NULL;
     STACK_OF(X509_EXTENSION) *exts = sk_X509_EXTENSION_new_null();
@@ -307,7 +300,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_enroll,
         if (!get_personality_identifier(p_personality_content, identifier_value, p_errinfo)) {
             goto cleanup;
         }
-        ASN1_STRING_set(ia5, identifier_value, strlen(identifier_value));
+        ASN1_STRING_set(ia5, identifier_value, (int) strlen(identifier_value));
         GENERAL_NAME_set0_value(gen_name, GEN_DNS, ia5);
         sk_GENERAL_NAME_push(san_names, gen_name);        
         

@@ -1824,6 +1824,18 @@ static void profile_opc_ecc(void ** state)
     assert_false(gta_context_set_attribute(h_ctx, "unknown.attribute.type", (gtaio_istream_t*)&istream, &errinfo));
     assert_int_equal(errinfo, GTA_ERROR_INVALID_ATTRIBUTE);   
 
+    /* try to set subject attribute with dummy data */
+    errinfo = 0;
+    istream_from_buf_init(&istream, "dummy data", strlen("dummy data"));
+    assert_false(gta_context_set_attribute(h_ctx, "org.opcfoundation.csr.subject", (gtaio_istream_t*)&istream, &errinfo));
+    assert_int_equal(errinfo, GTA_ERROR_INTERNAL_ERROR); 
+
+    /* try to set subjectAltName attribute with dummy data */
+    errinfo = 0;
+    istream_from_buf_init(&istream, "dummy data", strlen("dummy data"));
+    assert_false(gta_context_set_attribute(h_ctx, "org.opcfoundation.csr.subjectAltName", (gtaio_istream_t*)&istream, &errinfo));
+    assert_int_equal(errinfo, GTA_ERROR_INTERNAL_ERROR); 
+
     /* call enroll again with additional attributes subject and subjectAltName */
     /* Create a new X509_NAME object as to be set as subject */
     X509_NAME *p_x509_name = X509_NAME_new();
