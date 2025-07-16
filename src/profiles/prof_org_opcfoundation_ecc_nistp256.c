@@ -327,8 +327,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_enroll,
     unsigned char *p_buffer_out= NULL;
     int len = i2d_X509_REQ(x509_req, &p_buffer_out);    
     if (len < 0) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        return false;
+        goto internal_err;
     }
 
     size_t buffer_idx_out = (size_t)len;
@@ -379,20 +378,18 @@ GTA_SWP_DEFINE_FUNCTION(bool, authenticate_data_detached,
     /* Create the Message Digest Context */
     if (!(mdctx = EVP_MD_CTX_new()))
     {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     if (SECRET_TYPE_DER == p_personality_content->secret_type) {        
         evp_private_key = get_pkey_from_der(p_personality_content->secret_data, p_personality_content->secret_data_size, p_errinfo);
         if (NULL == evp_private_key) {            
-            goto err;
+            goto cleanup;
         }
 
         /* Initialise the DigestSign operation - SHA-256 */
         if (1 != EVP_DigestSignInit(mdctx, NULL, EVP_sha256(), NULL, evp_private_key)) {            
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;            
-            goto err;
+            goto internal_err;
         }
 
         /* get Data to sign */
@@ -400,27 +397,23 @@ GTA_SWP_DEFINE_FUNCTION(bool, authenticate_data_detached,
             size_t read_len = data->read(data, payload_chunk, CHUNK_LEN, p_errinfo);
             /* Update with the data chunck */
             if(1 != EVP_DigestSignUpdate(mdctx, payload_chunk, read_len)) {
-                *p_errinfo = GTA_ERROR_INTERNAL_ERROR;                
-                goto err;
+                goto internal_err;
             }
         }
 
         /* Obtain the length of the signature before being calculated */
         if (1 != EVP_DigestSignFinal(mdctx, NULL, &signature_len)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;            
-            goto err;
+            goto internal_err;
         }
 
         /* Allocate memory for the signature based on size in signature_len */
         if (!(signature = OPENSSL_malloc(sizeof(unsigned char) * (signature_len)))) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;            
-            goto err;
+            goto internal_err;
         }
 
         /* Obtain the signature */
         if (1 != EVP_DigestSignFinal(mdctx, signature, &signature_len)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
+            goto internal_err;
         }
       
         const unsigned char * ptmpData = signature;
@@ -429,35 +422,37 @@ GTA_SWP_DEFINE_FUNCTION(bool, authenticate_data_detached,
 
         signatureRaw = d2i_ECDSA_SIG(NULL, &ptmpData, signature_len);
         if (NULL == signatureRaw) {
-            goto err;
+            goto internal_err;
         }
 
         ECDSA_SIG_get0(signatureRaw, &pr, &ps);
         if ((NULL == pr) || (NULL == ps) || ((P256_COORDINATE_LEN * 2) > signature_len)) {
-            goto err;
+            goto internal_err;
         }
 
         if (P256_COORDINATE_LEN != BN_bn2binpad(pr, signature, P256_COORDINATE_LEN)) {
-            goto err;
+            goto internal_err;
         }
 
         if (P256_COORDINATE_LEN != BN_bn2binpad(ps, signature + P256_COORDINATE_LEN, P256_COORDINATE_LEN)) {
-            goto err;
+            goto internal_err;
         }
         signature_len = P256_COORDINATE_LEN * 2;
         
     }
     else {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;        
-        goto err;
+        goto internal_err;
     }
 
     seal->write(seal, (const char*)signature, signature_len, p_errinfo);
     seal->finish(seal, 0, p_errinfo);
 
     ret = true;
+    goto cleanup;
 
-err:
+internal_err:
+    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+cleanup:
     OPENSSL_free(signature);
     EVP_MD_CTX_free(mdctx);
     EVP_PKEY_free(evp_private_key);

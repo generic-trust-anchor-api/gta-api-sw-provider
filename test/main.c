@@ -36,6 +36,7 @@
 #define MAXLEN_ATTRIBUTE_TYPE 160
 #define MAXLEN_ATTRIBUTE_NAME 160
 #define MAXLEN_ATTRIBUTE_VALUE 2000
+#define MAXLEN_CTX_ATTRIBUTE_VALUE 2000
 
 const char * passcode = "zZ902()[]{}%*&-+<>!?=$#Ar";
 
@@ -1836,6 +1837,16 @@ static void profile_opc_ecc(void ** state)
     assert_false(gta_context_set_attribute(h_ctx, "org.opcfoundation.csr.subjectAltName", (gtaio_istream_t*)&istream, &errinfo));
     assert_int_equal(errinfo, GTA_ERROR_INTERNAL_ERROR); 
 
+    /* try to set attribute with long dummy data */
+    char long_attribute[MAXLEN_CTX_ATTRIBUTE_VALUE + 1] = { 0 };
+    for (size_t i=0; i<sizeof(long_attribute); ++i) {
+        long_attribute[i] = 'x';
+    }
+    errinfo = 0;
+    istream_from_buf_init(&istream, long_attribute, (MAXLEN_CTX_ATTRIBUTE_VALUE + 1));
+    assert_false(gta_context_set_attribute(h_ctx, "org.opcfoundation.csr.subject", (gtaio_istream_t*)&istream, &errinfo));
+    assert_int_equal(errinfo, GTA_ERROR_INVALID_ATTRIBUTE);     
+
     /* call enroll again with additional attributes subject and subjectAltName */
     /* Create a new X509_NAME object as to be set as subject */
     X509_NAME *p_x509_name = X509_NAME_new();
@@ -1857,6 +1868,12 @@ static void profile_opc_ecc(void ** state)
     istream_from_buf_init(&istream, (const char*) p_subject_der, len);
     assert_true(gta_context_set_attribute(h_ctx, "org.opcfoundation.csr.subject", (gtaio_istream_t*)&istream, &errinfo));
     assert_int_equal(0, errinfo);
+
+    /* try to set attribute already set */
+    errinfo = 0;
+    istream_from_buf_init(&istream, (const char*) p_subject_der, len);
+    assert_false(gta_context_set_attribute(h_ctx, "org.opcfoundation.csr.subject", (gtaio_istream_t*)&istream, &errinfo));
+    assert_int_equal(errinfo, GTA_ERROR_INVALID_ATTRIBUTE);  
 
     /* create general names as to be set as subjectAltName */
     GENERAL_NAMES *san_names = sk_GENERAL_NAME_new_null();
@@ -1888,6 +1905,17 @@ static void profile_opc_ecc(void ** state)
     istream_from_buf_init(&istream, (const char*) p_san_names_der, len);
     assert_true(gta_context_set_attribute(h_ctx, "org.opcfoundation.csr.subjectAltName", (gtaio_istream_t*)&istream, &errinfo));
     assert_int_equal(0, errinfo);
+
+    /* try to set attributes already set */
+    errinfo = 0;
+    istream_from_buf_init(&istream, (const char*) p_subject_der, len);
+    assert_false(gta_context_set_attribute(h_ctx, "org.opcfoundation.csr.subject", (gtaio_istream_t*)&istream, &errinfo));
+    assert_int_equal(errinfo, GTA_ERROR_INVALID_ATTRIBUTE);  
+
+    errinfo = 0;
+    istream_from_buf_init(&istream, (const char*) p_san_names_der, len);
+    assert_false(gta_context_set_attribute(h_ctx, "org.opcfoundation.csr.subjectAltName", (gtaio_istream_t*)&istream, &errinfo));
+    assert_int_equal(errinfo, GTA_ERROR_INVALID_ATTRIBUTE);  
 
     DEBUG_PRINT(("\nPKCS#10 with additional attributes:\n"));
     errinfo = 0; 
