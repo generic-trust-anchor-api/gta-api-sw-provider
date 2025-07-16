@@ -1788,6 +1788,26 @@ static void profile_opc_ecc(void ** state)
     ostream = &ostream_null;
 #endif
 
+    /* negative tests */
+    /* try to open context with an rsa personality */
+    h_ctx = gta_context_open(test_params->h_inst,
+                             get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA),
+                             "org.opcfoundation.ECC-nistP256",
+                             &errinfo);
+    assert_null(h_ctx);
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+
+    /* try to open context with a secret_type (SECRET_TYPE_RAW_BYTES) not supported by the profile */
+    errinfo = 0; 
+    h_ctx = gta_context_open(test_params->h_inst,
+                             get_personality_name(PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION),
+                             "org.opcfoundation.ECC-nistP256",
+                             &errinfo);
+    assert_null(h_ctx);
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+
+    /* open context with correct ecc personality */
+    errinfo = 0; 
     h_ctx = gta_context_open(test_params->h_inst,
                              get_personality_name(PROF_ORG_OPCFOUNDATION_ECC_NISTP256),
                              "org.opcfoundation.ECC-nistP256",

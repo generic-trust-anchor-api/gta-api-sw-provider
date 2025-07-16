@@ -65,7 +65,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_open,
     {
         DEBUG_PRINT(("gta_sw_provider_gta_context_open: Personality type not as expected\n"));
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
-        goto err;
+        goto cleanup;
     }
 
     /* get the private key from the personality */
@@ -73,8 +73,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_open,
     unsigned char * p_secret_buffer  = p_personality_content->secret_data;
     /* Range check on p_personality_content->content_data_size */
     if (p_personality_content->secret_data_size > LONG_MAX) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
     evp_private_key = d2i_AutoPrivateKey(NULL,
                                          (const unsigned char **) &p_secret_buffer,
@@ -82,8 +81,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_open,
     /* clear pointer */
     p_secret_buffer = NULL;
     if (NULL == evp_private_key) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     int key_id = EVP_PKEY_base_id(evp_private_key);
@@ -96,21 +94,25 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_open,
 
         DEBUG_PRINT(("gta_sw_provider_gta_context_open: Profile requirements not fulfilled \n"));
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
-        goto err;
+        goto cleanup;
     }
 
     /* Allocate memory for context attributes */
     p_context_params->context_attributes = gta_secmem_calloc(p_context_params->h_ctx, 1, sizeof(struct pers_enroll_attributes_t), p_errinfo);
     if (NULL == p_context_params->context_attributes) {
         *p_errinfo = GTA_ERROR_MEMORY;
-        goto err;
+        goto cleanup;
     }
     struct pers_enroll_attributes_t * pers_enroll_attributes = (struct pers_enroll_attributes_t *) p_context_params->context_attributes;
     pers_enroll_attributes->x509_name = NULL;
     pers_enroll_attributes->san_names = NULL;
     ret = true;
+    goto cleanup;
 
-err:
+internal_err: 
+     *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+
+cleanup:
     EVP_PKEY_free(evp_private_key);
     return ret;
 }
