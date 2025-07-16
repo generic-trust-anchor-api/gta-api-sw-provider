@@ -376,26 +376,20 @@ bool get_personality_identifier(
     gta_errinfo_t * p_errinfo
 )
 {   
-   const struct personality_attribute_t * p_personality_attribute;
+   const struct personality_attribute_t * p_personality_attribute;   
 
-    if (NULL != p_personality) {
+    if ((NULL != p_personality) && (NULL != personality_identifier)) {
         p_personality_attribute = list_find((struct list_t *) p_personality->p_attribute_list,
                                             (unsigned char *)PERS_ATTR_NAME_IDENTIFIER,
                                             attribute_list_item_cmp_name);
-        if(NULL != p_personality_attribute) {
-            if ((NULL != personality_identifier) && (IDENTIFIER_VALUE_MAXLEN > p_personality_attribute->data_size)) {
-                memcpy (personality_identifier, p_personality_attribute->p_data, p_personality_attribute->data_size);
-            } else {
-                *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-                return false;
-            }
-
+        if((NULL != p_personality_attribute) && (p_personality_attribute->data_size < IDENTIFIER_VALUE_MAXLEN)) {
+            memcpy (personality_identifier, p_personality_attribute->p_data, p_personality_attribute->data_size);
         } else {
             *p_errinfo = GTA_ERROR_ATTRIBUTE_MISSING;
             return false;
         }
     } else {
-        *p_errinfo = GTA_ERROR_ITEM_NOT_FOUND;
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         return false;
     }
     return true;
