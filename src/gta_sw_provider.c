@@ -369,32 +369,6 @@ static bool get_personality_fingerprint(
     return true;
 }
 
-/* Helper function to get the identifier of a personality */
-bool get_personality_identifier(
-    struct personality_t * p_personality,    
-    gta_identifier_value_t personality_identifier,
-    gta_errinfo_t * p_errinfo
-)
-{   
-   const struct personality_attribute_t * p_personality_attribute;   
-
-    if ((NULL != p_personality) && (NULL != personality_identifier)) {
-        p_personality_attribute = list_find((struct list_t *) p_personality->p_attribute_list,
-                                            (unsigned char *)PERS_ATTR_NAME_IDENTIFIER,
-                                            attribute_list_item_cmp_name);
-        if((NULL != p_personality_attribute) && (p_personality_attribute->data_size < IDENTIFIER_VALUE_MAXLEN)) {
-            memcpy (personality_identifier, p_personality_attribute->p_data, p_personality_attribute->data_size);
-        } else {
-            *p_errinfo = GTA_ERROR_ATTRIBUTE_MISSING;
-            return false;
-        }
-    } else {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        return false;
-    }
-    return true;
-}
-
 bool find_access_token(void *p_item, void *p_item_crit) {
     /*
     *  ::: We search in the auth token list for a matching token:

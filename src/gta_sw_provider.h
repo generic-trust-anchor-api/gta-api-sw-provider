@@ -162,12 +162,6 @@ EVP_PKEY * get_pkey_from_der(unsigned char * p_der_content, const size_t der_siz
 /* Helper function to read the whole input from gtaio_istream_t into a buffer */
 bool read_input_buffer (gtaio_istream_t * data, unsigned char ** pp_data, size_t * p_data_size, gta_errinfo_t * p_errinfo);
 
-bool get_personality_identifier(
-    struct personality_t * p_personality,    
-    gta_identifier_value_t personality_identifier,
-    gta_errinfo_t * p_errinfo
-);
-
 struct profile_function_list_t {
     bool (*context_open)(struct gta_sw_provider_context_params_t *, gta_errinfo_t *);
     bool (*context_close)(struct gta_sw_provider_context_params_t *, gta_errinfo_t *);

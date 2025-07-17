@@ -250,6 +250,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_enroll,
     struct personality_t * p_personality_content = NULL;
 
     const struct pers_enroll_attributes_t * pers_enroll_attributes = (struct pers_enroll_attributes_t *) p_context_params->context_attributes;
+    unsigned char *p_buffer_out= NULL;
 
     /* get personality of the context */
     p_personality_content = p_context_params->p_personality_item->p_personality_content;
@@ -293,12 +294,9 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_enroll,
         STACK_OF(GENERAL_NAME) *san_names = sk_GENERAL_NAME_new_null();
         GENERAL_NAME *gen_name = GENERAL_NAME_new();
         ASN1_IA5STRING *ia5 = ASN1_IA5STRING_new();
-        char identifier_value[IDENTIFIER_VALUE_MAXLEN] = {0};
 
-        if (!get_personality_identifier(p_personality_content, identifier_value, p_errinfo)) {
-            goto cleanup;
-        }
-        ASN1_STRING_set(ia5, identifier_value, (int) strnlen(identifier_value,IDENTIFIER_VALUE_MAXLEN));
+        /* todo: check if identifier has the type PERS_ATTR_NAME_IDENTIFIER*/
+        ASN1_STRING_set(ia5, p_context_params->p_personality_item->p_identifier_list_item->name, -1);
         GENERAL_NAME_set0_value(gen_name, GEN_DNS, ia5);
         sk_GENERAL_NAME_push(san_names, gen_name);        
         
@@ -321,8 +319,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_enroll,
     if (0 >= ret_val) {
         goto internal_err;
     }
-
-    unsigned char *p_buffer_out= NULL;
+    
     int len = i2d_X509_REQ(x509_req, &p_buffer_out);    
     if (len < 0) {
         goto internal_err;
