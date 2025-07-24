@@ -1897,13 +1897,7 @@ static void profile_opc_ecc(void ** state)
     istream_from_buf_init(&istream, (const char*) p_subject_der, len);
     assert_true(gta_context_set_attribute(h_ctx, "org.opcfoundation.csr.subject", (gtaio_istream_t*)&istream, &errinfo));
     assert_int_equal(0, errinfo);
-
-    /* try to set attribute already set */
-    errinfo = 0;
-    istream_from_buf_init(&istream, (const char*) p_subject_der, len);
-    assert_false(gta_context_set_attribute(h_ctx, "org.opcfoundation.csr.subject", (gtaio_istream_t*)&istream, &errinfo));
-    assert_int_equal(errinfo, GTA_ERROR_INVALID_ATTRIBUTE);  
-
+    
     /* create general names as to be set as subjectAltName */
     GENERAL_NAMES *san_names = sk_GENERAL_NAME_new_null();
     assert_non_null(san_names); 

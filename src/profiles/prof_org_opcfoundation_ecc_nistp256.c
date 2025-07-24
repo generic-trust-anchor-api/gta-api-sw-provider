@@ -9,8 +9,6 @@
 
 #define CTX_ATTR_TYPE_CSR_SUBJECT_DER           "org.opcfoundation.csr.subject"
 #define CTX_ATTR_TYPE_CSR_SUBJECTALTNAME_DER    "org.opcfoundation.csr.subjectAltName"
-#define PERS_ATTR_NAME_KEYTYPE                  "com.github.generic-trust-anchor-api.keytype.openssl"
-#define PERS_ATTR_KEYTYPE_EC                    "EC"
 #define P256_COORDINATE_LEN                     32
 
 struct pers_enroll_attributes_t {    
@@ -38,15 +36,8 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_create,
     /* Calculate personality fingerprint */
     SHA512(*p_pers_secret_buffer, *p_pers_secret_length, (unsigned char *)pers_fingerprint);
 
-    /* Add profile specific personality attribute */
-    if (!add_personality_attribute_list_item(p_provider_params,
-        p_pers_attribute, PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL,
-        (unsigned char *)PERS_ATTR_NAME_KEYTYPE, sizeof(PERS_ATTR_NAME_KEYTYPE),
-        (unsigned char *)PERS_ATTR_KEYTYPE_EC, sizeof(PERS_ATTR_KEYTYPE_EC),
-        true, p_errinfo)) {
-
-        return false;
-    }
+    /* No profile specific personality attributes */
+    *p_pers_attribute = NULL;
 
     return true;
 }
