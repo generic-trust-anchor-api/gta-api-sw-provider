@@ -16,12 +16,10 @@
 #include <oqs/oqs.h>
 #endif
 
-#include <openssl/evp.h>
 #include <openssl/pkcs12.h>
 #include <openssl/kdf.h>
 #include <openssl/err.h>
 #include <openssl/pem.h>
-#include <openssl/core_names.h>
 #include <openssl/rand.h>
 #include <openssl/hmac.h>
 #include <openssl/asn1t.h>
@@ -46,8 +44,6 @@
 #define MAXLEN_PROFILE 160
 #define MAXLEN_CTX_ATTRIBUTE_VALUE 2000
 #define PERSONALITY_NAME_LENGTH_MAX 1024
-#define CURVENAME_LENGTH_MAX 64
-#define CHUNK_LEN 512
 #define SERIALIZE_PATH_LEN_MAX 200
 
 /* Supported profiles */
@@ -139,27 +135,6 @@ bool add_personality_attribute_list_item
     const bool b_trusted,
     gta_errinfo_t * p_errinfo
 );
-
-/*
- * Helper function, returning the number of bits of a private key.
- * It is intended to be used in order to check if the properties
- * of a personality matches the expectations of a profile.
- */
-int pkey_bits(const EVP_PKEY *evp_private_key);
-
-/*
- * Helper function, returning the OpenSSL curve NID of an EC private key.
- * It is intended to be used in order to check if the properties
- * of a personality matches the expectations of a profile.
- * Returns 0 in case of error.
- */
-int pkey_ec_nid(const EVP_PKEY *evp_private_key);
-
-/* Helper function, returning an OpenSSL EVP_PKEY from DER encoded buffer. */
-EVP_PKEY * get_pkey_from_der(unsigned char * p_der_content, const size_t der_size, gta_errinfo_t * p_errinfo);
-
-/* Helper function to read the whole input from gtaio_istream_t into a buffer */
-bool read_input_buffer (gtaio_istream_t * data, unsigned char ** pp_data, size_t * p_data_size, gta_errinfo_t * p_errinfo);
 
 struct profile_function_list_t {
     bool (*context_open)(struct gta_sw_provider_context_params_t *, gta_errinfo_t *);
