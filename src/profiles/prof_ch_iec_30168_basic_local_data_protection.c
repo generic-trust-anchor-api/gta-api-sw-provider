@@ -5,6 +5,7 @@
 
 #include <gta_api/gta_api.h>
 #include "../gta_sw_provider.h"
+#include "prof_helper_functions.h"
 
 #define LOCAL_DATA_PROTECTION_SECRET_LEN 32
 #define LOCAL_DATA_PROTECTION_KEY_DERIVATION_LEN 32

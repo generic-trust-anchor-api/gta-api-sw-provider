@@ -6,6 +6,7 @@
 #include <gta_api/gta_api.h>
 #include <gta_api/util/gta_memset.h>
 #include "../gta_sw_provider.h"
+#include "prof_helper_functions.h"
 
 #define PROFILE_MIN_PASSCODE_LEN 16
 
