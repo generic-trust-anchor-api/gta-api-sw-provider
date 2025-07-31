@@ -7,6 +7,7 @@
 
 gta_sw_provider_files = files (
   'gta_sw_provider.c',
+  'helper_functions.c',
   'persistent_storage.c',
   'provider_data_model.c',
   'key_management.c',
