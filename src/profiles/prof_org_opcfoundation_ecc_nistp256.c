@@ -300,26 +300,20 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_enroll,
     sk_X509_EXTENSION_push(exts, ext);   
     X509_REQ_add_extensions(x509_req, exts);
 
-    ret_val = X509_REQ_set_pubkey(x509_req, p_key);
-    if (1 != ret_val) {
-        goto internal_err;
-    }
-
+    /* set pub key of x509 req */
     /* set sign key of x509 req */
-    ret_val = X509_REQ_sign(x509_req, p_key, EVP_sha256());
-    if (0 >= ret_val) {
+    if ((1 != X509_REQ_set_pubkey(x509_req, p_key)) ||
+        (0 >= X509_REQ_sign(x509_req, p_key, EVP_sha256()))) {
+        goto internal_err;
+    }      
+    
+    int len = i2d_X509_REQ(x509_req, &p_buffer_out); 
+    size_t buffer_idx_out = (size_t)len;
+    if ((len < 0) ||
+        (buffer_idx_out != p_personality_enrollment_info->write(p_personality_enrollment_info, (char *)p_buffer_out, buffer_idx_out, p_errinfo))) {
         goto internal_err;
     }
     
-    int len = i2d_X509_REQ(x509_req, &p_buffer_out);    
-    if (len < 0) {
-        goto internal_err;
-    }
-
-    size_t buffer_idx_out = (size_t)len;
-    if (buffer_idx_out != p_personality_enrollment_info->write(p_personality_enrollment_info, (char *)p_buffer_out, buffer_idx_out, p_errinfo)) {    
-          goto internal_err;
-    }
     p_personality_enrollment_info->finish(p_personality_enrollment_info, 0, p_errinfo);    
 
     ret = true;
@@ -359,21 +353,18 @@ GTA_SWP_DEFINE_FUNCTION(bool, authenticate_data_detached,
     /* get Personality of the Context */
     p_personality_content = p_context_params->p_personality_item->p_personality_content;
 
-    /* Create the Message Digest Context */
-    if (!(mdctx = EVP_MD_CTX_new()))
-    {
-        goto internal_err;
-    }
-
     evp_private_key = get_pkey_from_der(p_personality_content->secret_data, p_personality_content->secret_data_size, p_errinfo);
     if (NULL == evp_private_key) {            
         goto cleanup;
     }
 
+    /* Create the Message Digest Context */
     /* Initialise the DigestSign operation - SHA-256 */
-    if (1 != EVP_DigestSignInit(mdctx, NULL, EVP_sha256(), NULL, evp_private_key)) {            
+    if ((!(mdctx = EVP_MD_CTX_new())) ||
+        (1 != EVP_DigestSignInit(mdctx, NULL, EVP_sha256(), NULL, evp_private_key)))
+    {
         goto internal_err;
-    }
+    }    
 
     /* get Data to sign */
     while (!data->eof(data, p_errinfo)) {
@@ -385,17 +376,11 @@ GTA_SWP_DEFINE_FUNCTION(bool, authenticate_data_detached,
     }
 
     /* Obtain the length of the signature before being calculated */
-    if (1 != EVP_DigestSignFinal(mdctx, NULL, &signature_len)) {
-        goto internal_err;
-    }
-
     /* Allocate memory for the signature based on size in signature_len */
-    if (!(signature = OPENSSL_malloc(sizeof(unsigned char) * (signature_len)))) {
-        goto internal_err;
-    }
-
     /* Obtain the signature */
-    if (1 != EVP_DigestSignFinal(mdctx, signature, &signature_len)) {
+    if ((1 != EVP_DigestSignFinal(mdctx, NULL, &signature_len)) ||
+        (!(signature = OPENSSL_malloc(sizeof(unsigned char) * (signature_len)))) ||
+        (1 != EVP_DigestSignFinal(mdctx, signature, &signature_len))) {
         goto internal_err;
     }
     
@@ -413,13 +398,11 @@ GTA_SWP_DEFINE_FUNCTION(bool, authenticate_data_detached,
         goto internal_err;
     }
 
-    if (P256_COORDINATE_LEN != BN_bn2binpad(pr, signature, P256_COORDINATE_LEN)) {
+    if ((P256_COORDINATE_LEN != BN_bn2binpad(pr, signature, P256_COORDINATE_LEN)) ||
+        (P256_COORDINATE_LEN != BN_bn2binpad(ps, signature + P256_COORDINATE_LEN, P256_COORDINATE_LEN))) {
         goto internal_err;
     }
 
-    if (P256_COORDINATE_LEN != BN_bn2binpad(ps, signature + P256_COORDINATE_LEN, P256_COORDINATE_LEN)) {
-        goto internal_err;
-    }
     signature_len = P256_COORDINATE_LEN * 2;
 
     seal->write(seal, (const char*)signature, signature_len, p_errinfo);
