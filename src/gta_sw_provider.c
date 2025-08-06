@@ -40,6 +40,7 @@ extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anc
 extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_jwt;
 extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_signature;
 extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_enroll;
+extern const struct profile_function_list_t fl_prof_org_opcfoundation_ecc_nistp256;
 
 struct profile_list_t {
     const char name[MAXLEN_PROFILE];
@@ -48,9 +49,9 @@ struct profile_list_t {
 
 /* Supported profiles */
 #ifdef ENABLE_PQC
-#define NUM_PROFILES 11
+#define NUM_PROFILES 12
 #else
-#define NUM_PROFILES 10
+#define NUM_PROFILES 11
 #endif
 static struct profile_list_t supported_profiles[NUM_PROFILES] = {
     [PROF_INVALID] = {"INVALID", &fl_null},
@@ -67,6 +68,7 @@ static struct profile_list_t supported_profiles[NUM_PROFILES] = {
     /* The following is only an alias of com.github.generic-trust-anchor-api.basic.signature and does not have its own implementation. */
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = {"com.github.generic-trust-anchor-api.basic.tls", &fl_prof_com_github_generic_trust_anchor_api_basic_signature},
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL] = {"com.github.generic-trust-anchor-api.basic.enroll", &fl_prof_com_github_generic_trust_anchor_api_basic_enroll},
+    [PROF_ORG_OPCFOUNDATION_ECC_NISTP256] = {"org.opcfoundation.ECC-nistP256", &fl_prof_org_opcfoundation_ecc_nistp256},
 };
 
 struct provider_instance_auth_token_t {
@@ -139,7 +141,7 @@ static char pers_attr_type_strings[NUM_PERSONALITY_ATTRIBUTE_TYPE][MAXLEN_PERSON
     [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3] = "ch.iec.30168.trustlist.certificate.trusted.x509v3",
     [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_AUXILIARY_X509] = "ch.iec.30168.trustlist.certificate.auxiliary.x509",
     [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_LIST_RFC8446] = "ch.iec.30168.trustlist.certificate_list.rfc8446",
-    [PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL] = "com.github.generic-trust-anchor-api.keytype.openssl",
+    [PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL] = "com.github.generic-trust-anchor-api.keytype.openssl",      
 };
 
 static bool pers_attr_type_trusted[NUM_PERSONALITY_ATTRIBUTE_TYPE] = {
@@ -151,7 +153,7 @@ static bool pers_attr_type_trusted[NUM_PERSONALITY_ATTRIBUTE_TYPE] = {
     [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3] = true,
     [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_AUXILIARY_X509] = false,
     [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_LIST_RFC8446] = false,
-    [PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL] = true, /* it is an internal attribute, anyway not allowed to be changed */
+    [PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL] = true, /* it is an internal attribute, anyway not allowed to be changed */    
 };
 
 /*
@@ -168,7 +170,7 @@ static bool pers_attr_type_restricted[NUM_PERSONALITY_ATTRIBUTE_TYPE] = {
     [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3] = false,
     [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_AUXILIARY_X509] = false,
     [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_LIST_RFC8446] = false,
-    [PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL] = true,
+    [PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL] = true,    
 };
 
 /* attribute related defines */
