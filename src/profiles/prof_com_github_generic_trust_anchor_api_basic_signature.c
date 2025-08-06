@@ -5,6 +5,7 @@
 
 #include <gta_api/gta_api.h>
 #include "../gta_sw_provider.h"
+#include "prof_helper_functions.h"
 
 #ifdef ENABLE_PQC
 #define OQS_SIGN_ALGORITHM OQS_SIG_alg_dilithium_2
