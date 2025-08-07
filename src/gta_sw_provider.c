@@ -72,6 +72,47 @@ static struct profile_list_t supported_profiles[NUM_PROFILES] = {
     [PROF_ORG_OPCFOUNDATION_ECC_NISTP256] = {"org.opcfoundation.ECC-nistP256", &fl_prof_org_opcfoundation_ecc_nistp256},
 };
 
+char pers_attr_type_strings[NUM_PERSONALITY_ATTRIBUTE_TYPE][MAXLEN_PERSONALITY_ATTRIBUTE_TYPE] = {
+    [PAT_INVALID] = "INVALID",
+    [PAT_CH_IEC_30168_IDENTIFIER] = "ch.iec.30168.identifier",
+    [PAT_CH_IEC_30168_FINGERPRINT] = "ch.iec.30168.fingerprint",
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509] = "ch.iec.30168.trustlist.certificate.self.x509",
+    [PAT_CH_IEC_30168_TRUSTLIST_CRL_X509V3] = "ch.iec.30168.trustlist.crl.x509v3",
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3] = "ch.iec.30168.trustlist.certificate.trusted.x509v3",
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_AUXILIARY_X509] = "ch.iec.30168.trustlist.certificate.auxiliary.x509",
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_LIST_RFC8446] = "ch.iec.30168.trustlist.certificate_list.rfc8446",
+    [PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL] = "com.github.generic-trust-anchor-api.keytype.openssl",
+};
+
+bool pers_attr_type_trusted[NUM_PERSONALITY_ATTRIBUTE_TYPE] = {
+    [PAT_INVALID] = false,
+    [PAT_CH_IEC_30168_IDENTIFIER] = true, /* it is an internal attribute, anyway not allowed to be changed */
+    [PAT_CH_IEC_30168_FINGERPRINT] = true, /* it is an internal attribute, anyway not allowed to be changed */
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509] = false,
+    [PAT_CH_IEC_30168_TRUSTLIST_CRL_X509V3] = false,
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3] = true,
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_AUXILIARY_X509] = false,
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_LIST_RFC8446] = false,
+    [PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL] = true, /* it is an internal attribute, anyway not allowed to be changed */
+};
+
+/*
+ * This table defines which personality attribute types are not allowed
+ * (restricted) to be added, deactivated and deleted by the respective GTA API
+ * functions.
+ */
+bool pers_attr_type_restricted[NUM_PERSONALITY_ATTRIBUTE_TYPE] = {
+    [PAT_INVALID] = false,
+    [PAT_CH_IEC_30168_IDENTIFIER] = true,
+    [PAT_CH_IEC_30168_FINGERPRINT] = true,
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509] = false,
+    [PAT_CH_IEC_30168_TRUSTLIST_CRL_X509V3] = false,
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3] = false,
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_AUXILIARY_X509] = false,
+    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_LIST_RFC8446] = false,
+    [PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL] = true,
+};
+
 /*
  * Helper function to get enum value of a profile string. In case the string is
  * not found, 0 (PROF_INVALID) is returned.

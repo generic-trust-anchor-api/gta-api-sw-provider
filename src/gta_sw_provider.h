@@ -64,6 +64,16 @@ enum profile_t {
     PROF_ORG_OPCFOUNDATION_ECC_NISTP256,
 };
 
+#define NUM_PERSONALITY_ATTRIBUTE_TYPE 9
+
+/* attribute related defines */
+#define PERS_ATTR_NAME_IDENTIFIER       "ch.iec.30168.identifier_value"
+#define PERS_ATTR_NAME_FINGERPRINT      "ch.iec.30168.fingerprint"
+
+extern char pers_attr_type_strings[NUM_PERSONALITY_ATTRIBUTE_TYPE][MAXLEN_PERSONALITY_ATTRIBUTE_TYPE];
+extern bool pers_attr_type_trusted[NUM_PERSONALITY_ATTRIBUTE_TYPE];
+extern bool pers_attr_type_restricted[NUM_PERSONALITY_ATTRIBUTE_TYPE];
+
 /*
  * Personality Attribute Types
  * Todo: The list only needs to contain personality attribute types which are

@@ -5,109 +5,12 @@
 
 #include "helper_functions.h"
 
-#define NUM_PERSONALITY_ATTRIBUTE_TYPE 9
-char pers_attr_type_strings[NUM_PERSONALITY_ATTRIBUTE_TYPE][MAXLEN_PERSONALITY_ATTRIBUTE_TYPE] = {
-    [PAT_INVALID] = "INVALID",
-    [PAT_CH_IEC_30168_IDENTIFIER] = "ch.iec.30168.identifier",
-    [PAT_CH_IEC_30168_FINGERPRINT] = "ch.iec.30168.fingerprint",
-    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509] = "ch.iec.30168.trustlist.certificate.self.x509",
-    [PAT_CH_IEC_30168_TRUSTLIST_CRL_X509V3] = "ch.iec.30168.trustlist.crl.x509v3",
-    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3] = "ch.iec.30168.trustlist.certificate.trusted.x509v3",
-    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_AUXILIARY_X509] = "ch.iec.30168.trustlist.certificate.auxiliary.x509",
-    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_LIST_RFC8446] = "ch.iec.30168.trustlist.certificate_list.rfc8446",
-    [PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL] = "com.github.generic-trust-anchor-api.keytype.openssl",
-};
-
-bool pers_attr_type_trusted[NUM_PERSONALITY_ATTRIBUTE_TYPE] = {
-    [PAT_INVALID] = false,
-    [PAT_CH_IEC_30168_IDENTIFIER] = true, /* it is an internal attribute, anyway not allowed to be changed */
-    [PAT_CH_IEC_30168_FINGERPRINT] = true, /* it is an internal attribute, anyway not allowed to be changed */
-    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509] = false,
-    [PAT_CH_IEC_30168_TRUSTLIST_CRL_X509V3] = false,
-    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3] = true,
-    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_AUXILIARY_X509] = false,
-    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_LIST_RFC8446] = false,
-    [PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL] = true, /* it is an internal attribute, anyway not allowed to be changed */
-};
-
-/*
- * This table defines which personality attribute types are not allowed
- * (restricted) to be added, deactivated and deleted by the respective GTA API
- * functions.
- */
-bool pers_attr_type_restricted[NUM_PERSONALITY_ATTRIBUTE_TYPE] = {
-    [PAT_INVALID] = false,
-    [PAT_CH_IEC_30168_IDENTIFIER] = true,
-    [PAT_CH_IEC_30168_FINGERPRINT] = true,
-    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_SELF_X509] = false,
-    [PAT_CH_IEC_30168_TRUSTLIST_CRL_X509V3] = false,
-    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3] = false,
-    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_AUXILIARY_X509] = false,
-    [PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_LIST_RFC8446] = false,
-    [PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL] = true,
-};
-
-
-/*
- * Helper function to get enum value of personality attribute type string. In
- * case the string is not found, 0 (PAT_INVALID) is returned.
- */
-enum pers_attr_type_t get_pers_attr_type_enum(const char * attrtype)
-{
-    for (uint32_t i=0; i < NUM_PERSONALITY_ATTRIBUTE_TYPE; ++i) {
-        if (0 == strcmp(attrtype, pers_attr_type_strings[i])) {
-            return i;
-        }
-    }
-    return PAT_INVALID;
-}
-
 void gta_sw_provider_free_params(void * p_params)
 {
     /* p_params have been allocated using gta_secmem_calloc() an
        are released automatically.
        Since there are no additional resources there's nothing
        to do at the moment. */
-}
-
-
-/* used with list_find() to find a identifier list item by the identifier name */
-bool identifier_list_item_cmp_name(void * p_list_item, void * p_item_crit)
-{
-    struct identifier_list_item_t * p_identifier_list_item = p_list_item;
-    gta_identifier_value_t identifier_value = p_item_crit;
-
-    if (0 == strcmp(p_identifier_list_item->name, identifier_value)) {
-        return true;
-    }
-
-    return false;
-}
-
-/* used with list_find() to find a personality list item by the personality name */
-bool personality_list_item_cmp_name(void * p_list_item, void * p_item_crit)
-{
-    struct personality_name_list_item_t * p_personality_name_list_item = p_list_item;
-    gta_personality_name_t personality_name = p_item_crit;
-
-    if (0 == strcmp(p_personality_name_list_item->personality_name, personality_name)) {
-        return true;
-    }
-
-    return false;
-}
-
-/* used with list_find() to find an attribute list item by the attribute name */
-bool attribute_list_item_cmp_name(void * p_list_item, void * p_item_crit)
-{
-    struct personality_attribute_t * p_personality_attribute = p_list_item;
-    char * p_attribute_name = p_item_crit;
-
-    if (0 == strcmp(p_personality_attribute->p_name, p_attribute_name)) {
-        return true;
-    }
-
-    return false;
 }
 
 /*
@@ -158,39 +61,152 @@ bool check_context_params
     return ret;
 }
 
-/* Helper function to get the fingerprint of a personality specified by name */
-bool get_personality_fingerprint(
-    struct personality_name_list_item_t * p_personality_name_list,
-    const gta_personality_name_t personality_name,
-    gta_personality_fingerprint_t * target_personality_fingerprint,
+
+/*
+ * Helper function to get enum value of personality attribute type string. In
+ * case the string is not found, 0 (PAT_INVALID) is returned.
+ */
+enum pers_attr_type_t get_pers_attr_type_enum(const char * attrtype)
+{
+    for (uint32_t i=0; i < NUM_PERSONALITY_ATTRIBUTE_TYPE; ++i) {
+        if (0 == strcmp(attrtype, pers_attr_type_strings[i])) {
+            return i;
+        }
+    }
+    return PAT_INVALID;
+}
+
+/*
+ * Helper function to create and add a new list item for a personality attribute
+ * (personality_attribute_t). Input validation and range checks are done by
+ * caller.
+ */
+bool add_personality_attribute_list_item(
+    struct gta_sw_provider_params_t * p_provider_params,
+    struct personality_attribute_t ** p_pers_attribute_list,
+    const enum pers_attr_type_t attrtype,
+    const unsigned char * attrname,
+    const size_t attrname_len,
+    const unsigned char * attrval,
+    const size_t attrval_len,
+    const bool b_trusted,
+    gta_errinfo_t * p_errinfo
+    )
+{
+    struct personality_attribute_t * p_personality_attribute = NULL;
+    gta_errinfo_t errinfo_tmp = GTA_ERROR_INTERNAL_ERROR;
+
+    /* allocate memory for personality attribute list item */
+    if (!(p_personality_attribute = gta_secmem_calloc(p_provider_params->h_ctx,
+        1, sizeof(struct personality_attribute_t), p_errinfo))) {
+
+        *p_errinfo = GTA_ERROR_MEMORY;
+        goto err;
+    }
+    p_personality_attribute->p_next = NULL;
+    p_personality_attribute->type = attrtype;
+    p_personality_attribute->activated = true;
+    p_personality_attribute->trusted = b_trusted;
+
+    /* allocate memory for attribute value (and additional null-terminator) */
+    p_personality_attribute->data_size = attrval_len;
+    if (!(p_personality_attribute->p_data = gta_secmem_calloc(p_provider_params->h_ctx, 1, attrval_len + 1, p_errinfo))) {
+        *p_errinfo = GTA_ERROR_MEMORY;
+        goto err;
+    }
+    /* copy attribute value */
+    memcpy(p_personality_attribute->p_data, attrval, attrval_len);
+    /* add null-terminator explicitly */
+    p_personality_attribute->p_data[attrval_len] = '\0';
+
+    /* allocate memory for attribute name (and additional null-terminator) */
+    if (!(p_personality_attribute->p_name = gta_secmem_calloc(p_provider_params->h_ctx, 1, attrname_len + 1, p_errinfo))) {
+        *p_errinfo = GTA_ERROR_MEMORY;
+        goto err;
+    }
+    memcpy(p_personality_attribute->p_name, attrname, attrname_len);
+    /* add null-terminator explicitly */
+    p_personality_attribute->p_name[attrname_len] = '\0';
+
+    /* add the attribute */
+    list_append_front((struct list_t **)(p_pers_attribute_list),p_personality_attribute);
+
+    return true;
+err:
+    personality_attribute_list_item_free(p_provider_params->h_ctx, p_personality_attribute, &errinfo_tmp);
+    return false;
+}
+
+/*
+ * Helper function for gta_sw_provider_gta_personality_remove_attribute
+ * and gta_sw_provider_gta_personality_deactivate_attribute to find a
+ * personality attribute by name with two additional conditions: it has to be
+ * activated and a non default attribute.
+ */
+bool find_activated_nondefault_attribute(
+    struct gta_sw_provider_context_params_t * p_context_params,
+    struct personality_attribute_t ** p_attribute,
+    const gta_personality_attribute_name_t attrname,
     gta_errinfo_t * p_errinfo
 )
 {
-   struct personality_name_list_item_t * p_personality;
-   const struct personality_attribute_t * p_personality_attribute;
-
-    p_personality = list_find(  (struct list_t *)p_personality_name_list,
-                                personality_name,
-                                personality_list_item_cmp_name);
-    if (NULL != p_personality) {
-        p_personality_attribute = list_find((struct list_t *) p_personality->p_personality_content->p_attribute_list,
-                                            (unsigned char *)PERS_ATTR_NAME_FINGERPRINT,
-                                            attribute_list_item_cmp_name);
-        if(NULL != p_personality_attribute) {
-            memcpy (*target_personality_fingerprint, p_personality_attribute->p_data, p_personality_attribute->data_size);
-
-        } else {
-            *p_errinfo = GTA_ERROR_ATTRIBUTE_MISSING;
-            return false;
-        }
-    } else {
+    /* Find attribute_list_item with requested name and check whether it is activated */
+    *p_attribute = list_find((struct list_t *)(p_context_params->p_personality_item->p_personality_content->p_attribute_list),
+                            attrname, attribute_list_item_cmp_name);
+    if ((NULL == *p_attribute) || (!(*p_attribute)->activated)) {
         *p_errinfo = GTA_ERROR_ITEM_NOT_FOUND;
         return false;
     }
+
+    /* Restricted attributes (default and internal) are ignored */
+    if (pers_attr_type_restricted[(*p_attribute)->type]) {
+        *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
+        *p_attribute = NULL;
+        return false;
+    }
+
     return true;
 }
 
 
+/* used with list_find() to find an attribute list item by the attribute name */
+bool attribute_list_item_cmp_name(void * p_list_item, void * p_item_crit)
+{
+    struct personality_attribute_t * p_personality_attribute = p_list_item;
+    char * p_attribute_name = p_item_crit;
+
+    if (0 == strcmp(p_personality_attribute->p_name, p_attribute_name)) {
+        return true;
+    }
+
+    return false;
+}
+
+/* used with list_find() to find a identifier list item by the identifier name */
+bool identifier_list_item_cmp_name(void * p_list_item, void * p_item_crit)
+{
+    struct identifier_list_item_t * p_identifier_list_item = p_list_item;
+    gta_identifier_value_t identifier_value = p_item_crit;
+
+    if (0 == strcmp(p_identifier_list_item->name, identifier_value)) {
+        return true;
+    }
+
+    return false;
+}
+
+/* used with list_find() to find a personality list item by the personality name */
+bool personality_list_item_cmp_name(void * p_list_item, void * p_item_crit)
+{
+    struct personality_name_list_item_t * p_personality_name_list_item = p_list_item;
+    gta_personality_name_t personality_name = p_item_crit;
+
+    if (0 == strcmp(p_personality_name_list_item->personality_name, personality_name)) {
+        return true;
+    }
+
+    return false;
+}
 
 
 bool find_access_token(void *p_item, void *p_item_crit) {
@@ -370,27 +386,6 @@ err:
     return ret;
 }
 
-/* Helper function to create a new device state. Serialization is done by caller */
-bool create_new_devicestate(struct gta_sw_provider_params_t * p_provider_params, gta_errinfo_t * p_errinfo)
-{
-    struct devicestate_stack_item_t * p_devicestate_stack_item = NULL;
-
-    p_devicestate_stack_item = gta_secmem_calloc(p_provider_params->h_ctx, 1, sizeof(struct devicestate_stack_item_t), p_errinfo);
-    if (NULL == p_devicestate_stack_item) {
-        *p_errinfo = GTA_ERROR_MEMORY;
-        return false;
-    }
-
-    p_devicestate_stack_item->p_next = NULL;
-    p_devicestate_stack_item->p_auth_recede_info_list = NULL;
-    p_devicestate_stack_item->owner_lock_count = 0;
-    p_devicestate_stack_item->p_identifier_list = NULL;
-    p_devicestate_stack_item->p_personality_name_list = NULL;
-    list_append_front((struct list_t **)(&(p_provider_params->p_devicestate_stack)), p_devicestate_stack_item);
-    return true;
-}
-
-
 /*
  * Helper routine that performs the copy operation of authentication information to
  * the access policy data structure. Memory allocation and error checks are performed.
@@ -477,95 +472,55 @@ err:
 }
 
 
-/*
- * Helper function to create and add a new list item for a personality attribute
- * (personality_attribute_t). Input validation and range checks are done by
- * caller.
- */
-bool add_personality_attribute_list_item(
-    struct gta_sw_provider_params_t * p_provider_params,
-    struct personality_attribute_t ** p_pers_attribute_list,
-    const enum pers_attr_type_t attrtype,
-    const unsigned char * attrname,
-    const size_t attrname_len,
-    const unsigned char * attrval,
-    const size_t attrval_len,
-    const bool b_trusted,
-    gta_errinfo_t * p_errinfo
-    )
+/* Helper function to create a new device state. Serialization is done by caller */
+bool create_new_devicestate(struct gta_sw_provider_params_t * p_provider_params, gta_errinfo_t * p_errinfo)
 {
-    struct personality_attribute_t * p_personality_attribute = NULL;
-    gta_errinfo_t errinfo_tmp = GTA_ERROR_INTERNAL_ERROR;
+    struct devicestate_stack_item_t * p_devicestate_stack_item = NULL;
 
-    /* allocate memory for personality attribute list item */
-    if (!(p_personality_attribute = gta_secmem_calloc(p_provider_params->h_ctx,
-        1, sizeof(struct personality_attribute_t), p_errinfo))) {
-
+    p_devicestate_stack_item = gta_secmem_calloc(p_provider_params->h_ctx, 1, sizeof(struct devicestate_stack_item_t), p_errinfo);
+    if (NULL == p_devicestate_stack_item) {
         *p_errinfo = GTA_ERROR_MEMORY;
-        goto err;
+        return false;
     }
-    p_personality_attribute->p_next = NULL;
-    p_personality_attribute->type = attrtype;
-    p_personality_attribute->activated = true;
-    p_personality_attribute->trusted = b_trusted;
 
-    /* allocate memory for attribute value (and additional null-terminator) */
-    p_personality_attribute->data_size = attrval_len;
-    if (!(p_personality_attribute->p_data = gta_secmem_calloc(p_provider_params->h_ctx, 1, attrval_len + 1, p_errinfo))) {
-        *p_errinfo = GTA_ERROR_MEMORY;
-        goto err;
-    }
-    /* copy attribute value */
-    memcpy(p_personality_attribute->p_data, attrval, attrval_len);
-    /* add null-terminator explicitly */
-    p_personality_attribute->p_data[attrval_len] = '\0';
-
-    /* allocate memory for attribute name (and additional null-terminator) */
-    if (!(p_personality_attribute->p_name = gta_secmem_calloc(p_provider_params->h_ctx, 1, attrname_len + 1, p_errinfo))) {
-        *p_errinfo = GTA_ERROR_MEMORY;
-        goto err;
-    }
-    memcpy(p_personality_attribute->p_name, attrname, attrname_len);
-    /* add null-terminator explicitly */
-    p_personality_attribute->p_name[attrname_len] = '\0';
-
-    /* add the attribute */
-    list_append_front((struct list_t **)(p_pers_attribute_list),p_personality_attribute);
-
+    p_devicestate_stack_item->p_next = NULL;
+    p_devicestate_stack_item->p_auth_recede_info_list = NULL;
+    p_devicestate_stack_item->owner_lock_count = 0;
+    p_devicestate_stack_item->p_identifier_list = NULL;
+    p_devicestate_stack_item->p_personality_name_list = NULL;
+    list_append_front((struct list_t **)(&(p_provider_params->p_devicestate_stack)), p_devicestate_stack_item);
     return true;
-err:
-    personality_attribute_list_item_free(p_provider_params->h_ctx, p_personality_attribute, &errinfo_tmp);
-    return false;
 }
 
 
-/*
- * Helper function for gta_sw_provider_gta_personality_remove_attribute
- * and gta_sw_provider_gta_personality_deactivate_attribute to find a
- * personality attribute by name with two additional conditions: it has to be
- * activated and a non default attribute.
- */
-bool find_activated_nondefault_attribute(
-    struct gta_sw_provider_context_params_t * p_context_params,
-    struct personality_attribute_t ** p_attribute,
-    const gta_personality_attribute_name_t attrname,
+/* Helper function to get the fingerprint of a personality specified by name */
+bool get_personality_fingerprint(
+    struct personality_name_list_item_t * p_personality_name_list,
+    const gta_personality_name_t personality_name,
+    gta_personality_fingerprint_t * target_personality_fingerprint,
     gta_errinfo_t * p_errinfo
 )
 {
-    /* Find attribute_list_item with requested name and check whether it is activated */
-    *p_attribute = list_find((struct list_t *)(p_context_params->p_personality_item->p_personality_content->p_attribute_list),
-                            attrname, attribute_list_item_cmp_name);
-    if ((NULL == *p_attribute) || (!(*p_attribute)->activated)) {
+   struct personality_name_list_item_t * p_personality;
+   const struct personality_attribute_t * p_personality_attribute;
+
+    p_personality = list_find(  (struct list_t *)p_personality_name_list,
+                                personality_name,
+                                personality_list_item_cmp_name);
+    if (NULL != p_personality) {
+        p_personality_attribute = list_find((struct list_t *) p_personality->p_personality_content->p_attribute_list,
+                                            (unsigned char *)PERS_ATTR_NAME_FINGERPRINT,
+                                            attribute_list_item_cmp_name);
+        if(NULL != p_personality_attribute) {
+            memcpy (*target_personality_fingerprint, p_personality_attribute->p_data, p_personality_attribute->data_size);
+
+        } else {
+            *p_errinfo = GTA_ERROR_ATTRIBUTE_MISSING;
+            return false;
+        }
+    } else {
         *p_errinfo = GTA_ERROR_ITEM_NOT_FOUND;
         return false;
     }
-
-    /* Restricted attributes (default and internal) are ignored */
-    if (pers_attr_type_restricted[(*p_attribute)->type]) {
-        *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
-        *p_attribute = NULL;
-        return false;
-    }
-
     return true;
 }
