@@ -69,8 +69,8 @@ static struct profile_list_t supported_profiles[NUM_PROFILES] = {
     /* The following is only an alias of com.github.generic-trust-anchor-api.basic.signature and does not have its own implementation. */
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = {"com.github.generic-trust-anchor-api.basic.tls", &fl_prof_com_github_generic_trust_anchor_api_basic_signature},
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL] = {"com.github.generic-trust-anchor-api.basic.enroll", &fl_prof_com_github_generic_trust_anchor_api_basic_enroll},
+    [PROF_ORG_OPCFOUNDATION_ECC_NISTP256] = {"org.opcfoundation.ECC-nistP256", &fl_prof_org_opcfoundation_ecc_nistp256},
 };
-
 
 /*
  * Helper function to get enum value of a profile string. In case the string is
