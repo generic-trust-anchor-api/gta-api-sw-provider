@@ -986,7 +986,6 @@ static void profile_local_integrity_only(void ** state)
     assert_true(myio_close_ifilestream(&istream_data_to_seal, &errinfo));
     assert_int_equal(0, errinfo);
 
-#if 0
     /* Positive test for gta_verify_data_detached */
     assert_true(myio_open_ifilestream(&istream_data_to_seal, TEST_DATA_PAYLOAD, &errinfo));
     assert_int_equal(0, errinfo);
@@ -1032,7 +1031,6 @@ static void profile_local_integrity_only(void ** state)
 
     assert_true(myio_close_ifilestream(&istream_data_to_seal, &errinfo));
     assert_int_equal(0, errinfo);    
-#endif
 
     assert_true(gta_context_close(h_ctx, &errinfo));
     assert_int_equal(0, errinfo);   

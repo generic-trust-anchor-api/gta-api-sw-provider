@@ -257,12 +257,6 @@ err:
     return ret;
 }
 
-
-/*
-authenticate_data_detached(data) { HMAC_SHA256(data, pers) } -> ICV (as raw data or as DER encoded ASN1?)
-verify(data, ICV) {HMAC_SHA256(data, pers)-> ICV_new and compare(ICV_new, ICV) } -> ok/not ok
-*/
-
 GTA_SWP_DEFINE_FUNCTION(bool, authenticate_data_detached,
 (
     struct gta_sw_provider_context_params_t * p_context_params,
