@@ -551,7 +551,13 @@ static bool decode_attributes(
         QCBORDecode_GetBoolInMapSZ(p_decode_ctx, LABEL_ATTRIBUTE_TRUSTED, &p_attribute_list_item->trusted);
 
         /* Decode attribute type */
-        QCBORDecode_GetUInt64InMapSZ(p_decode_ctx, LABEL_ATTRIBUTE_TYPE, (uint64_t *)&p_attribute_list_item->type);
+        uint64_t tmp_value = 0;
+        QCBORDecode_GetUInt64InMapSZ(p_decode_ctx, LABEL_ATTRIBUTE_TYPE, &tmp_value);
+        /* Range check */
+        if (UINT32_MAX < tmp_value) {
+            goto err;
+        }
+        p_attribute_list_item->type = (uint32_t)tmp_value;
 
         /* Decode attribute data */
         UsefulBufC tmp_bytes;
@@ -608,8 +614,18 @@ static bool auth_info_list_deserialize(gta_context_handle_t h_ctx,
         if (NULL != (p_auth_item = gta_secmem_calloc(h_ctx,
                         1, sizeof(struct auth_info_list_item_t), p_errinfo))) {
             p_auth_item->p_next = NULL;
-            QCBORDecode_GetUInt64InMapSZ(p_decode_ctx,
-                LABEL_AUTH_ITEM_TYPE, (uint64_t *)&(p_auth_item->type));
+
+            uint64_t tmp_value = 0;
+            QCBORDecode_GetUInt64InMapSZ(p_decode_ctx, LABEL_AUTH_ITEM_TYPE, (uint64_t *)&(p_auth_item->type));
+            /*
+             * Range check. We assume the compiler choses uint as data type for
+             * the enum. As the possible values are small enough anyways, it may
+             * be better to do a more conservative range check.
+             */
+            if (UINT_MAX < tmp_value) {
+                goto err;
+            }
+            p_auth_item->type = (unsigned int)tmp_value;
 
             switch (p_auth_item->type) {
                 case GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL:
@@ -767,7 +783,17 @@ static bool personality_content_deserialize(
     QCBORDecode_EnterMap(&perso_decode_ctx, &Item);
 
     /* Decode personality type */
-    QCBORDecode_GetUInt64InMapSZ(&perso_decode_ctx, LABEL_PERSONALITY_TYPE, (uint64_t *)&p_personality->secret_type);
+    uint64_t tmp_value = 0;
+    QCBORDecode_GetUInt64InMapSZ(&perso_decode_ctx, LABEL_PERSONALITY_TYPE, &tmp_value);
+    /*
+    * Range check. We assume the compiler choses uint as data type for
+    * the enum. As the possible values are small enough anyways, it may
+    * be better to do a more conservative range check.
+    */
+    if (UINT_MAX < tmp_value) {
+        goto err;
+    }
+    p_personality->secret_type = (unsigned int)tmp_value;
 
     /* Decode personality content */
     UsefulBufC tmp_bytes;
@@ -1067,7 +1093,13 @@ static bool decode_devicestates(
         QCBORDecode_ExitArray(p_decode_ctx);
 
         /* Decode Owner Lock Count */
-        QCBORDecode_GetUInt64InMapSZ(p_decode_ctx, LABEL_DEVICE_STATE_LOCK, (uint64_t *)&p_devicestack_item->owner_lock_count);
+        uint64_t tmp_value = 0;
+        QCBORDecode_GetUInt64InMapSZ(p_decode_ctx, LABEL_DEVICE_STATE_LOCK, &tmp_value);
+        /* Range check */
+        if (UINT8_MAX < tmp_value) {
+            goto err;
+        }
+        p_devicestack_item->owner_lock_count = (uint8_t)tmp_value;
 
         /* Decode Identifiers */
         QCBORDecode_EnterArrayFromMapSZ(p_decode_ctx, LABEL_IDENTIFIERS);
