@@ -20,14 +20,14 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_open,
 
     if (SECRET_TYPE_RAW_BYTES != p_context_params->p_personality_item->p_personality_content->secret_type)
     {
-        DEBUG_PRINT(("gta_sw_provider_gta_context_open: Personality type not as expected\n"));
-        *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        DEBUG_PRINT(("gta_sw_provider_gta_context_open: personality secret type not as expected\n"));
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
     /* Check secret length */
     if (LOCAL_DATA_INTEGRITY_ONLY_SECRET_LEN != p_context_params->p_personality_item->p_personality_content->secret_data_size) {
-        DEBUG_PRINT(("gta_sw_provider_gta_context_open: Profile requirements not fulfilled \n"));
-        *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        DEBUG_PRINT(("gta_sw_provider_gta_context_open: personality secret size not as expected\n"));
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
     ret = true;
@@ -50,10 +50,6 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_create,
 {
     *p_pers_secret_length = LOCAL_DATA_INTEGRITY_ONLY_SECRET_LEN;
     *p_pers_secret_buffer = OPENSSL_zalloc(*p_pers_secret_length);
-
-    DEBUG_PRINT(("Anne personality_create\n"));
-
-
     if ((NULL == *p_pers_secret_buffer) || (1 != RAND_bytes(*p_pers_secret_buffer, (int)*p_pers_secret_length))) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         return false;
@@ -340,32 +336,18 @@ GTA_SWP_DEFINE_FUNCTION(bool, verify_data_detached,
     p_personality_content = p_context_params->p_personality_item->p_personality_content;
 
     /* Read whole input into buffer */
-    if (!read_input_buffer(data, &p_buffer_in, &buffer_idx_in, p_errinfo)) {
+    if ((!read_input_buffer(data, &p_buffer_in, &buffer_idx_in, p_errinfo)) || 
+        (!read_input_buffer(seal, &p_icv_ref, &icv_ref_len, p_errinfo))) {
         goto err;
-    }
+    }    
 
-    /* Read whole input into buffer */
-    if (!read_input_buffer(seal, &p_icv_ref, &icv_ref_len, p_errinfo)) {
-        goto err;
-    }
-
-    /* Range check on buffer_idx_in */
-    if (buffer_idx_in > LONG_MAX) {
+    /* Range checks */
+    if ((buffer_idx_in > LONG_MAX) ||
+        (p_personality_content->secret_data_size > INT_MAX) ||
+        (LOCAL_DATA_INTEGRITY_ONLY_ICV_LEN < EVP_MD_size(EVP_sha256()))) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
-    }
-    
-    /* Range check on p_personality_content->content_data_size */
-    if (p_personality_content->secret_data_size > INT_MAX) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
-    }
-
-     /* check size of icv */    
-    if (LOCAL_DATA_INTEGRITY_ONLY_ICV_LEN < EVP_MD_size(EVP_sha256())) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
-    }
+    }    
 
     /* Calculate ICV over data with HMAC SHA256 and the personality secret */
     if ((NULL == HMAC(EVP_sha256(), p_personality_content->secret_data,
