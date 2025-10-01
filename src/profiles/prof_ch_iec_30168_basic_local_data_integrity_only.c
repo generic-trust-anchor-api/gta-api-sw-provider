@@ -18,18 +18,14 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_open,
 {
     bool ret = false;
 
-    if (SECRET_TYPE_RAW_BYTES != p_context_params->p_personality_item->p_personality_content->secret_type)
+    if ((SECRET_TYPE_RAW_BYTES != p_context_params->p_personality_item->p_personality_content->secret_type) || 
+        (LOCAL_DATA_INTEGRITY_ONLY_SECRET_LEN != p_context_params->p_personality_item->p_personality_content->secret_data_size))
     {
-        DEBUG_PRINT(("gta_sw_provider_gta_context_open: personality secret type not as expected\n"));
+        DEBUG_PRINT(("gta_sw_provider_gta_context_open: personality secret type or size not as expected\n"));
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
-    /* Check secret length */
-    if (LOCAL_DATA_INTEGRITY_ONLY_SECRET_LEN != p_context_params->p_personality_item->p_personality_content->secret_data_size) {
-        DEBUG_PRINT(("gta_sw_provider_gta_context_open: personality secret size not as expected\n"));
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
-    }
+    
     ret = true;
 
 err:
@@ -112,17 +108,12 @@ GTA_SWP_DEFINE_FUNCTION(bool, seal_data,
     /* Encode data */
     ASN1_OCTET_STRING_set(asn1_data.data, p_buffer_in, (int)buffer_idx_in);
 
-    /* Range check on p_personality_content->content_data_size */
-    if (p_personality_content->secret_data_size > INT_MAX) {
+    /* Range checks */
+    if ((p_personality_content->secret_data_size > INT_MAX) ||
+        (LOCAL_DATA_INTEGRITY_ONLY_ICV_LEN < EVP_MD_size(EVP_sha256()))) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
-    }
-    
-    /* check size of icv */    
-    if (LOCAL_DATA_INTEGRITY_ONLY_ICV_LEN < EVP_MD_size(EVP_sha256())) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
-    }
+    }    
 
     /* Calculate ICV over data with HMAC SHA256 and the personality secret */
     if ((NULL == HMAC(EVP_sha256(), p_personality_content->secret_data,
@@ -203,14 +194,9 @@ GTA_SWP_DEFINE_FUNCTION(bool, unseal_data,
     const unsigned char * p_icv_ref = ASN1_STRING_get0_data(p_asn1_data->icv);
     int icv_ref_len = ASN1_STRING_length(p_asn1_data->icv);
 
-    /* Range check on p_personality_content->content_data_size */
-    if (p_personality_content->secret_data_size > INT_MAX) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
-    }
-
-     /* check size of icv */    
-    if (LOCAL_DATA_INTEGRITY_ONLY_ICV_LEN < EVP_MD_size(EVP_sha256())) {
+    /* Range checks */
+    if ((p_personality_content->secret_data_size > INT_MAX) || 
+        (LOCAL_DATA_INTEGRITY_ONLY_ICV_LEN < EVP_MD_size(EVP_sha256()))) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
@@ -279,18 +265,13 @@ GTA_SWP_DEFINE_FUNCTION(bool, authenticate_data_detached,
         goto err;
     }
 
-    /* Range check on p_personality_content->content_data_size */
-    if (p_personality_content->secret_data_size > INT_MAX) {
+    /* Range checks */
+    if ((p_personality_content->secret_data_size > INT_MAX) || 
+        (LOCAL_DATA_INTEGRITY_ONLY_ICV_LEN < EVP_MD_size(EVP_sha256()))) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
-    }
+    }   
     
-    /* check size of icv */    
-    if (LOCAL_DATA_INTEGRITY_ONLY_ICV_LEN < EVP_MD_size(EVP_sha256())) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
-    }
-
     /* Calculate ICV over data with HMAC SHA256 and the personality secret */
     if ((NULL == HMAC(EVP_sha256(), p_personality_content->secret_data,
                      (int)p_personality_content->secret_data_size, p_buffer_in,
@@ -342,8 +323,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, verify_data_detached,
     }    
 
     /* Range checks */
-    if ((buffer_idx_in > LONG_MAX) ||
-        (p_personality_content->secret_data_size > INT_MAX) ||
+    if ((p_personality_content->secret_data_size > INT_MAX) ||
         (LOCAL_DATA_INTEGRITY_ONLY_ICV_LEN < EVP_MD_size(EVP_sha256()))) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
