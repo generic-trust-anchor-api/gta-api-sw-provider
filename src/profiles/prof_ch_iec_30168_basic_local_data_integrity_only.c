@@ -236,7 +236,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, unseal_data,
     }    
 
     /* Write output stream */
-    if (p_asn1_data->data->length != (int) data->write(data, (char *)p_data, data_len, p_errinfo)) {
+    if (p_asn1_data->data->length != (int) data->write(data, (const char *)p_data, data_len, p_errinfo)) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
