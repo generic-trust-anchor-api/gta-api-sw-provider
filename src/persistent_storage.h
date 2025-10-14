@@ -8,7 +8,7 @@
 
 #include <stdbool.h>
 #include <gta_api/gta_api.h>
-
+#include "gta_sw_provider.h"
 
 bool serialized_file_exists(const char * se_dir);
 
