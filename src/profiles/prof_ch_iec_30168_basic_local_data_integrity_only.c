@@ -3,14 +3,11 @@
  * Copyright (c) 2025, Siemens AG
  **********************************************************************/
 
-#include <gta_api/gta_api.h>
 #include "../gta_sw_provider.h"
+#include <gta_api/gta_api.h>
 
 GTA_SWP_DEFINE_FUNCTION(bool, context_open,
-(
-    struct gta_sw_provider_context_params_t * p_context_params,
-    gta_errinfo_t * p_errinfo
-))
+                        (struct gta_sw_provider_context_params_t * p_context_params, gta_errinfo_t * p_errinfo))
 {
     return true;
 }
