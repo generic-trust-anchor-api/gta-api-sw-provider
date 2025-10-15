@@ -2783,7 +2783,27 @@ static void provider_deserialize(void ** state)
     assert_non_null(h_inst);
 
     /* register a profile to trigger deserialization */
-    assert_true(gta_sw_provider_gta_register_provider(h_inst, (gtaio_istream_t*)&init_config, supported_profiles[1], &errinfo));
+    assert_true(gta_sw_provider_gta_register_provider(h_inst, (gtaio_istream_t*)&init_config, supported_profiles[PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION], &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* create a new personality to trigger serialization of deserialized state */
+    gta_access_policy_handle_t h_auth_use = GTA_HANDLE_INVALID;
+    gta_access_policy_handle_t h_auth_admin = GTA_HANDLE_INVALID;
+    struct gta_protection_properties_t protection_properties = { 0 };
+
+    h_auth_use = gta_access_policy_simple(h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL, &errinfo);
+    h_auth_admin = h_auth_use;
+    assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
+
+    assert_true(gta_personality_create(h_inst,
+                                       IDENTIFIER1_VALUE,
+                                       "deserialization_test_pers",
+                                       "provider_test",
+                                       supported_profiles[PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION],
+                                       h_auth_use,
+                                       h_auth_admin,
+                                       protection_properties,
+                                       &errinfo));
     assert_int_equal(0, errinfo);
 
     assert_true(gta_instance_final(h_inst, &errinfo));
