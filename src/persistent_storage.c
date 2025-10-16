@@ -10,6 +10,7 @@
 #include <gta_api/util/gta_list.h>
 #include <gta_api/util/gta_memset.h>
 #include "gta_sw_provider.h"
+#include "helper_functions.h"
 
 #include "gta_debug.h"
 
@@ -187,21 +188,6 @@ err:
 err1:
     return ret;
 }
-
-
-/* used with list_find() to find an identifier list item by the identifier name */
-static bool identifier_list_item_cmp_name(void * p_list_item, void * p_item_crit)
-{
-    struct identifier_list_item_t * p_identifier_list_item = p_list_item;
-    gta_identifier_value_t identifier_value = p_item_crit;
-
-    if (0 == strcmp(p_identifier_list_item->name, identifier_value)) {
-        return true;
-    }
-
-    return false;
-}
-
 
 static void auth_info_list_serialize(QCBOREncodeContext * p_encode_ctx,
                               const struct auth_info_list_item_t * p_auth_list)
