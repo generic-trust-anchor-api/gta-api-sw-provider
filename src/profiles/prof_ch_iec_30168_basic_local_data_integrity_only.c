@@ -18,11 +18,16 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_open,
 {
     bool ret = false;
 
-    if ((SECRET_TYPE_RAW_BYTES != p_context_params->p_personality_item->p_personality_content->secret_type) || 
-        (LOCAL_DATA_INTEGRITY_ONLY_SECRET_LEN != p_context_params->p_personality_item->p_personality_content->secret_data_size))
+    if (SECRET_TYPE_RAW_BYTES != p_context_params->p_personality_item->p_personality_content->secret_type)
     {
-        DEBUG_PRINT(("gta_sw_provider_gta_context_open: personality secret type or size not as expected\n"));
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        DEBUG_PRINT(("gta_sw_provider_gta_context_open: personality secret type not as expected\n"));
+        *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        goto err;
+    }
+    /* Check secret length */
+    if (LOCAL_DATA_INTEGRITY_ONLY_SECRET_LEN != p_context_params->p_personality_item->p_personality_content->secret_data_size) {
+        DEBUG_PRINT(("gta_sw_provider_gta_context_open: personality secret data size not as expected \n"));
+        *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
         goto err;
     }
     
@@ -103,17 +108,24 @@ GTA_SWP_DEFINE_FUNCTION(bool, seal_data,
 
     /* Initialize data structure */
     asn1_data.data = ASN1_OCTET_STRING_new();
-    asn1_data.icv = ASN1_OCTET_STRING_new();
-    
-    /* Encode data */
-    ASN1_OCTET_STRING_set(asn1_data.data, p_buffer_in, (int)buffer_idx_in);
+    asn1_data.icv = ASN1_OCTET_STRING_new();    
 
+    if ((NULL == asn1_data.data) ||
+        (NULL == asn1_data.icv)) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        goto err; 
+    }
+    
     /* Range checks */
     if ((p_personality_content->secret_data_size > INT_MAX) ||
-        (LOCAL_DATA_INTEGRITY_ONLY_ICV_LEN < EVP_MD_size(EVP_sha256()))) {
+        (LOCAL_DATA_INTEGRITY_ONLY_ICV_LEN < EVP_MD_size(EVP_sha256())) ||
+        (buffer_idx_in > INT_MAX)) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }    
+
+    /* Encode data */
+    ASN1_OCTET_STRING_set(asn1_data.data, p_buffer_in, (int)buffer_idx_in);
 
     /* Calculate ICV over data with HMAC SHA256 and the personality secret */
     if ((NULL == HMAC(EVP_sha256(), p_personality_content->secret_data,
