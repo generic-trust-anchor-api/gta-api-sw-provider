@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: Copyright 2025 Siemens
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Security Policy
 
 The Generic Trust Anchor API community takes the security of its code

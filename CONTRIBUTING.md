@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: Copyright 2025 Siemens
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Contribution Guidelines
 
 Thank you for considering contributing to our project! To maintain a high standard of quality and consistency, please follow these guidelines when making contributions.
