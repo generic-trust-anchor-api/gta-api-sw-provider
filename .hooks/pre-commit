@@ -1,10 +1,8 @@
 #!/bin/bash
-#;**********************************************************************;
+
+# SPDX-FileCopyrightText: Copyright 2025 Siemens
+#
 # SPDX-License-Identifier: Apache-2.0
-#
-# Copyright (c) 2025, Siemens AG
-#
-#;**********************************************************************;
 
 # Select files to format
 files=$(git diff --cached --name-only | grep -E '\.(c|h)$')

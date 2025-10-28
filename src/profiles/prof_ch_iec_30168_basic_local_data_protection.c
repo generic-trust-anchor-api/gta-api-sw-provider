@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: Apache-2.0 */
-/**********************************************************************
- * Copyright (c) 2025, Siemens AG
- **********************************************************************/
+/*
+ * SPDX-FileCopyrightText: Copyright 2025 Siemens
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #include "../gta_sw_provider.h"
 #include "prof_helper_functions.h"

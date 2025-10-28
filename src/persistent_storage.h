@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: Apache-2.0 */
-/**********************************************************************
- * Copyright (c) 2024, Siemens AG
- **********************************************************************/
+/*
+ * SPDX-FileCopyrightText: Copyright 2024 Siemens
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #ifndef PROVIDER_MOCKUP_GTA_PROVIDER_PERSISTENT_STORAGE_NEW_H_
 #define PROVIDER_MOCKUP_GTA_PROVIDER_PERSISTENT_STORAGE_NEW_H_
