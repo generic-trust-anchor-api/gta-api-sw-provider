@@ -56,7 +56,7 @@ struct profile_list_t {
 static struct profile_list_t supported_profiles[NUM_PROFILES] = {
     [PROF_INVALID] = {"INVALID", &fl_null},
     [PROF_CH_IEC_30168_BASIC_PASSCODE] = {"ch.iec.30168.basic.passcode", &fl_prof_ch_iec_30168_basic_passcode},
-    [PROF_CH_IEC_30168_BASIC_LOCAL_DATA_INTEGRITY_ONLY] = {"ch.iec.30168.basic.local_integrity_only", &fl_prof_ch_iec_30168_basic_local_data_integrity_only},
+    [PROF_CH_IEC_30168_BASIC_LOCAL_DATA_INTEGRITY_ONLY] = {"ch.iec.30168.basic.local_data_integrity_only", &fl_prof_ch_iec_30168_basic_local_data_integrity_only},
     [PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION] = {"ch.iec.30168.basic.local_data_protection", &fl_prof_ch_iec_30168_basic_local_data_protection},
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA] = {"com.github.generic-trust-anchor-api.basic.rsa", &fl_prof_com_github_generic_trust_anchor_api_basic_rsa},
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC] = {"com.github.generic-trust-anchor-api.basic.ec", &fl_prof_com_github_generic_trust_anchor_api_basic_ec},
@@ -3120,13 +3120,33 @@ GTA_DEFINE_FUNCTION(bool, gta_sw_provider_gta_verify_data_detached,
     gta_errinfo_t * p_errinfo
     ))
 {
-    bool ret = false;
+    struct gta_sw_provider_context_params_t * p_context_params = NULL;
+    struct gta_sw_provider_params_t * p_provider_params = NULL;
 
-    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    p_context_params = gta_context_get_params(h_ctx, p_errinfo);
+    if (!check_context_params(p_context_params, p_errinfo)) {
+        return false;
+    }
 
-    /* ... */
+    p_provider_params = gta_context_get_provider_params(h_ctx, p_errinfo);
+    if (!check_provider_params(p_provider_params, p_errinfo)) {
+        return false;
+    }
 
-    return ret;
+    /* check whether function is supported by profile */
+    if (NULL == supported_profiles[p_context_params->profile].pFunction->verify_data_detached) {
+        DEBUG_PRINT(("gta_sw_provider_gta_verify_data_detached: Profile not supported\n"));
+        *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
+        return false;
+    }
+
+    /* check access condition */
+    if (!check_access_permission(p_context_params, p_provider_params, GTA_ACCESS_TOKEN_USAGE_USE, p_errinfo)) {
+        return false;
+    }
+
+    /* call profile specific implementation */
+    return supported_profiles[p_context_params->profile].pFunction->verify_data_detached(p_context_params, data, seal, p_errinfo);    
 }
 
 
