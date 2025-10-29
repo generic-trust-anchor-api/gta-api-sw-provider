@@ -98,7 +98,7 @@ struct personality_t {
 
     /* provider specific – TBD */
     size_t secret_data_size;
-    unsigned char* secret_data;
+    unsigned char * secret_data;
 };
 
 /* authentication information */
@@ -113,64 +113,62 @@ struct auth_info_list_item_t {
 };
 
 /* free an Attribute of a Personality */
-bool personality_attribute_list_item_free(gta_context_handle_t h_ctx,
-                                          struct personality_attribute_t * p_attribute_item,
-                                          gta_errinfo_t * p_errinfo
-);
-
+bool personality_attribute_list_item_free(
+    gta_context_handle_t h_ctx,
+    struct personality_attribute_t * p_attribute_item,
+    gta_errinfo_t * p_errinfo);
 
 /* free the list of Attributes of a Personality */
-bool personality_attribute_list_destroy(gta_context_handle_t h_ctx,
-                                        struct personality_attribute_t * p_attribute_list_head,
-                                        gta_errinfo_t * p_errinfo
-);
+bool personality_attribute_list_destroy(
+    gta_context_handle_t h_ctx,
+    struct personality_attribute_t * p_attribute_list_head,
+    gta_errinfo_t * p_errinfo);
 
 /* free personality content */
-bool personality_content_free(gta_context_handle_t h_ctx,
-                              struct personality_t * p_personality_content,
-                              gta_errinfo_t * p_errinfo
-);
+bool personality_content_free(
+    gta_context_handle_t h_ctx,
+    struct personality_t * p_personality_content,
+    gta_errinfo_t * p_errinfo);
 
 /* free a Personality */
-bool personality_name_list_item_free(gta_context_handle_t h_ctx,
-                                     struct personality_name_list_item_t * p_personality_name_item,
-                                     gta_errinfo_t * p_errinfo
-);
+bool personality_name_list_item_free(
+    gta_context_handle_t h_ctx,
+    struct personality_name_list_item_t * p_personality_name_item,
+    gta_errinfo_t * p_errinfo);
 
 /* free the list of Personalities */
-bool personality_name_list_destroy(gta_context_handle_t h_ctx,
-                                   struct personality_name_list_item_t * p_personality_name_list_head,
-                                   gta_errinfo_t * p_errinfo
-);
+bool personality_name_list_destroy(
+    gta_context_handle_t h_ctx,
+    struct personality_name_list_item_t * p_personality_name_list_head,
+    gta_errinfo_t * p_errinfo);
 
 /* free an Identifier */
-bool identifier_list_item_free(gta_context_handle_t h_ctx,
-                               struct identifier_list_item_t * p_identifier_item,
-                               gta_errinfo_t * p_errinfo
-);
+bool identifier_list_item_free(
+    gta_context_handle_t h_ctx,
+    struct identifier_list_item_t * p_identifier_item,
+    gta_errinfo_t * p_errinfo);
 
 /* free the list of Identifiers */
-bool identifier_list_destroy(gta_context_handle_t h_ctx,
-                             struct identifier_list_item_t * p_identifier_list_head,
-                             gta_errinfo_t * p_errinfo
-);
+bool identifier_list_destroy(
+    gta_context_handle_t h_ctx,
+    struct identifier_list_item_t * p_identifier_list_head,
+    gta_errinfo_t * p_errinfo);
 /* free a Device State */
-bool devicestate_stack_list_item_free(gta_context_handle_t h_ctx,
-                                      struct devicestate_stack_item_t * p_devicestate_stack_item,
-                                      gta_errinfo_t * p_errinfo
-);
+bool devicestate_stack_list_item_free(
+    gta_context_handle_t h_ctx,
+    struct devicestate_stack_item_t * p_devicestate_stack_item,
+    gta_errinfo_t * p_errinfo);
 
 /* free the list of Device States */
-bool devicestate_stack_list_destroy(gta_context_handle_t h_ctx,
-                                    struct devicestate_stack_item_t * p_devicestate_stack_head,
-                                    gta_errinfo_t * p_errinfo
-);
+bool devicestate_stack_list_destroy(
+    gta_context_handle_t h_ctx,
+    struct devicestate_stack_item_t * p_devicestate_stack_head,
+    gta_errinfo_t * p_errinfo);
 
 /* free the list of auth info */
-bool auth_info_list_destroy(gta_context_handle_t h_ctx,
-                            struct auth_info_list_item_t * p_auth_info_list_head,
-                            gta_errinfo_t * p_errinfo
-);
+bool auth_info_list_destroy(
+    gta_context_handle_t h_ctx,
+    struct auth_info_list_item_t * p_auth_info_list_head,
+    gta_errinfo_t * p_errinfo);
 
 #endif /* PROVIDER_DATA_MODEL_H */
-

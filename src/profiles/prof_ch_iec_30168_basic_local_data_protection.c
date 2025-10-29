@@ -3,31 +3,30 @@
  * Copyright (c) 2025, Siemens AG
  **********************************************************************/
 
-#include <gta_api/gta_api.h>
 #include "../gta_sw_provider.h"
 #include "prof_helper_functions.h"
+#include <gta_api/gta_api.h>
 
 #define LOCAL_DATA_PROTECTION_SECRET_LEN 32
 #define LOCAL_DATA_PROTECTION_KEY_DERIVATION_LEN 32
 #define LOCAL_DATA_PROTECTION_IV_LEN 12
 #define LOCAL_DATA_PROTECTION_TAG_LEN 16
 
-GTA_SWP_DEFINE_FUNCTION(bool, context_open,
-(
-    struct gta_sw_provider_context_params_t * p_context_params,
-    gta_errinfo_t * p_errinfo
-))
+GTA_SWP_DEFINE_FUNCTION(
+    bool,
+    context_open,
+    (struct gta_sw_provider_context_params_t * p_context_params, gta_errinfo_t * p_errinfo))
 {
     bool ret = false;
 
-    if (SECRET_TYPE_RAW_BYTES != p_context_params->p_personality_item->p_personality_content->secret_type)
-    {
+    if (SECRET_TYPE_RAW_BYTES != p_context_params->p_personality_item->p_personality_content->secret_type) {
         DEBUG_PRINT(("gta_sw_provider_gta_context_open: Personality type not as expected\n"));
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
         goto err;
     }
     /* Check secret length */
-    if (LOCAL_DATA_PROTECTION_SECRET_LEN != p_context_params->p_personality_item->p_personality_content->secret_data_size) {
+    if (LOCAL_DATA_PROTECTION_SECRET_LEN !=
+        p_context_params->p_personality_item->p_personality_content->secret_data_size) {
         DEBUG_PRINT(("gta_sw_provider_gta_context_open: Profile requirements not fulfilled \n"));
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
         goto err;
@@ -38,17 +37,17 @@ err:
     return ret;
 }
 
-GTA_SWP_DEFINE_FUNCTION(bool, personality_create,
-(
-    struct gta_sw_provider_params_t * p_provider_params,
-    gta_personality_name_t personality_name,
-    personality_secret_type_t * p_pers_secret_type,
-    unsigned char ** p_pers_secret_buffer,
-    size_t * p_pers_secret_length,
-    gta_personality_fingerprint_t pers_fingerprint,
-    struct personality_attribute_t ** p_pers_attribute,
-    gta_errinfo_t * p_errinfo
-))
+GTA_SWP_DEFINE_FUNCTION(
+    bool,
+    personality_create,
+    (struct gta_sw_provider_params_t * p_provider_params,
+     gta_personality_name_t personality_name,
+     personality_secret_type_t * p_pers_secret_type,
+     unsigned char ** p_pers_secret_buffer,
+     size_t * p_pers_secret_length,
+     gta_personality_fingerprint_t pers_fingerprint,
+     struct personality_attribute_t ** p_pers_attribute,
+     gta_errinfo_t * p_errinfo))
 {
     *p_pers_secret_length = LOCAL_DATA_PROTECTION_SECRET_LEN;
     *p_pers_secret_buffer = OPENSSL_zalloc(*p_pers_secret_length);
@@ -67,50 +66,51 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_create,
 }
 
 typedef struct {
-    ASN1_OCTET_STRING *key;
-    ASN1_OCTET_STRING *iv;
-    ASN1_OCTET_STRING *tag;
-    ASN1_OCTET_STRING *data;
+    ASN1_OCTET_STRING * key;
+    ASN1_OCTET_STRING * iv;
+    ASN1_OCTET_STRING * tag;
+    ASN1_OCTET_STRING * data;
 } ProtectedData;
 
-ASN1_SEQUENCE(ProtectedData) = {
-    ASN1_SIMPLE(ProtectedData, key, ASN1_OCTET_STRING),
-    ASN1_SIMPLE(ProtectedData, iv, ASN1_OCTET_STRING),
-    ASN1_SIMPLE(ProtectedData, tag, ASN1_OCTET_STRING),
-    ASN1_SIMPLE(ProtectedData, data, ASN1_OCTET_STRING),
+ASN1_SEQUENCE(ProtectedData) =
+    {
+        ASN1_SIMPLE(ProtectedData, key, ASN1_OCTET_STRING),
+        ASN1_SIMPLE(ProtectedData, iv, ASN1_OCTET_STRING),
+        ASN1_SIMPLE(ProtectedData, tag, ASN1_OCTET_STRING),
+        ASN1_SIMPLE(ProtectedData, data, ASN1_OCTET_STRING),
 } ASN1_SEQUENCE_END(ProtectedData)
 
-IMPLEMENT_ASN1_FUNCTIONS(ProtectedData)
+        IMPLEMENT_ASN1_FUNCTIONS(ProtectedData)
 
-GTA_SWP_DEFINE_FUNCTION(bool, seal_data,
-(
-    struct gta_sw_provider_context_params_t * p_context_params,
-    gtaio_istream_t * data,
-    gtaio_ostream_t * protected_data,
-    gta_errinfo_t * p_errinfo
-))
+            GTA_SWP_DEFINE_FUNCTION(
+                bool,
+                seal_data,
+                (struct gta_sw_provider_context_params_t * p_context_params,
+                 gtaio_istream_t * data,
+                 gtaio_ostream_t * protected_data,
+                 gta_errinfo_t * p_errinfo))
 {
     bool ret = false;
     gta_errinfo_t errinfo_tmp;
     const struct personality_t * p_personality_content = NULL;
 
-    EVP_MD_CTX *mdctx = NULL;
-    EVP_PKEY *evp_private_key = NULL;
+    EVP_MD_CTX * mdctx = NULL;
+    EVP_PKEY * evp_private_key = NULL;
 
-    ProtectedData p_data = { NULL };
+    ProtectedData p_data = {NULL};
     unsigned int size = 0;
     int len = 0;
     unsigned char * p_buffer_in = NULL;
     size_t buffer_idx_in = 0;
     unsigned char * p_buffer_out = NULL;
     size_t buffer_idx_out = 0;
-    unsigned char *encoded_data = NULL;
+    unsigned char * encoded_data = NULL;
     int encoded_len = 0;
-    EVP_CIPHER_CTX *gcmctx = NULL;
-    unsigned char key_derivation[LOCAL_DATA_PROTECTION_KEY_DERIVATION_LEN] = { 0 };
-    unsigned char iv[LOCAL_DATA_PROTECTION_IV_LEN] = { 0 };
-    unsigned char tag[LOCAL_DATA_PROTECTION_TAG_LEN] = { 0 };
-    unsigned char *key = NULL;
+    EVP_CIPHER_CTX * gcmctx = NULL;
+    unsigned char key_derivation[LOCAL_DATA_PROTECTION_KEY_DERIVATION_LEN] = {0};
+    unsigned char iv[LOCAL_DATA_PROTECTION_IV_LEN] = {0};
+    unsigned char tag[LOCAL_DATA_PROTECTION_TAG_LEN] = {0};
+    unsigned char * key = NULL;
 
     /* get personality of the context */
     p_personality_content = p_context_params->p_personality_item->p_personality_content;
@@ -134,8 +134,12 @@ GTA_SWP_DEFINE_FUNCTION(bool, seal_data,
     ASN1_OCTET_STRING_set(p_data.key, key_derivation, LOCAL_DATA_PROTECTION_KEY_DERIVATION_LEN);
 
     /* Allocate memory for the key to be derived (return value of
-        * EVP_CIPHER_get_key_length always >= 0) */
-    key = gta_secmem_calloc(p_context_params->h_ctx, (size_t)EVP_CIPHER_get_key_length(EVP_aes_256_gcm()), sizeof(unsigned char), p_errinfo);
+     * EVP_CIPHER_get_key_length always >= 0) */
+    key = gta_secmem_calloc(
+        p_context_params->h_ctx,
+        (size_t)EVP_CIPHER_get_key_length(EVP_aes_256_gcm()),
+        sizeof(unsigned char),
+        p_errinfo);
     if (NULL == key) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
@@ -147,9 +151,14 @@ GTA_SWP_DEFINE_FUNCTION(bool, seal_data,
         goto err;
     }
     /* Derive a key from the personality secret */
-    HMAC(EVP_sha256(), p_personality_content->secret_data,
-        (int)p_personality_content->secret_data_size, key_derivation,
-        LOCAL_DATA_PROTECTION_KEY_DERIVATION_LEN, key, &size);
+    HMAC(
+        EVP_sha256(),
+        p_personality_content->secret_data,
+        (int)p_personality_content->secret_data_size,
+        key_derivation,
+        LOCAL_DATA_PROTECTION_KEY_DERIVATION_LEN,
+        key,
+        &size);
 
     /* EVP_CIPHER_get_key_length always >= 0 */
     if (size < (unsigned int)EVP_CIPHER_get_key_length(EVP_aes_256_gcm())) {
@@ -185,8 +194,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, seal_data,
         goto err;
     }
     /* Encrypt input data */
-    if(1 != EVP_EncryptUpdate(gcmctx, p_buffer_out, &len, p_buffer_in, (int)buffer_idx_in))
-    {
+    if (1 != EVP_EncryptUpdate(gcmctx, p_buffer_out, &len, p_buffer_in, (int)buffer_idx_in)) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
@@ -247,26 +255,26 @@ err:
     return ret;
 }
 
-GTA_SWP_DEFINE_FUNCTION(bool, unseal_data,
-(
-    struct gta_sw_provider_context_params_t * p_context_params,
-    gtaio_istream_t * protected_data,
-    gtaio_ostream_t * data,
-    gta_errinfo_t * p_errinfo
-))
+GTA_SWP_DEFINE_FUNCTION(
+    bool,
+    unseal_data,
+    (struct gta_sw_provider_context_params_t * p_context_params,
+     gtaio_istream_t * protected_data,
+     gtaio_ostream_t * data,
+     gta_errinfo_t * p_errinfo))
 {
     bool ret = false;
     gta_errinfo_t errinfo_tmp;
     const struct personality_t * p_personality_content = NULL;
-    ProtectedData *p_data = NULL;
+    ProtectedData * p_data = NULL;
     unsigned int size = 0;
     int len = 0;
     unsigned char * p_buffer_in = NULL;
     size_t buffer_idx_in = 0;
     unsigned char * p_buffer_out = NULL;
     size_t buffer_idx_out = 0;
-    EVP_CIPHER_CTX *gcmctx = NULL;
-    unsigned char *key = NULL;
+    EVP_CIPHER_CTX * gcmctx = NULL;
+    unsigned char * key = NULL;
 
     /* get personality of the context */
     p_personality_content = p_context_params->p_personality_item->p_personality_content;
@@ -282,7 +290,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, unseal_data,
         goto err;
     }
     /* Decode ProtectedData */
-    const unsigned char *p = p_buffer_in;
+    const unsigned char * p = p_buffer_in;
     p_data = d2i_ProtectedData(NULL, &p, (long)buffer_idx_in);
     if (NULL == p_data) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
@@ -298,8 +306,12 @@ GTA_SWP_DEFINE_FUNCTION(bool, unseal_data,
     }
 
     /* Allocate memory for the key to be derived (return value of
-        * EVP_CIPHER_get_key_length always >= 0) */
-    key = gta_secmem_calloc(p_context_params->h_ctx, (size_t)EVP_CIPHER_get_key_length(EVP_aes_256_gcm()), sizeof(unsigned char), p_errinfo);
+     * EVP_CIPHER_get_key_length always >= 0) */
+    key = gta_secmem_calloc(
+        p_context_params->h_ctx,
+        (size_t)EVP_CIPHER_get_key_length(EVP_aes_256_gcm()),
+        sizeof(unsigned char),
+        p_errinfo);
     if (NULL == key) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
@@ -311,9 +323,14 @@ GTA_SWP_DEFINE_FUNCTION(bool, unseal_data,
         goto err;
     }
     /* Derive a key from the personality secret */
-    HMAC(EVP_sha256(), p_personality_content->secret_data,
-        (int)p_personality_content->secret_data_size, p_data->key->data,
-        LOCAL_DATA_PROTECTION_KEY_DERIVATION_LEN, key, &size);
+    HMAC(
+        EVP_sha256(),
+        p_personality_content->secret_data,
+        (int)p_personality_content->secret_data_size,
+        p_data->key->data,
+        LOCAL_DATA_PROTECTION_KEY_DERIVATION_LEN,
+        key,
+        &size);
 
     /* EVP_CIPHER_get_key_length always >= 0 */
     if (size < (unsigned int)EVP_CIPHER_get_key_length(EVP_aes_256_gcm())) {
@@ -338,8 +355,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, unseal_data,
     }
 
     /* Decrypt input data */
-    if(1 != EVP_DecryptUpdate(gcmctx, p_buffer_out, &len, p_data->data->data, p_data->data->length))
-    {
+    if (1 != EVP_DecryptUpdate(gcmctx, p_buffer_out, &len, p_data->data->data, p_data->data->length)) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
@@ -354,8 +370,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, unseal_data,
     buffer_idx_out += (size_t)len;
 
     /* Check length */
-    if ((p_data->data->length < 0) ||
-        (buffer_idx_out != (size_t)p_data->data->length)) {
+    if ((p_data->data->length < 0) || (buffer_idx_out != (size_t)p_data->data->length)) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }

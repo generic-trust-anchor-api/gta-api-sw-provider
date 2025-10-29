@@ -6,39 +6,36 @@
 #ifndef GTA_SW_PROVIDER_H
 #define GTA_SW_PROVIDER_H
 
-#include <stdio.h>
-#include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #ifdef ENABLE_PQC
 #include <oqs/oqs.h>
 #endif
 
-#include <openssl/pkcs12.h>
-#include <openssl/kdf.h>
-#include <openssl/err.h>
-#include <openssl/pem.h>
-#include <openssl/rand.h>
-#include <openssl/hmac.h>
-#include <openssl/asn1t.h>
+#include "gta_debug.h"
+#include "provider_data_model.h"
+#include <gta_api/gta_api.h>
+#include <gta_api/util/gta_list.h>
 #include <openssl/asn1.h>
+#include <openssl/asn1t.h>
 #include <openssl/bio.h>
+#include <openssl/err.h>
+#include <openssl/hmac.h>
+#include <openssl/kdf.h>
+#include <openssl/pem.h>
+#include <openssl/pkcs12.h>
+#include <openssl/rand.h>
 #include <openssl/types.h>
 #include <openssl/x509.h>
 
-#include <gta_api/gta_api.h>
-#include <gta_api/util/gta_list.h>
-
-#include "gta_debug.h"
-#include "provider_data_model.h"
-
-
-#define GTA_SWP_DEFINE_FUNCTION(return_type, function_name, argument_list) \
+#define GTA_SWP_DEFINE_FUNCTION(return_type, function_name, argument_list)                                             \
     static return_type function_name argument_list
 
-#define SIZEOF(x) sizeof(x)/sizeof(x[0])
+#define SIZEOF(x) sizeof(x) / sizeof(x[0])
 
 /* Implementation specific boundary of profile name length */
 #define MAXLEN_PROFILE 160
@@ -82,7 +79,7 @@ enum pers_attr_type_t {
     PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_TRUSTED_X509V3,
     PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_AUXILIARY_X509,
     PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_LIST_RFC8446,
-    PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL,    
+    PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL,
 };
 
 /* provider instance global data */
@@ -124,8 +121,7 @@ struct gta_sw_provider_context_params_t {
  * (personality_attribute_t). Input validation and range checks are done by
  * caller.
  */
-bool add_personality_attribute_list_item
-(
+bool add_personality_attribute_list_item(
     struct gta_sw_provider_params_t * p_provider_params,
     struct personality_attribute_t ** p_pers_attribute_list,
     const enum pers_attr_type_t attrtype,
@@ -134,24 +130,57 @@ bool add_personality_attribute_list_item
     const unsigned char * attrval,
     const size_t attrval_len,
     const bool b_trusted,
-    gta_errinfo_t * p_errinfo
-);
+    gta_errinfo_t * p_errinfo);
 
 struct profile_function_list_t {
     bool (*context_open)(struct gta_sw_provider_context_params_t *, gta_errinfo_t *);
     bool (*context_close)(struct gta_sw_provider_context_params_t *, gta_errinfo_t *);
-    bool (*context_get_attribute)(struct gta_sw_provider_context_params_t *, gta_context_attribute_type_t, gtaio_ostream_t *, gta_errinfo_t *);
-    bool (*context_set_attribute)(struct gta_sw_provider_context_params_t *, gta_context_attribute_type_t, gtaio_istream_t *, gta_errinfo_t *);
-    bool (*personality_deploy)(struct gta_sw_provider_params_t *, gta_personality_name_t, gtaio_istream_t *, personality_secret_type_t *,unsigned char **, size_t *, gta_personality_fingerprint_t, struct personality_attribute_t **, gta_errinfo_t *);
-    bool (*personality_create)(struct gta_sw_provider_params_t *, gta_personality_name_t, personality_secret_type_t *,unsigned char **, size_t *, gta_personality_fingerprint_t, struct personality_attribute_t **, gta_errinfo_t *);
+    bool (*context_get_attribute)(
+        struct gta_sw_provider_context_params_t *,
+        gta_context_attribute_type_t,
+        gtaio_ostream_t *,
+        gta_errinfo_t *);
+    bool (*context_set_attribute)(
+        struct gta_sw_provider_context_params_t *,
+        gta_context_attribute_type_t,
+        gtaio_istream_t *,
+        gta_errinfo_t *);
+    bool (*personality_deploy)(
+        struct gta_sw_provider_params_t *,
+        gta_personality_name_t,
+        gtaio_istream_t *,
+        personality_secret_type_t *,
+        unsigned char **,
+        size_t *,
+        gta_personality_fingerprint_t,
+        struct personality_attribute_t **,
+        gta_errinfo_t *);
+    bool (*personality_create)(
+        struct gta_sw_provider_params_t *,
+        gta_personality_name_t,
+        personality_secret_type_t *,
+        unsigned char **,
+        size_t *,
+        gta_personality_fingerprint_t,
+        struct personality_attribute_t **,
+        gta_errinfo_t *);
     bool (*personality_enroll)(struct gta_sw_provider_context_params_t *, gtaio_ostream_t *, gta_errinfo_t *);
     bool personality_activate_deactivate_supported;
     bool personality_attribute_functions_supported;
     bool (*seal_data)(struct gta_sw_provider_context_params_t *, gtaio_istream_t *, gtaio_ostream_t *, gta_errinfo_t *);
-    bool (*unseal_data)(struct gta_sw_provider_context_params_t *, gtaio_istream_t *, gtaio_ostream_t *, gta_errinfo_t *);
+    bool (
+        *unseal_data)(struct gta_sw_provider_context_params_t *, gtaio_istream_t *, gtaio_ostream_t *, gta_errinfo_t *);
     bool (*verify)(struct gta_sw_provider_context_params_t *, gtaio_istream_t *, gta_errinfo_t *);
-    bool (*authenticate_data_detached)(struct gta_sw_provider_context_params_t *, gtaio_istream_t *, gtaio_ostream_t *, gta_errinfo_t *);
-    bool (*verify_data_detached)(struct gta_sw_provider_context_params_t *, gtaio_istream_t *, gtaio_istream_t *, gta_errinfo_t *);
+    bool (*authenticate_data_detached)(
+        struct gta_sw_provider_context_params_t *,
+        gtaio_istream_t *,
+        gtaio_ostream_t *,
+        gta_errinfo_t *);
+    bool (*verify_data_detached)(
+        struct gta_sw_provider_context_params_t *,
+        gtaio_istream_t *,
+        gtaio_istream_t *,
+        gta_errinfo_t *);
 };
 
-#endif //GTA_SW_PROVIDER_H
+#endif // GTA_SW_PROVIDER_H

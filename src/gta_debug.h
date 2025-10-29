@@ -8,12 +8,13 @@
 
 #include <stdio.h>
 
-
 #ifdef NDEBUG
-#  define DEBUG_PRINT(msg)
+#define DEBUG_PRINT(msg)
 #else
-#  define DEBUG_PRINT(msg) do { printf msg; } while(0)
+#define DEBUG_PRINT(msg)                                                                                               \
+    do {                                                                                                               \
+        printf msg;                                                                                                    \
+    } while (0)
 #endif
-
 
 #endif /* GTA_DEBUG_H */

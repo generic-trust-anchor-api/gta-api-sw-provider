@@ -3,9 +3,9 @@
  * Copyright (c) 2025, Siemens AG
  **********************************************************************/
 
-#include <gta_api/gta_api.h>
 #include "../gta_sw_provider.h"
 #include "prof_helper_functions.h"
+#include <gta_api/gta_api.h>
 
 #define CTX_ATTR_TYPE_SUBJECT_RDN "com.github.generic-trust-anchor-api.enroll.subject_rdn"
 
@@ -22,8 +22,15 @@ static bool parse_rdn_pair(char * rdn_pair, X509_NAME * name)
     if (delimiter_pos != strrchr(rdn_pair, '=')) {
         return false;
     }
-    rdn_pair[delimiter_pos-rdn_pair] = '\0';
-    if (1 != X509_NAME_add_entry_by_txt(name, rdn_pair, MBSTRING_UTF8, (const unsigned char *)value, (int)strnlen(value, MAXLEN_CTX_ATTRIBUTE_VALUE), -1, 0)) {
+    rdn_pair[delimiter_pos - rdn_pair] = '\0';
+    if (1 != X509_NAME_add_entry_by_txt(
+                 name,
+                 rdn_pair,
+                 MBSTRING_UTF8,
+                 (const unsigned char *)value,
+                 (int)strnlen(value, MAXLEN_CTX_ATTRIBUTE_VALUE),
+                 -1,
+                 0)) {
         return false;
     }
     return true;
@@ -42,7 +49,7 @@ static X509_NAME * parse_rdn(const char * subject_rdn)
     size_t len = strnlen(subject_rdn, MAXLEN_CTX_ATTRIBUTE_VALUE);
 
     /* subject_rdn string must not end with a delimiter */
-    if ((',' == subject_rdn[len-1]) || ('+' == subject_rdn[len-1]) || ('=' == subject_rdn[len-1])) {
+    if ((',' == subject_rdn[len - 1]) || ('+' == subject_rdn[len - 1]) || ('=' == subject_rdn[len - 1])) {
         return NULL;
     }
 
@@ -69,18 +76,16 @@ err:
     return NULL;
 }
 
-GTA_SWP_DEFINE_FUNCTION(bool, context_open,
-(
-    struct gta_sw_provider_context_params_t * p_context_params,
-    gta_errinfo_t * p_errinfo
-))
+GTA_SWP_DEFINE_FUNCTION(
+    bool,
+    context_open,
+    (struct gta_sw_provider_context_params_t * p_context_params, gta_errinfo_t * p_errinfo))
 {
     bool ret = false;
     struct personality_t * p_personality_content = NULL;
     EVP_PKEY * evp_private_key = NULL;
 
-    if (SECRET_TYPE_DER != p_context_params->p_personality_item->p_personality_content->secret_type)
-    {
+    if (SECRET_TYPE_DER != p_context_params->p_personality_item->p_personality_content->secret_type) {
         DEBUG_PRINT(("gta_sw_provider_gta_context_open: Personality type not as expected\n"));
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
         goto err;
@@ -88,15 +93,14 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_open,
 
     /* get the private key from the personality */
     p_personality_content = p_context_params->p_personality_item->p_personality_content;
-    unsigned char * p_secret_buffer  = p_personality_content->secret_data;
+    unsigned char * p_secret_buffer = p_personality_content->secret_data;
     /* Range check on p_personality_content->content_data_size */
     if (p_personality_content->secret_data_size > LONG_MAX) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
-    evp_private_key = d2i_AutoPrivateKey(NULL,
-                                         (const unsigned char **) &p_secret_buffer,
-                                         (long)p_personality_content->secret_data_size);
+    evp_private_key = d2i_AutoPrivateKey(
+        NULL, (const unsigned char **)&p_secret_buffer, (long)p_personality_content->secret_data_size);
     /* clear pointer */
     p_secret_buffer = NULL;
     if (NULL == evp_private_key) {
@@ -110,8 +114,8 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_open,
      * Check profile restrictions on personality:
      * Only RSA 2048 and ECC P-256 are allowed.
      */
-    if (!(((EVP_PKEY_RSA == key_id) && (2048 == pkey_bits(evp_private_key)))
-        || ((EVP_PKEY_EC == key_id) && (NID_X9_62_prime256v1 == pkey_ec_nid(evp_private_key))))) {
+    if (!(((EVP_PKEY_RSA == key_id) && (2048 == pkey_bits(evp_private_key))) ||
+          ((EVP_PKEY_EC == key_id) && (NID_X9_62_prime256v1 == pkey_ec_nid(evp_private_key))))) {
 
         DEBUG_PRINT(("gta_sw_provider_gta_context_open: Profile requirements not fulfilled \n"));
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
@@ -119,12 +123,14 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_open,
     }
 
     /* Allocate memory for context attributes */
-    p_context_params->context_attributes = gta_secmem_calloc(p_context_params->h_ctx, 1, sizeof(struct pers_enroll_attributes_t), p_errinfo);
+    p_context_params->context_attributes =
+        gta_secmem_calloc(p_context_params->h_ctx, 1, sizeof(struct pers_enroll_attributes_t), p_errinfo);
     if (NULL == p_context_params->context_attributes) {
         *p_errinfo = GTA_ERROR_MEMORY;
         goto err;
     }
-    struct pers_enroll_attributes_t * pers_enroll_attributes = (struct pers_enroll_attributes_t *) p_context_params->context_attributes;
+    struct pers_enroll_attributes_t * pers_enroll_attributes =
+        (struct pers_enroll_attributes_t *)p_context_params->context_attributes;
     pers_enroll_attributes->x509_name = NULL;
     pers_enroll_attributes->subject_rdn = NULL;
     ret = true;
@@ -134,26 +140,27 @@ err:
     return ret;
 }
 
-GTA_SWP_DEFINE_FUNCTION(bool, context_close,
-(
-    struct gta_sw_provider_context_params_t * p_context_params,
-    gta_errinfo_t * p_errinfo
-))
+GTA_SWP_DEFINE_FUNCTION(
+    bool,
+    context_close,
+    (struct gta_sw_provider_context_params_t * p_context_params, gta_errinfo_t * p_errinfo))
 {
-    struct pers_enroll_attributes_t * pers_enroll_attributes = (struct pers_enroll_attributes_t *) p_context_params->context_attributes;
+    struct pers_enroll_attributes_t * pers_enroll_attributes =
+        (struct pers_enroll_attributes_t *)p_context_params->context_attributes;
     X509_NAME_free(pers_enroll_attributes->x509_name);
     return true;
 }
 
-GTA_SWP_DEFINE_FUNCTION(bool, context_get_attribute,
-(
-    struct gta_sw_provider_context_params_t * p_context_params,
-    gta_context_attribute_type_t attrtype,
-    gtaio_ostream_t * p_attrvalue,
-    gta_errinfo_t * p_errinfo
-))
+GTA_SWP_DEFINE_FUNCTION(
+    bool,
+    context_get_attribute,
+    (struct gta_sw_provider_context_params_t * p_context_params,
+     gta_context_attribute_type_t attrtype,
+     gtaio_ostream_t * p_attrvalue,
+     gta_errinfo_t * p_errinfo))
 {
-    const struct pers_enroll_attributes_t * pers_enroll_attributes = (struct pers_enroll_attributes_t *) p_context_params->context_attributes;
+    const struct pers_enroll_attributes_t * pers_enroll_attributes =
+        (struct pers_enroll_attributes_t *)p_context_params->context_attributes;
 
     /* check whether attribute type is supported by profile */
     if (0 != strcmp(attrtype, CTX_ATTR_TYPE_SUBJECT_RDN)) {
@@ -184,16 +191,17 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_get_attribute,
     return true;
 }
 
-GTA_SWP_DEFINE_FUNCTION(bool, context_set_attribute,
-(
-    struct gta_sw_provider_context_params_t * p_context_params,
-    gta_context_attribute_type_t attrtype,
-    gtaio_istream_t * p_attrvalue,
-    gta_errinfo_t * p_errinfo
-))
+GTA_SWP_DEFINE_FUNCTION(
+    bool,
+    context_set_attribute,
+    (struct gta_sw_provider_context_params_t * p_context_params,
+     gta_context_attribute_type_t attrtype,
+     gtaio_istream_t * p_attrvalue,
+     gta_errinfo_t * p_errinfo))
 {
-    struct pers_enroll_attributes_t * pers_enroll_attributes = (struct pers_enroll_attributes_t *) p_context_params->context_attributes;
-    char attrval[MAXLEN_CTX_ATTRIBUTE_VALUE] = { 0 };
+    struct pers_enroll_attributes_t * pers_enroll_attributes =
+        (struct pers_enroll_attributes_t *)p_context_params->context_attributes;
+    char attrval[MAXLEN_CTX_ATTRIBUTE_VALUE] = {0};
     X509_NAME * x509_name = NULL;
     size_t read = 0;
 
@@ -207,7 +215,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_set_attribute,
 
     /* read context attribute value into buffer */
     read = p_attrvalue->read(p_attrvalue, attrval, MAXLEN_CTX_ATTRIBUTE_VALUE, p_errinfo);
-    if ((MAXLEN_CTX_ATTRIBUTE_VALUE == read) || ('\0' != attrval[read-1])) {
+    if ((MAXLEN_CTX_ATTRIBUTE_VALUE == read) || ('\0' != attrval[read - 1])) {
         /* attribute too long or not Null-terminated*/
         *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
         return false;
@@ -234,21 +242,22 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_set_attribute,
     return true;
 }
 
-GTA_SWP_DEFINE_FUNCTION(bool, personality_enroll,
-(
-    struct gta_sw_provider_context_params_t * p_context_params,
-    gtaio_ostream_t * p_personality_enrollment_info,
-    gta_errinfo_t * p_errinfo
-))
+GTA_SWP_DEFINE_FUNCTION(
+    bool,
+    personality_enroll,
+    (struct gta_sw_provider_context_params_t * p_context_params,
+     gtaio_ostream_t * p_personality_enrollment_info,
+     gta_errinfo_t * p_errinfo))
 {
     bool ret = false;
-    BIO* bio = NULL;
-    char* pem_data = NULL;
-    EVP_PKEY *p_key = NULL;
+    BIO * bio = NULL;
+    char * pem_data = NULL;
+    EVP_PKEY * p_key = NULL;
     X509_REQ * x509_req = NULL;
     struct personality_t * p_personality_content = NULL;
 
-    const struct pers_enroll_attributes_t * pers_enroll_attributes = (struct pers_enroll_attributes_t *) p_context_params->context_attributes;
+    const struct pers_enroll_attributes_t * pers_enroll_attributes =
+        (struct pers_enroll_attributes_t *)p_context_params->context_attributes;
 
     /* get personality of the context */
     p_personality_content = p_context_params->p_personality_item->p_personality_content;
@@ -258,10 +267,9 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_enroll,
         goto internal_err;
     }
     /* get the key from the personality */
-    unsigned char * p_secret_buffer  = p_personality_content->secret_data;
-    p_key = d2i_AutoPrivateKey(NULL,
-        (const unsigned char **) &p_secret_buffer,
-        (long)p_personality_content->secret_data_size);
+    unsigned char * p_secret_buffer = p_personality_content->secret_data;
+    p_key = d2i_AutoPrivateKey(
+        NULL, (const unsigned char **)&p_secret_buffer, (long)p_personality_content->secret_data_size);
 
     p_secret_buffer = NULL;
     if (!p_key) {
@@ -271,13 +279,13 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_enroll,
     int ret_val = 0;
     x509_req = X509_REQ_new();
     ret_val = X509_REQ_set_version(x509_req, 0);
-    if (1 != ret_val){
+    if (1 != ret_val) {
         goto internal_err;
     }
 
     /* This is optional */
-    if ((NULL != pers_enroll_attributes->x509_name)
-        && (!X509_REQ_set_subject_name(x509_req, pers_enroll_attributes->x509_name))) {
+    if ((NULL != pers_enroll_attributes->x509_name) &&
+        (!X509_REQ_set_subject_name(x509_req, pers_enroll_attributes->x509_name))) {
 
         goto internal_err;
     }

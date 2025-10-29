@@ -3,9 +3,9 @@
  * Copyright (c) 2025, Siemens AG
  **********************************************************************/
 
-#include <gta_api/gta_api.h>
 #include "../gta_sw_provider.h"
 #include "prof_helper_functions.h"
+#include <gta_api/gta_api.h>
 
 #ifdef ENABLE_PQC
 #define OQS_SIGN_ALGORITHM OQS_SIG_alg_dilithium_2
@@ -13,35 +13,36 @@
 
 /* TODO this has to be reworked, naming of variable is confusing */
 typedef struct EncryptionAlgorithm_st {
-    ASN1_OBJECT* algorithm;
+    ASN1_OBJECT * algorithm;
 } EncryptionAlgorithm;
 DECLARE_ASN1_FUNCTIONS(EncryptionAlgorithm)
 
 typedef struct PublicKeyInfo_st {
-  EncryptionAlgorithm* encryptionAlgorithm;
-  ASN1_BIT_STRING *public_key_data;
+    EncryptionAlgorithm * encryptionAlgorithm;
+    ASN1_BIT_STRING * public_key_data;
 } PublicKeyInfo;
 DECLARE_ASN1_FUNCTIONS(PublicKeyInfo)
 
-ASN1_SEQUENCE(EncryptionAlgorithm) = {
-  ASN1_SIMPLE(EncryptionAlgorithm, algorithm, ASN1_OBJECT),
+ASN1_SEQUENCE(EncryptionAlgorithm) =
+    {
+        ASN1_SIMPLE(EncryptionAlgorithm, algorithm, ASN1_OBJECT),
 } ASN1_SEQUENCE_END(EncryptionAlgorithm)
 
-IMPLEMENT_ASN1_FUNCTIONS(EncryptionAlgorithm)
+        IMPLEMENT_ASN1_FUNCTIONS(EncryptionAlgorithm)
 
-ASN1_SEQUENCE(PublicKeyInfo) = {
-  ASN1_SIMPLE(PublicKeyInfo, encryptionAlgorithm, EncryptionAlgorithm),
-  ASN1_SIMPLE(PublicKeyInfo, public_key_data, ASN1_BIT_STRING),
+            ASN1_SEQUENCE(PublicKeyInfo) =
+                {
+                    ASN1_SIMPLE(PublicKeyInfo, encryptionAlgorithm, EncryptionAlgorithm),
+                    ASN1_SIMPLE(PublicKeyInfo, public_key_data, ASN1_BIT_STRING),
 } ASN1_SEQUENCE_END(PublicKeyInfo)
 
-IMPLEMENT_ASN1_FUNCTIONS(PublicKeyInfo)
+                    IMPLEMENT_ASN1_FUNCTIONS(PublicKeyInfo)
 #endif
 
-GTA_SWP_DEFINE_FUNCTION(bool, context_open,
-(
-    struct gta_sw_provider_context_params_t * p_context_params,
-    gta_errinfo_t * p_errinfo
-))
+                        GTA_SWP_DEFINE_FUNCTION(
+                            bool,
+                            context_open,
+                            (struct gta_sw_provider_context_params_t * p_context_params, gta_errinfo_t * p_errinfo))
 {
     bool ret = false;
     const struct personality_t * p_personality_content = NULL;
@@ -50,7 +51,8 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_open,
     if (SECRET_TYPE_DER == p_context_params->p_personality_item->p_personality_content->secret_type) {
         /* get the private key from the personality */
         p_personality_content = p_context_params->p_personality_item->p_personality_content;
-        evp_private_key = get_pkey_from_der(p_personality_content->secret_data, p_personality_content->secret_data_size, p_errinfo);
+        evp_private_key =
+            get_pkey_from_der(p_personality_content->secret_data, p_personality_content->secret_data_size, p_errinfo);
         if (NULL == evp_private_key) {
             goto err;
         }
@@ -58,11 +60,11 @@ GTA_SWP_DEFINE_FUNCTION(bool, context_open,
         int key_id = EVP_PKEY_base_id(evp_private_key);
 
         /*
-        * Check profile restrictions on personality:
-        * Only RSA 2048 and ECC P-256 are allowed.
-        */
-        if (!(((EVP_PKEY_RSA == key_id) && (2048 == pkey_bits(evp_private_key)))
-            || ((EVP_PKEY_EC == key_id) && (NID_X9_62_prime256v1 == pkey_ec_nid(evp_private_key))))) {
+         * Check profile restrictions on personality:
+         * Only RSA 2048 and ECC P-256 are allowed.
+         */
+        if (!(((EVP_PKEY_RSA == key_id) && (2048 == pkey_bits(evp_private_key))) ||
+              ((EVP_PKEY_EC == key_id) && (NID_X9_62_prime256v1 == pkey_ec_nid(evp_private_key))))) {
 
             DEBUG_PRINT(("gta_sw_provider_gta_context_open: Profile requirements not fulfilled \n"));
             *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
@@ -86,27 +88,27 @@ err:
     return ret;
 }
 
-GTA_SWP_DEFINE_FUNCTION(bool, personality_enroll,
-(
-    struct gta_sw_provider_context_params_t * p_context_params,
-    gtaio_ostream_t * p_personality_enrollment_info,
-    gta_errinfo_t * p_errinfo
-))
+GTA_SWP_DEFINE_FUNCTION(
+    bool,
+    personality_enroll,
+    (struct gta_sw_provider_context_params_t * p_context_params,
+     gtaio_ostream_t * p_personality_enrollment_info,
+     gta_errinfo_t * p_errinfo))
 {
     bool ret = false;
-    BIO* bio = NULL;
+    BIO * bio = NULL;
     long len = 0;
-    char* pem_data = NULL;
-    EVP_PKEY *p_key = NULL;
+    char * pem_data = NULL;
+    EVP_PKEY * p_key = NULL;
     struct personality_t * p_personality_content = NULL;
 #ifdef ENABLE_PQC
-    OQS_SIG *signer = NULL;
-    char *base64EncodedKey = NULL;
-    PublicKeyInfo *pub_key = NULL;
-    unsigned char *publicKeyInfoString = NULL;
-    BIO *bio_sink = NULL;
-    BIO *bio_base64_converter = NULL;
-    FILE* stream = NULL;
+    OQS_SIG * signer = NULL;
+    char * base64EncodedKey = NULL;
+    PublicKeyInfo * pub_key = NULL;
+    unsigned char * publicKeyInfoString = NULL;
+    BIO * bio_sink = NULL;
+    BIO * bio_base64_converter = NULL;
+    FILE * stream = NULL;
     gta_errinfo_t errinfo_tmp = GTA_ERROR_INTERNAL_ERROR;
 #endif
 
@@ -114,7 +116,8 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_enroll,
     p_personality_content = p_context_params->p_personality_item->p_personality_content;
 
     if (SECRET_TYPE_DER == p_personality_content->secret_type) {
-        p_key = get_pkey_from_der(p_personality_content->secret_data, p_personality_content->secret_data_size, p_errinfo);
+        p_key =
+            get_pkey_from_der(p_personality_content->secret_data, p_personality_content->secret_data_size, p_errinfo);
         if (NULL == p_key) {
             goto err;
         }
@@ -140,7 +143,10 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_enroll,
             *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
             goto err;
         }
-        if (0 == ASN1_BIT_STRING_set(pub_key->public_key_data, (p_personality_content->secret_data + signer->length_secret_key), signer->length_public_key)) {
+        if (0 == ASN1_BIT_STRING_set(
+                     pub_key->public_key_data,
+                     (p_personality_content->secret_data + signer->length_secret_key),
+                     signer->length_public_key)) {
             *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
             goto err;
         }
@@ -182,19 +188,20 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_enroll,
         }
 
         /* Step 4: Add PEM header and footer and write the result to pem_data */
-        char* pub_key_begin = "-----BEGIN PUBLIC KEY-----";
-        char* pub_key_end = "-----END PUBLIC KEY-----";
+        char * pub_key_begin = "-----BEGIN PUBLIC KEY-----";
+        char * pub_key_end = "-----END PUBLIC KEY-----";
 
         /* Note: Size is incremented by 4 as we add 3 '\n' and the 0-termination */
-        size_t pem_size_calculated = strlen(pub_key_begin) + strlen(base64EncodedKey) + strlen(pub_key_end) + 4 ;
+        size_t pem_size_calculated = strlen(pub_key_begin) + strlen(base64EncodedKey) + strlen(pub_key_end) + 4;
 
         pem_data = OPENSSL_zalloc(pem_size_calculated);
         if (NULL == pem_data) {
             *p_errinfo = GTA_ERROR_MEMORY;
             goto err;
         }
-        if ((pem_size_calculated-1) != (size_t)snprintf(pem_data, pem_size_calculated,
-                    "%s\n%s\n%s\n", pub_key_begin, base64EncodedKey, pub_key_end)) {
+        if ((pem_size_calculated - 1) !=
+            (size_t)snprintf(
+                pem_data, pem_size_calculated, "%s\n%s\n%s\n", pub_key_begin, base64EncodedKey, pub_key_end)) {
             *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
             goto err;
         }
@@ -206,7 +213,8 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_enroll,
         goto err;
     }
     /* len always >= 0 */
-    if ((size_t)len != p_personality_enrollment_info->write(p_personality_enrollment_info, pem_data, (size_t)len, p_errinfo)) {
+    if ((size_t)len !=
+        p_personality_enrollment_info->write(p_personality_enrollment_info, pem_data, (size_t)len, p_errinfo)) {
         goto err;
     }
     p_personality_enrollment_info->finish(p_personality_enrollment_info, 0, p_errinfo);
@@ -234,26 +242,26 @@ err:
     return ret;
 }
 
-GTA_SWP_DEFINE_FUNCTION(bool, authenticate_data_detached,
-(
-    struct gta_sw_provider_context_params_t * p_context_params,
-    gtaio_istream_t * data,
-    gtaio_ostream_t * seal,
-    gta_errinfo_t * p_errinfo
-))
+GTA_SWP_DEFINE_FUNCTION(
+    bool,
+    authenticate_data_detached,
+    (struct gta_sw_provider_context_params_t * p_context_params,
+     gtaio_istream_t * data,
+     gtaio_ostream_t * seal,
+     gta_errinfo_t * p_errinfo))
 {
     bool ret = false;
     char payload_chunk[CHUNK_LEN];
-    unsigned char* signature = NULL;
+    unsigned char * signature = NULL;
     size_t signature_len = 0;
 
-    EVP_MD_CTX *mdctx = NULL;
-    EVP_PKEY *evp_private_key = NULL;
+    EVP_MD_CTX * mdctx = NULL;
+    EVP_PKEY * evp_private_key = NULL;
 
     struct personality_t * p_personality_content = NULL;
 
 #ifdef ENABLE_PQC
-    OQS_SIG *signer = NULL;
+    OQS_SIG * signer = NULL;
     unsigned char * p_buffer_in = NULL;
     size_t buffer_idx_in = 0;
 #endif
@@ -262,14 +270,14 @@ GTA_SWP_DEFINE_FUNCTION(bool, authenticate_data_detached,
     p_personality_content = p_context_params->p_personality_item->p_personality_content;
 
     /* Create the Message Digest Context */
-    if (!(mdctx = EVP_MD_CTX_new()))
-    {
+    if (!(mdctx = EVP_MD_CTX_new())) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
 
     if (SECRET_TYPE_DER == p_personality_content->secret_type) {
-        evp_private_key = get_pkey_from_der(p_personality_content->secret_data, p_personality_content->secret_data_size, p_errinfo);
+        evp_private_key =
+            get_pkey_from_der(p_personality_content->secret_data, p_personality_content->secret_data_size, p_errinfo);
         if (NULL == evp_private_key) {
             goto err;
         }
@@ -284,7 +292,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, authenticate_data_detached,
         while (!data->eof(data, p_errinfo)) {
             size_t read_len = data->read(data, payload_chunk, CHUNK_LEN, p_errinfo);
             /* Update with the data chunck */
-            if(1 != EVP_DigestSignUpdate(mdctx, payload_chunk, read_len)) {
+            if (1 != EVP_DigestSignUpdate(mdctx, payload_chunk, read_len)) {
                 *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
                 goto err;
             }
@@ -309,10 +317,10 @@ GTA_SWP_DEFINE_FUNCTION(bool, authenticate_data_detached,
         }
     }
 #ifdef ENABLE_PQC
-    else if (SECRET_TYPE_DILITHIUM2 == p_personality_content->secret_type){
+    else if (SECRET_TYPE_DILITHIUM2 == p_personality_content->secret_type) {
         OQS_STATUS rc;
 
-        uint8_t *private_key = (unsigned char*)(p_personality_content->secret_data);
+        uint8_t * private_key = (unsigned char *)(p_personality_content->secret_data);
 
         OQS_init();
         signer = OQS_SIG_new(OQS_SIGN_ALGORITHM);
@@ -352,7 +360,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, authenticate_data_detached,
         goto err;
     }
 
-    seal->write(seal, (const char*)signature, signature_len, p_errinfo);
+    seal->write(seal, (const char *)signature, signature_len, p_errinfo);
     seal->finish(seal, 0, p_errinfo);
 
     ret = true;
