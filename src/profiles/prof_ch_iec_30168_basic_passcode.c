@@ -140,7 +140,7 @@ GTA_SWP_DEFINE_FUNCTION(
     while (!claim->eof(claim, p_errinfo)) {
         len = claim->read(claim, p_buffer, CHUNK_LEN, p_errinfo);
         if ((0 == len) || (p_personality_content->secret_data_size < (len + buffer_idx)) ||
-            (0 != memcmp(p_personality_content->secret_data + buffer_idx, p_buffer, len))) {
+            (0 != CRYPTO_memcmp(p_personality_content->secret_data + buffer_idx, p_buffer, len))) {
 
             *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
             goto err;

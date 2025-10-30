@@ -336,7 +336,7 @@ bool find_access_token(void * p_item, void * p_item_crit)
      *   ::: Note: Here we do not test whether the policy allows a certain usage, profile, type, ...
      */
 
-    if (0 == memcmp(
+    if (0 == CRYPTO_memcmp(
                  ((struct provider_instance_auth_token_t *)p_item)->access_token,
                  (struct gta_access_token_t *)p_item_crit,
                  GTA_ACCESS_TOKEN_LEN)) {
@@ -738,7 +738,7 @@ GTA_DEFINE_FUNCTION(
      */
     if ((!p_provider_params->provider_instance_auth_token_info.issuing_token_issued) ||
         (p_provider_params->provider_instance_auth_token_info.issuing_token_revoked) ||
-        (0 != memcmp(
+        (0 != CRYPTO_memcmp(
                   p_provider_params->provider_instance_auth_token_info.issuing_token,
                   granting_token,
                   sizeof(gta_access_token_t)))) {
@@ -896,7 +896,7 @@ GTA_DEFINE_FUNCTION(
     }
 
     /* Check if access_token_tbr is issuing token */
-    if (0 == memcmp(
+    if (0 == CRYPTO_memcmp(
                  p_provider_params->provider_instance_auth_token_info.issuing_token,
                  access_token_tbr,
                  sizeof(gta_access_token_t))) {
