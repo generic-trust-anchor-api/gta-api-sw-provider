@@ -616,7 +616,7 @@ static bool auth_info_list_deserialize(gta_context_handle_t h_ctx,
             p_auth_item->p_next = NULL;
 
             uint64_t tmp_value = 0;
-            QCBORDecode_GetUInt64InMapSZ(p_decode_ctx, LABEL_AUTH_ITEM_TYPE, (uint64_t *)&(p_auth_item->type));
+            QCBORDecode_GetUInt64InMapSZ(p_decode_ctx, LABEL_AUTH_ITEM_TYPE, &tmp_value);
             /*
              * Range check. We assume the compiler choses uint as data type for
              * the enum. As the possible values are small enough anyways, it may
