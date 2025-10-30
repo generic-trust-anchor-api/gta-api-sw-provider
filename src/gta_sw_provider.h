@@ -64,6 +64,16 @@ enum profile_t {
     PROF_ORG_OPCFOUNDATION_ECC_NISTP256,
 };
 
+#define NUM_PERSONALITY_ATTRIBUTE_TYPE 9
+
+/* attribute related defines */
+#define PERS_ATTR_NAME_IDENTIFIER       "ch.iec.30168.identifier_value"
+#define PERS_ATTR_NAME_FINGERPRINT      "ch.iec.30168.fingerprint"
+
+extern char pers_attr_type_strings[NUM_PERSONALITY_ATTRIBUTE_TYPE][MAXLEN_PERSONALITY_ATTRIBUTE_TYPE];
+extern bool pers_attr_type_trusted[NUM_PERSONALITY_ATTRIBUTE_TYPE];
+extern bool pers_attr_type_restricted[NUM_PERSONALITY_ATTRIBUTE_TYPE];
+
 /*
  * Personality Attribute Types
  * Todo: The list only needs to contain personality attribute types which are
@@ -84,6 +94,45 @@ enum pers_attr_type_t {
     PAT_CH_IEC_30168_TRUSTLIST_CERTIFICATE_LIST_RFC8446,
     PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL,    
 };
+
+struct provider_instance_auth_token_t {
+    struct provider_instance_auth_token_t * p_next;
+
+    /*
+     * Mandatory token attributes
+     */
+
+    /*
+     * Object reference scope. For access tokens with
+     * usage == GTA_ACCESS_TOKEN_USAGE_RECEDE this parameter is not used and set
+     * to {0}.
+     */
+    gta_personality_fingerprint_t target_personality_fingerprint;
+
+    /* enum: initial, basic, personality derived, physical presence */
+    gta_access_descriptor_type_t type;
+
+    /*
+     * enum:
+     * GTA_ACCESS_TOKEN_USAGE_USE, GTA_ACCESS_TOKEN_USAGE_ADMIN, GTA_ACCESS_TOKEN_USAGE_RECEDE
+     */
+    gta_access_token_usage_t usage;
+
+    /* Nonce for freshness of token */
+    uint8_t freshness[GTA_ACCESS_TOKEN_LEN];
+
+    /*
+     * Optional attributes required for personality derived tokens
+     */
+    /* Fingerprint of the personality used to derive this token */
+    gta_personality_fingerprint_t binding_personality_fingerprint;
+    /* Note: Stores unnamed enum declared in gta_sw_provider_context_params_t */
+    uint32_t derivation_profile;
+
+    /* Actual token value (binary string) */
+    gta_access_token_t access_token;
+};
+
 
 /* provider instance global data */
 struct gta_sw_provider_params_t {
@@ -108,6 +157,12 @@ struct gta_sw_provider_params_t {
     char p_serializ_path[SERIALIZE_PATH_LEN_MAX + 2];
 };
 
+/* List of access tokens */
+struct gta_access_token_list_t {
+    struct gta_access_token_list_t * p_next;
+    gta_access_token_t access_token;
+};
+
 /* provider local context specific data */
 struct gta_sw_provider_context_params_t {
     gta_context_handle_t h_ctx;
@@ -120,22 +175,10 @@ struct gta_sw_provider_context_params_t {
 };
 
 /*
- * Helper function to create and add a new list item for a personality attribute
- * (personality_attribute_t). Input validation and range checks are done by
- * caller.
+ * Helper function to get enum value of a profile string. In case the string is
+ * not found, 0 (PROF_INVALID) is returned.
  */
-bool add_personality_attribute_list_item
-(
-    struct gta_sw_provider_params_t * p_provider_params,
-    struct personality_attribute_t ** p_pers_attribute_list,
-    const enum pers_attr_type_t attrtype,
-    const unsigned char * attrname,
-    const size_t attrname_len,
-    const unsigned char * attrval,
-    const size_t attrval_len,
-    const bool b_trusted,
-    gta_errinfo_t * p_errinfo
-);
+enum profile_t get_profile_enum(const char * profile);
 
 struct profile_function_list_t {
     bool (*context_open)(struct gta_sw_provider_context_params_t *, gta_errinfo_t *);
