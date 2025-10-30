@@ -264,6 +264,10 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_enroll,
 
     int ret_val = 0;
     x509_req = X509_REQ_new();
+
+    if (NULL == x509_req) {
+            goto internal_err; 
+    }
     ret_val = X509_REQ_set_version(x509_req, 0);
     if (1 != ret_val){
         goto internal_err;
@@ -283,19 +287,36 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_enroll,
     } else {
         /* default behaviour if subjectAltName wasn't set by the enrollment attributes */
         /* Create X509 extension with subjectAltNames set to the identifier that relates to the personality */
+
+        /* check first if the identifier type of the personality is correct */
+        if (0 != strcmp("org.opcfoundation.application_instance_uri", p_context_params->p_personality_item->p_identifier_list_item->type)) {
+            *p_errinfo = GTA_ERROR_ITEM_NOT_FOUND;
+            goto cleanup;
+		}
+
         STACK_OF(GENERAL_NAME) *san_names = sk_GENERAL_NAME_new_null();
         GENERAL_NAME *gen_name = GENERAL_NAME_new();
         ASN1_IA5STRING *ia5 = ASN1_IA5STRING_new();
+        
+        if ((NULL == san_names) || 
+            (NULL == gen_name) ||
+            (NULL == ia5)) {
+            goto internal_err; 
+        }        
 
-        /* todo: check if identifier has the type PERS_ATTR_NAME_IDENTIFIER*/
         ASN1_STRING_set(ia5, p_context_params->p_personality_item->p_identifier_list_item->name, -1);
-        GENERAL_NAME_set0_value(gen_name, GEN_DNS, ia5);
+        GENERAL_NAME_set0_value(gen_name, GEN_URI, ia5);
         sk_GENERAL_NAME_push(san_names, gen_name);        
         
         ext = X509V3_EXT_i2d(NID_subject_alt_name, 0, san_names);   
         
         sk_GENERAL_NAME_pop_free(san_names, GENERAL_NAME_free); 
 
+    }
+    
+    if ((NULL == exts) || 
+        (NULL == ext)) {
+        goto internal_err; 
     }
 
     sk_X509_EXTENSION_push(exts, ext);   
