@@ -46,6 +46,9 @@ const char * passcode = "zZ902()[]{}%*&-+<>!?=$#Ar";
 #define IDENTIFIER2_TYPE "ch.iec.30168.identifier.serial_number"
 #define IDENTIFIER2_VALUE "0123456789"
 
+#define IDENTIFIER3_TYPE "org.opcfoundation.application_instance_uri"
+#define IDENTIFIER3_VALUE "urn:mycompany.com:2024-10:myproduct:myappid?cg=DefaultApplication"
+
 #define TESTFILE_TXT "../test/testdata/testfile.txt"
 
 #define TEST_JWT_INPUT "../test/testdata/test_jwt_input.txt"
@@ -732,6 +735,8 @@ static void identifier_assign(void ** state)
     assert_int_equal(0, errinfo);
     assert_true(gta_identifier_assign(test_params->h_inst, IDENTIFIER2_TYPE, IDENTIFIER2_VALUE, &errinfo));
     assert_int_equal(0, errinfo);    
+    assert_true(gta_identifier_assign(test_params->h_inst, IDENTIFIER3_TYPE, IDENTIFIER3_VALUE, &errinfo));
+    assert_int_equal(0, errinfo);
 
     assert_false(gta_identifier_assign(test_params->h_inst, IDENTIFIER2_TYPE, IDENTIFIER2_VALUE, &errinfo));
     assert_int_equal(GTA_ERROR_NAME_ALREADY_EXISTS, errinfo);
@@ -2180,14 +2185,12 @@ static void profile_opc_ecc(void ** state)
     /* check if identifier is set by calling gta_personality_get_attribute */
     pers_get_attribute(h_ctx, "ch.iec.30168.identifier_value", 0);
 
-    /* call enroll without additional attributes */
-    /* should be ok as org.opcfoundation.csr.subject is optional */
+    /* try to call enroll without additional attributes but with wrong identifier type of personality */
     DEBUG_PRINT(("\nPKCS#10 without additional attributes:\n"));
     errinfo = 0; 
-    assert_true(gta_personality_enroll(h_ctx, ostream, &errinfo));
-    assert_int_equal(0, errinfo);
+    assert_false(gta_personality_enroll(h_ctx, ostream, &errinfo));
+    assert_int_equal(GTA_ERROR_ITEM_NOT_FOUND, errinfo);
 
-    /* negative tests */
     /* try to read context attributes not set */
     errinfo = 0; 
     assert_false(gta_context_get_attribute(h_ctx, "org.opcfoundation.csr.subject", ostream, &errinfo));            
@@ -2346,6 +2349,49 @@ static void profile_opc_ecc(void ** state)
     assert_int_equal(0, errinfo);
     assert_true(myio_close_ifilestream(&istream_data_to_seal, &errinfo));
       
+    errinfo = 0;
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* positive test */
+    /* create personality with correct identifier type */
+    /* and do personality_enroll without setting context attributes */
+    /* so that SubjectAltName for CSR is taken from identifer value of the personality */
+    gta_access_policy_handle_t h_auth_use = GTA_HANDLE_INVALID;
+    gta_access_policy_handle_t h_auth_admin = GTA_HANDLE_INVALID;
+    struct gta_protection_properties_t protection_properties = { 0 };
+    h_auth_use = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_INITIAL, &errinfo);
+    h_auth_admin = h_auth_use;
+    assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
+    errinfo = 0;
+    assert_true(gta_personality_create(test_params->h_inst,
+                                               IDENTIFIER3_VALUE,
+                                               "pers_test_opc",
+                                               "provider_test",
+                                               supported_profiles[PROF_ORG_OPCFOUNDATION_ECC_NISTP256],
+                                               h_auth_use,
+                                               h_auth_admin,
+                                               protection_properties,
+                                               &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* open context with correct ecc personality */
+    errinfo = 0;
+    h_ctx = gta_context_open(test_params->h_inst,
+                             "pers_test_opc",
+                             "org.opcfoundation.ECC-nistP256",
+                             &errinfo);
+    assert_non_null(h_ctx);
+    assert_int_equal(0, errinfo);
+
+    /* call enroll without additional attributes */
+    /* should be ok as setting org.opcfoundation.csr.subject and org.opcfoundation.csr.subjectAltName are optional */
+    /* and identifier type of personality is correct too*/
+    DEBUG_PRINT(("\nPKCS#10 without additional attributes:\n"));
+    errinfo = 0;
+    assert_true(gta_personality_enroll(h_ctx, ostream, &errinfo));
+    assert_int_equal(0, errinfo);
+
     errinfo = 0;
     assert_true(gta_context_close(h_ctx, &errinfo));
     assert_int_equal(0, errinfo);
