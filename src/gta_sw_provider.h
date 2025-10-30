@@ -151,6 +151,7 @@ struct profile_function_list_t {
     bool (*unseal_data)(struct gta_sw_provider_context_params_t *, gtaio_istream_t *, gtaio_ostream_t *, gta_errinfo_t *);
     bool (*verify)(struct gta_sw_provider_context_params_t *, gtaio_istream_t *, gta_errinfo_t *);
     bool (*authenticate_data_detached)(struct gta_sw_provider_context_params_t *, gtaio_istream_t *, gtaio_ostream_t *, gta_errinfo_t *);
+    bool (*verify_data_detached)(struct gta_sw_provider_context_params_t *, gtaio_istream_t *, gtaio_istream_t *, gta_errinfo_t *);
 };
 
 #endif //GTA_SW_PROVIDER_H

@@ -104,7 +104,7 @@ static char supported_profiles[NUM_PROFILES][MAXLEN_PROFILE] = {
 static bool profile_creation_supported[NUM_PROFILES] = {
     [PROF_INVALID] = false,
     [PROF_CH_IEC_30168_BASIC_PASSCODE] = false,
-    [PROF_CH_IEC_30168_BASIC_LOCAL_DATA_INTEGRITY_ONLY] = false, // ToDo: to be changed to true after implementation
+    [PROF_CH_IEC_30168_BASIC_LOCAL_DATA_INTEGRITY_ONLY] = true,
     [PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION] = true,
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA] = true,
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC] = true,
@@ -675,6 +675,7 @@ static void profile_spec_create(void ** state)
                                                protection_properties,
                                                &errinfo));
             assert_int_equal(0, errinfo);
+            
         } else
         {
             assert_false(gta_personality_create(test_params->h_inst,
@@ -686,6 +687,7 @@ static void profile_spec_create(void ** state)
                                                h_auth_admin,
                                                protection_properties,
                                                &errinfo));
+                       
             assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
             errinfo = 0;
         }
@@ -790,6 +792,11 @@ static void profile_local_data_protection(void ** state)
     assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
     errinfo = 0;
 
+    /* Negative test for gta_verify_data_detached */
+    assert_false(gta_verify_data_detached(h_ctx, (gtaio_istream_t *)&istream, (gtaio_istream_t *)&istream, &errinfo));
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+    errinfo = 0;
+
     /* Negative test for gta_personality_enroll */
     assert_false(gta_personality_enroll(h_ctx, (gtaio_ostream_t *)&ostream, &errinfo));
     assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
@@ -839,6 +846,352 @@ static void profile_local_data_protection(void ** state)
     assert_int_equal(0, errinfo);
 
     /* todo: negative tests for gta_context_open() */
+}
+
+static void profile_local_integrity_only(void ** state)
+{
+    DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__)); 
+    struct test_params_t * test_params = (struct test_params_t *)(*state);
+    gta_errinfo_t errinfo = 0;
+    gta_context_handle_t h_ctx = GTA_HANDLE_INVALID;
+
+    myio_ifilestream_t istream_data_to_seal = { 0 };
+    ostream_to_buf_t ostream = { 0 };
+    istream_from_buf_t istream = { 0 };
+
+    char protected_data[3000] = { 0 };
+    char data[3000] = { 0 };
+    size_t protected_data_size = sizeof(protected_data) - 1;
+    size_t data_size = sizeof(data) - 1;
+    size_t len = 0;
+    
+    /* Using an invalid personality type */
+    h_ctx = gta_context_open(test_params->h_inst,
+                             get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA),
+                             supported_profiles[PROF_CH_IEC_30168_BASIC_LOCAL_DATA_INTEGRITY_ONLY],
+                             &errinfo);
+
+    assert_null(h_ctx);
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+    errinfo = 0;
+
+    gta_access_policy_handle_t h_auth_use = GTA_HANDLE_INVALID;
+    gta_access_policy_handle_t h_auth_admin = GTA_HANDLE_INVALID;
+    struct gta_protection_properties_t protection_properties = { 0 };
+    h_auth_use = gta_access_policy_simple(test_params->h_inst, GTA_ACCESS_DESCRIPTOR_TYPE_BASIC_TOKEN, &errinfo);
+    assert_int_not_equal(h_auth_use, GTA_HANDLE_INVALID);
+    assert_int_equal(0, errinfo);
+    h_auth_admin = h_auth_use;
+
+    /* Creating a personality with basic access policy */
+    assert_true(gta_personality_create(test_params->h_inst,
+                                       IDENTIFIER2_VALUE,
+                                       "local_data_integrity_only",
+                                       "local_data_integrity_only",
+                                       supported_profiles[PROF_CH_IEC_30168_BASIC_LOCAL_DATA_INTEGRITY_ONLY],
+                                       h_auth_use,
+                                       h_auth_admin,
+                                       protection_properties,
+                                       &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Negative test for access control */
+    h_ctx = gta_context_open(test_params->h_inst,
+                             "local_data_integrity_only",
+                             supported_profiles[PROF_CH_IEC_30168_BASIC_LOCAL_DATA_INTEGRITY_ONLY],
+                             &errinfo);
+
+    assert_non_null(h_ctx);
+    assert_int_equal(0, errinfo);
+
+    assert_false(gta_seal_data(h_ctx, (gtaio_istream_t*)&istream_data_to_seal, (gtaio_ostream_t*)&ostream, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+
+    assert_false(gta_unseal_data(h_ctx, (gtaio_istream_t*)&istream, (gtaio_ostream_t*)&ostream, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+
+    assert_false(gta_authenticate_data_detached(h_ctx, (gtaio_istream_t*)&istream_data_to_seal, (gtaio_ostream_t*)&ostream, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+
+    assert_false(gta_verify_data_detached(h_ctx, (gtaio_istream_t*)&istream_data_to_seal, (gtaio_istream_t*)&istream, &errinfo));
+    assert_int_equal(GTA_ERROR_ACCESS, errinfo);
+    errinfo = 0;
+
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /*
+     * This profile is supposed to work with the following creation profiles:
+     * - "ch.iec.30168.basic.local_data_integrity_only"
+     * - "ch.iec.30168.basic.local_data_protection"
+     */
+    /* Test with first personality */
+    h_ctx = gta_context_open(test_params->h_inst,
+                             get_personality_name(PROF_CH_IEC_30168_BASIC_LOCAL_DATA_INTEGRITY_ONLY),
+                             supported_profiles[PROF_CH_IEC_30168_BASIC_LOCAL_DATA_INTEGRITY_ONLY],
+                             &errinfo);
+
+    assert_non_null(h_ctx);
+    assert_int_equal(0, errinfo);
+
+    /* Negative tests for personality attribute functions */
+    pers_attribute_functions_unsupported(h_ctx);
+
+    assert_true(myio_open_ifilestream(&istream_data_to_seal, TEST_DATA_PAYLOAD, &errinfo));
+    assert_int_equal(0, errinfo);
+    ostream_to_buf_init(&ostream, protected_data, protected_data_size);    
+
+    /* Positive test for gta_seal_data */
+    assert_true(gta_seal_data(h_ctx,
+        (gtaio_istream_t*)&istream_data_to_seal,
+        (gtaio_ostream_t*)&ostream,
+        &errinfo));
+    assert_int_equal(0, errinfo);
+    len = ostream.buf_pos;
+
+    assert_true(myio_close_ifilestream(&istream_data_to_seal, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Positive test for gta_unseal_data */
+    istream_from_buf_init(&istream, protected_data, len);
+    ostream_to_buf_init(&ostream, data, data_size);
+        
+    assert_true(gta_unseal_data(h_ctx,
+        (gtaio_istream_t*)&istream,
+        (gtaio_ostream_t*)&ostream,
+        &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Compare input and output */
+    check_output(TEST_DATA_PAYLOAD, data, ostream.buf_pos, false);
+
+    /* Negative test for gta_personality_unseal */
+    /* take modified data as input */
+    /* modify asn1 structure so that asn1 decode will fail */
+    char orig_protected_data = protected_data[0];
+    protected_data[0]='h';
+    istream_from_buf_init(&istream, protected_data, len);
+    ostream_to_buf_init(&ostream, data, data_size);
+    assert_false(gta_unseal_data(h_ctx,
+        (gtaio_istream_t*)&istream,
+        (gtaio_ostream_t*)&ostream,
+        &errinfo));
+    assert_int_equal(GTA_ERROR_INTERNAL_ERROR, errinfo);
+    errinfo = 0;
+
+    /* modify data itself so that integrity check will fail */
+    protected_data[0] = orig_protected_data; /* correct asn1 structure */
+    orig_protected_data = protected_data[20]; 
+    protected_data[20] ='h'; /* modify arbitrary data in asn1 structure */
+    istream_from_buf_init(&istream, protected_data, len);
+    ostream_to_buf_init(&ostream, data, data_size);
+        
+    assert_false(gta_unseal_data(h_ctx,
+        (gtaio_istream_t*)&istream,
+        (gtaio_ostream_t*)&ostream,
+        &errinfo));
+    assert_int_equal(GTA_ERROR_INTEGRITY, errinfo);
+    errinfo = 0;
+
+    /*TODO negative test: modify icv len, would need der and asn1 en-/decoding... */
+
+    /* Positive test for gta_autenticate_data_detached */
+    assert_true(myio_open_ifilestream(&istream_data_to_seal, TEST_DATA_PAYLOAD, &errinfo));
+    assert_int_equal(0, errinfo);
+    ostream_to_buf_init(&ostream, protected_data, protected_data_size);    
+    
+    assert_true(gta_authenticate_data_detached(h_ctx,
+        (gtaio_istream_t*)&istream_data_to_seal,
+        (gtaio_ostream_t*)&ostream,
+        &errinfo));
+    assert_int_equal(0, errinfo);
+    len = ostream.buf_pos;
+
+    assert_true(myio_close_ifilestream(&istream_data_to_seal, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Positive test for gta_verify_data_detached */
+    assert_true(myio_open_ifilestream(&istream_data_to_seal, TEST_DATA_PAYLOAD, &errinfo));
+    assert_int_equal(0, errinfo);
+    istream_from_buf_init(&istream, protected_data, len);
+    
+    assert_true(gta_verify_data_detached(h_ctx,
+        (gtaio_istream_t*)&istream_data_to_seal,
+        (gtaio_istream_t*)&istream,        
+        &errinfo));
+    assert_int_equal(0, errinfo);    
+
+    assert_true(myio_close_ifilestream(&istream_data_to_seal, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Negative tests for gta_verify_data_detached */
+    /* take different data as modified data */
+    assert_true(myio_open_ifilestream(&istream_data_to_seal, TESTFILE_TXT, &errinfo));
+    assert_int_equal(0, errinfo);
+    istream_from_buf_init(&istream, protected_data, len);
+    
+    assert_false(gta_verify_data_detached(h_ctx,
+        (gtaio_istream_t*)&istream_data_to_seal,
+        (gtaio_istream_t*)&istream,        
+        &errinfo));
+    assert_int_equal(GTA_ERROR_INTEGRITY, errinfo);
+    errinfo = 0;    
+
+    assert_true(myio_close_ifilestream(&istream_data_to_seal, &errinfo));
+    assert_int_equal(0, errinfo);    
+
+    /* take correct data but icv with modified length */
+    assert_true(myio_open_ifilestream(&istream_data_to_seal, TEST_DATA_PAYLOAD, &errinfo));
+    assert_int_equal(0, errinfo);
+    len = len -1;
+    istream_from_buf_init(&istream, protected_data, len);
+    
+    assert_false(gta_verify_data_detached(h_ctx,
+        (gtaio_istream_t*)&istream_data_to_seal,
+        (gtaio_istream_t*)&istream,        
+        &errinfo));
+    assert_int_equal(GTA_ERROR_INTEGRITY, errinfo);
+    errinfo = 0;    
+
+    assert_true(myio_close_ifilestream(&istream_data_to_seal, &errinfo));
+    assert_int_equal(0, errinfo);    
+
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Test with second personality */
+    h_ctx = gta_context_open(test_params->h_inst,
+                             get_personality_name(PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION),
+                             supported_profiles[PROF_CH_IEC_30168_BASIC_LOCAL_DATA_INTEGRITY_ONLY],
+                             &errinfo);
+
+    assert_non_null(h_ctx);
+    assert_int_equal(0, errinfo);
+
+    assert_true(myio_open_ifilestream(&istream_data_to_seal, TEST_DATA_PAYLOAD, &errinfo));
+    assert_int_equal(0, errinfo);
+    ostream_to_buf_init(&ostream, protected_data, protected_data_size);    
+
+    /* Positive test for gta_seal_data */
+    assert_true(gta_seal_data(h_ctx,
+        (gtaio_istream_t*)&istream_data_to_seal,
+        (gtaio_ostream_t*)&ostream,
+        &errinfo));
+    assert_int_equal(0, errinfo);
+    len = ostream.buf_pos;
+
+    assert_true(myio_close_ifilestream(&istream_data_to_seal, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Positive test for gta_unseal_data */
+    istream_from_buf_init(&istream, protected_data, len);
+    ostream_to_buf_init(&ostream, data, data_size);
+        
+    assert_true(gta_unseal_data(h_ctx,
+        (gtaio_istream_t*)&istream,
+        (gtaio_ostream_t*)&ostream,
+        &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Compare input and output */
+    check_output(TEST_DATA_PAYLOAD, data, ostream.buf_pos, false);
+
+    /* Negative test for gta_personality_unseal */
+    /* take modified data as input */
+    /* modify asn1 structure so that asn1 decode will fail */
+    orig_protected_data = protected_data[0];
+    protected_data[0]='h';
+    istream_from_buf_init(&istream, protected_data, len);
+    ostream_to_buf_init(&ostream, data, data_size);
+    assert_false(gta_unseal_data(h_ctx,
+        (gtaio_istream_t*)&istream,
+        (gtaio_ostream_t*)&ostream,
+        &errinfo));
+    assert_int_equal(GTA_ERROR_INTERNAL_ERROR, errinfo);
+    errinfo = 0;
+
+    /* modify data itself so that integrity check will fail */
+    protected_data[0] = orig_protected_data; /* correct asn1 structure */
+    orig_protected_data = protected_data[20]; 
+    protected_data[20] ='h'; /* modify arbitrary data in asn1 structure */
+    istream_from_buf_init(&istream, protected_data, len);
+    ostream_to_buf_init(&ostream, data, data_size);
+        
+    assert_false(gta_unseal_data(h_ctx,
+        (gtaio_istream_t*)&istream,
+        (gtaio_ostream_t*)&ostream,
+        &errinfo));
+    assert_int_equal(GTA_ERROR_INTEGRITY, errinfo);
+    errinfo = 0;
+
+    /*TODO negative test: modify icv len, would need der and asn1 en-/decoding... */
+
+    /* Positive test for gta_autenticate_data_detached */
+    assert_true(myio_open_ifilestream(&istream_data_to_seal, TEST_DATA_PAYLOAD, &errinfo));
+    assert_int_equal(0, errinfo);
+    ostream_to_buf_init(&ostream, protected_data, protected_data_size);    
+    
+    assert_true(gta_authenticate_data_detached(h_ctx,
+        (gtaio_istream_t*)&istream_data_to_seal,
+        (gtaio_ostream_t*)&ostream,
+        &errinfo));
+    assert_int_equal(0, errinfo);
+    len = ostream.buf_pos;
+
+    assert_true(myio_close_ifilestream(&istream_data_to_seal, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Positive test for gta_verify_data_detached */
+    assert_true(myio_open_ifilestream(&istream_data_to_seal, TEST_DATA_PAYLOAD, &errinfo));
+    assert_int_equal(0, errinfo);
+    istream_from_buf_init(&istream, protected_data, len);
+    
+    assert_true(gta_verify_data_detached(h_ctx,
+        (gtaio_istream_t*)&istream_data_to_seal,
+        (gtaio_istream_t*)&istream,        
+        &errinfo));
+    assert_int_equal(0, errinfo);    
+
+    assert_true(myio_close_ifilestream(&istream_data_to_seal, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    /* Negative tests for gta_verify_data_detached */
+    /* take different data as modified data */
+    assert_true(myio_open_ifilestream(&istream_data_to_seal, TESTFILE_TXT, &errinfo));
+    assert_int_equal(0, errinfo);
+    istream_from_buf_init(&istream, protected_data, len);
+    
+    assert_false(gta_verify_data_detached(h_ctx,
+        (gtaio_istream_t*)&istream_data_to_seal,
+        (gtaio_istream_t*)&istream,        
+        &errinfo));
+    assert_int_equal(GTA_ERROR_INTEGRITY, errinfo);
+    errinfo = 0;    
+
+    assert_true(myio_close_ifilestream(&istream_data_to_seal, &errinfo));
+    assert_int_equal(0, errinfo);    
+
+    /* take correct data but icv with modified length */
+    assert_true(myio_open_ifilestream(&istream_data_to_seal, TEST_DATA_PAYLOAD, &errinfo));
+    assert_int_equal(0, errinfo);
+    len = len -1;
+    istream_from_buf_init(&istream, protected_data, len);
+    
+    assert_false(gta_verify_data_detached(h_ctx,
+        (gtaio_istream_t*)&istream_data_to_seal,
+        (gtaio_istream_t*)&istream,        
+        &errinfo));
+    assert_int_equal(GTA_ERROR_INTEGRITY, errinfo);
+    errinfo = 0;    
+
+    assert_true(myio_close_ifilestream(&istream_data_to_seal, &errinfo));
+    assert_int_equal(0, errinfo);    
+
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
 }
 
 static void profile_passcode(void ** state)
@@ -2824,6 +3177,7 @@ int ts_gta_sw_provider(void)
 
         /* Tests for the mandatory profiles */
         cmocka_unit_test(profile_local_data_protection),
+        cmocka_unit_test(profile_local_integrity_only),
         /* Tests for creation / deployment profiles only */
         cmocka_unit_test(profile_passcode),
 
