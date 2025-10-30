@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: Apache-2.0 */
-/**********************************************************************
- * Copyright (c) 2024, Siemens AG
- **********************************************************************/
+/*
+ * SPDX-FileCopyrightText: Copyright 2024 Siemens
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #ifndef KEY_MANAGEMENT_H
 #define KEY_MANAGEMENT_H
@@ -15,6 +16,6 @@ struct hw_unique_key_32 {
     uint8_t data[HUK_SIZE_32];
 };
 
-bool get_hw_unique_key_32(struct hw_unique_key_32 *key);
+bool get_hw_unique_key_32(struct hw_unique_key_32 * key);
 
 #endif /* KEY_MANAGEMENT_H */

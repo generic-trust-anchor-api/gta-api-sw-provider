@@ -1,9 +1,6 @@
-#;**********************************************************************;
+# SPDX-FileCopyrightText: Copyright 2024 Siemens
+#
 # SPDX-License-Identifier: Apache-2.0
-#
-# Copyright (c) 2024, Siemens AG
-#
-#;**********************************************************************;
 
 # Global project definition for GTA API implementation
 project('Generic Trust Anchor API SW Provider',

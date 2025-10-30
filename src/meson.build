@@ -1,9 +1,6 @@
-#;**********************************************************************;
+# SPDX-FileCopyrightText: Copyright 2024-2025 Siemens
+#
 # SPDX-License-Identifier: Apache-2.0
-#
-# Copyright (c) 2024-2025, Siemens AG
-#
-#;**********************************************************************;
 
 gta_sw_provider_files = files (
   'gta_sw_provider.c',

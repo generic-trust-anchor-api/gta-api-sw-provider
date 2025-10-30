@@ -1,9 +1,11 @@
-/* SPDX-License-Identifier: Apache-2.0 */
-/**********************************************************************
- * Copyright (c) 2024, Siemens AG
- **********************************************************************/
+/*
+ * SPDX-FileCopyrightText: Copyright 2024 Siemens
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #include "key_management.h"
+
 #include <string.h>
 
 /*
@@ -17,13 +19,11 @@
  *   true, in case 32 byte hardware unique key are written to key->data
  *   false, on failure
  */
-bool get_hw_unique_key_32(struct hw_unique_key_32 *key) {
-    static const unsigned char hardcoded_key[] = {
-            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08
-    };
+bool get_hw_unique_key_32(struct hw_unique_key_32 * key)
+{
+    static const unsigned char hardcoded_key[] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x01, 0x02, 0x03,
+                                                  0x04, 0x05, 0x06, 0x07, 0x08, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
+                                                  0x07, 0x08, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
 
     if (NULL == key) {
         return false;

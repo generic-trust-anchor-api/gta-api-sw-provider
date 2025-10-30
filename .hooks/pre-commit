@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# SPDX-FileCopyrightText: Copyright 2025 Siemens
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Select files to format
+files=$(git diff --cached --name-only | grep -E '\.(c|h)$')
+[ -z "$files" ] && exit 0
+# Format all selected files
+clang-format -i $files
+# Add back the modified files to staging
+echo "$files" | xargs git add
+exit 0

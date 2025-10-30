@@ -1,9 +1,6 @@
-#;**********************************************************************;
+# SPDX-FileCopyrightText: Copyright 2024 Siemens
+#
 # SPDX-License-Identifier: Apache-2.0
-#
-# Copyright (c) 2024, Siemens AG
-#
-#;**********************************************************************;
 
 example_local_data_protection_files = files(
   './local_data_protection/main.c',

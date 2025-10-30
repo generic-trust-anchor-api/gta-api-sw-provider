@@ -1,41 +1,42 @@
-/* SPDX-License-Identifier: Apache-2.0 */
-/**********************************************************************
- * Copyright (c) 2025, Siemens AG
- **********************************************************************/
+/*
+ * SPDX-FileCopyrightText: Copyright 2025 Siemens
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
-#include <gta_api/gta_api.h>
-#include <gta_api/util/gta_memset.h>
 #include "../gta_sw_provider.h"
 #include "prof_helper_functions.h"
+#include <gta_api/gta_api.h>
+#include <gta_api/util/gta_memset.h>
 
 #define PROFILE_MIN_PASSCODE_LEN 16
 
-const char * allowed_passcode_chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ()[]{}%*&-+<>!?=$#";
+const char * allowed_passcode_chars =
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ()[]{}%*&-+<>!?=$#";
 
-GTA_SWP_DEFINE_FUNCTION(bool, context_open,
-(
-    struct gta_sw_provider_context_params_t * p_context_params,
-    gta_errinfo_t * p_errinfo
-))
+GTA_SWP_DEFINE_FUNCTION(
+    bool,
+    context_open,
+    (struct gta_sw_provider_context_params_t * p_context_params, gta_errinfo_t * p_errinfo))
 {
     return true;
 }
 
-GTA_SWP_DEFINE_FUNCTION(bool, personality_deploy,
-(
-    struct gta_sw_provider_params_t * p_provider_params,
-    gta_personality_name_t personality_name,
-    gtaio_istream_t * personality_content,
-    personality_secret_type_t * p_pers_secret_type,
-    unsigned char ** p_pers_secret_buffer,
-    size_t * p_pers_secret_length,
-    gta_personality_fingerprint_t pers_fingerprint,
-    struct personality_attribute_t ** p_pers_attribute,
-    gta_errinfo_t * p_errinfo
-))
+GTA_SWP_DEFINE_FUNCTION(
+    bool,
+    personality_deploy,
+    (struct gta_sw_provider_params_t * p_provider_params,
+     gta_personality_name_t personality_name,
+     gtaio_istream_t * personality_content,
+     personality_secret_type_t * p_pers_secret_type,
+     unsigned char ** p_pers_secret_buffer,
+     size_t * p_pers_secret_length,
+     gta_personality_fingerprint_t pers_fingerprint,
+     struct personality_attribute_t ** p_pers_attribute,
+     gta_errinfo_t * p_errinfo))
 {
     EVP_MD_CTX * ctx = NULL;
-    unsigned char digest[SHA256_DIGEST_LENGTH] = { 0 };
+    unsigned char digest[SHA256_DIGEST_LENGTH] = {0};
 
     /* Read personality content into buffer */
     unsigned char * data = NULL;
@@ -51,7 +52,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_deploy,
     }
 
     /* Check if passcode contains only valid characters and is terminated with '\0' */
-    if (('\0' != data[len-1]) || ((len-1) != strspn((char *)data, allowed_passcode_chars))) {
+    if (('\0' != data[len - 1]) || ((len - 1) != strspn((char *)data, allowed_passcode_chars))) {
         *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
         goto err;
     }
@@ -69,7 +70,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_deploy,
      * be used, we define our own way here.
      */
     pers_fingerprint[0] = 0x01;
-    if (!RAND_bytes((unsigned char*)&pers_fingerprint[1], 32)) {
+    if (!RAND_bytes((unsigned char *)&pers_fingerprint[1], 32)) {
         goto internal_err;
     }
 
@@ -90,7 +91,7 @@ GTA_SWP_DEFINE_FUNCTION(bool, personality_deploy,
         goto internal_err;
     }
     /* Hash the passcode w/o the terminating '\0' */
-    if (1 != EVP_DigestUpdate(ctx, data, len-1)) {
+    if (1 != EVP_DigestUpdate(ctx, data, len - 1)) {
         goto internal_err;
     }
 
@@ -117,16 +118,14 @@ err:
     return false;
 }
 
-GTA_SWP_DEFINE_FUNCTION(bool, verify,
-(
-    struct gta_sw_provider_context_params_t * p_context_params,
-    gtaio_istream_t * claim,
-    gta_errinfo_t * p_errinfo
-))
+GTA_SWP_DEFINE_FUNCTION(
+    bool,
+    verify,
+    (struct gta_sw_provider_context_params_t * p_context_params, gtaio_istream_t * claim, gta_errinfo_t * p_errinfo))
 {
     bool ret = false;
     const struct personality_t * p_personality_content = NULL;
-    char p_buffer[CHUNK_LEN] = { 0 };
+    char p_buffer[CHUNK_LEN] = {0};
     size_t buffer_idx = 0;
     size_t len = 0;
 
@@ -140,9 +139,8 @@ GTA_SWP_DEFINE_FUNCTION(bool, verify,
      */
     while (!claim->eof(claim, p_errinfo)) {
         len = claim->read(claim, p_buffer, CHUNK_LEN, p_errinfo);
-        if ((0 == len)
-            || (p_personality_content->secret_data_size < (len + buffer_idx))
-            || (0 != memcmp(p_personality_content->secret_data + buffer_idx, p_buffer, len))) {
+        if ((0 == len) || (p_personality_content->secret_data_size < (len + buffer_idx)) ||
+            (0 != memcmp(p_personality_content->secret_data + buffer_idx, p_buffer, len))) {
 
             *p_errinfo = GTA_ERROR_INVALID_ATTRIBUTE;
             goto err;
