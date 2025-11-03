@@ -7,8 +7,7 @@
 # Select files to format
 files=$(git diff --cached --name-only | grep -E '\.(c|h)$')
 [ -z "$files" ] && exit 0
-# Format all selected files
-clang-format -i $files
-# Add back the modified files to staging
-echo "$files" | xargs git add
+# Format all relevant lines of selected files
+diff=$(git diff --cached -U0 --no-color $files)
+echo "$diff" | clang-format-diff -p1 -i
 exit 0
