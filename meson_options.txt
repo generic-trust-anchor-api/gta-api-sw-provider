@@ -1,8 +1,11 @@
-# SPDX-FileCopyrightText: Copyright 2024 Siemens
+# SPDX-FileCopyrightText: Copyright 2024-2026 Siemens
 #
 # SPDX-License-Identifier: Apache-2.0
 
 option('build', type : 'combo', choices : ['debug', 'release' ], value : 'debug', description : 'Select build type with associated tool configuration')
+option('enable-tpm2-backend', type : 'boolean', value : false, description : 'This switch enables the use of a TPM2 to protect the persisted state')
+option('tcti-module', type : 'combo', choices : ['device', 'mssim'], value : 'device', description : 'Select TCTI module in case TPM2 is enabled')
+option('tcti-conf', type : 'string', value : '', description : 'Optional TCTI connection configuration appended to the selected module (e.g. host=127.0.0.1,port=2321 for tcti-mssim). Empty uses the module default.')
 option('build-dependencies', type : 'boolean', value : true, yield: true, description : 'Select whether to build dependencies locally rather than use system installed libraries.')
 option('disable-deprecated-warnings', type : 'boolean', value : true, description : 'Select whether or not warnings for deprecated functions are displayed.')
 option('enable-post-quantum-crypto', type : 'boolean', value : false, description : 'This switch enables post quantum crypto algorithms.')

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright 2024-2025 Siemens
+# SPDX-FileCopyrightText: Copyright 2024-2026 Siemens
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -31,11 +31,19 @@ if enable_pqc
                  ]
 endif
 
+if enable_tpm2_backend
+    build_dep += [ dep_esys,
+                   dep_tctildr,
+                   dep_tcti,
+                 ]
+endif
+
 gta_sw_provider_static = static_library('gta_sw_provider',
     gta_sw_provider_files,
     dependencies : build_dep,
           c_args : ['-DNDEBUG',
                    ],
+
     install: true
 )
 

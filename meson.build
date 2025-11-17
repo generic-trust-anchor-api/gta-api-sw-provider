@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright 2024 Siemens
+# SPDX-FileCopyrightText: Copyright 2024-2026 Siemens
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -29,11 +29,18 @@ add_project_arguments(
 
 # Get custom build options from meson_options.txt
 build_type = get_option('build')
+enable_tpm2_backend = get_option('enable-tpm2-backend')
+tcti_module = get_option('tcti-module')
 build_dep = get_option('build-dependencies')
 disable_deprecated = get_option('disable-deprecated-warnings')
 enable_pqc = get_option('enable-post-quantum-crypto')
 enable_test_log = get_option('enable-test-log')
 build_examples = get_option('build-examples')
+
+enable_tpm2_backend = get_option('enable-tpm2-backend')
+tcti_module = get_option('tcti-module')
+tcti_conf = get_option('tcti-conf')
+enable_tpm2_monotonic_counter = get_option('enable-tpm2-monotonic-counter')
 
 # TODO consider to use more generic override_options for build targets
 if build_type == 'release'
@@ -78,6 +85,17 @@ if enable_pqc
    ),
    language: 'c'
 )
+endif
+
+if enable_tpm2_backend
+   add_project_arguments(
+      c_compiler.get_supported_arguments(
+         '-DENABLE_TPM2_BACKEND',
+         '-DTCTI_MODULE="'+tcti_module+'"',
+         '-DTCTI_CONF="'+tcti_conf+'"',
+      ),
+      language: 'c'
+   )
 endif
 
 if enable_test_log
@@ -131,6 +149,14 @@ if enable_pqc
    # and we have to write a meson file for liboqs in order to allow to
    # integrate it into the build system as subproject.
    dep_liboqs = dependency('liboqs', static: true)
+endif
+
+if enable_tpm2_backend
+   dep_esys = dependency('tss2-esys')
+   dep_tctildr = dependency('tss2-tctildr')
+   # The pkg-config module is named tss2-tcti-<module> whereas the runtime TCTI name
+   # passed to Tss2_TctiLdr_Initialize_ex() is the bare <module> (e.g. mssim/device).
+   dep_tcti = dependency('tss2-tcti-'+tcti_module)
 endif
 
 subdir('src') # Compile provider code as static library
