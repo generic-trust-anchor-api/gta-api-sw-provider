@@ -7,6 +7,9 @@
 #include "../gta_sw_provider.h"
 #include <gta_api/gta_api.h>
 
+#define PERS_ATTR_NAME_KEYTYPE "com.github.generic-trust-anchor-api.keytype.openssl"
+#define PERS_ATTR_KEYTYPE_RSA "RSA"
+
 GTA_SWP_DEFINE_FUNCTION(
     bool,
     personality_create,
@@ -27,9 +30,20 @@ GTA_SWP_DEFINE_FUNCTION(
     /* Calculate personality fingerprint */
     SHA512(*p_pers_secret_buffer, *p_pers_secret_length, (unsigned char *)pers_fingerprint);
 
-    /* No profile specific personality attributes */
-    *p_pers_attribute = NULL;
+    /* Add profile specific personality attribute */
+    if (!add_personality_attribute_list_item(
+            p_provider_params,
+            p_pers_attribute,
+            PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL,
+            (unsigned char *)PERS_ATTR_NAME_KEYTYPE,
+            sizeof(PERS_ATTR_NAME_KEYTYPE),
+            (unsigned char *)PERS_ATTR_KEYTYPE_RSA,
+            sizeof(PERS_ATTR_KEYTYPE_RSA),
+            true,
+            p_errinfo)) {
 
+        return false;
+    }
     return true;
 }
 
