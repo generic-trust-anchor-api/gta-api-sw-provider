@@ -11,7 +11,7 @@ project('Generic Trust Anchor API SW Provider',
         'buildtype=plain',
     ],
     license: 'Apache-2.0',
-    meson_version: '>=0.56.0',
+    meson_version: '>=0.57.0',
     version: '0.2'
 )
 
@@ -29,8 +29,6 @@ add_project_arguments(
 
 # Get custom build options from meson_options.txt
 build_type = get_option('build')
-enable_tpm2_backend = get_option('enable-tpm2-backend')
-tcti_module = get_option('tcti-module')
 build_dep = get_option('build-dependencies')
 disable_deprecated = get_option('disable-deprecated-warnings')
 enable_pqc = get_option('enable-post-quantum-crypto')
@@ -96,7 +94,17 @@ if enable_tpm2_backend
       ),
       language: 'c'
    )
+   if enable_tpm2_monotonic_counter
+      add_project_arguments(
+         c_compiler.get_supported_arguments(
+            '-DENABLE_TPM2_MONOTONIC_COUNTER',
+         ),
+         language: 'c'
+      )
+   endif
 endif
+
+
 
 if enable_test_log
    add_project_arguments(

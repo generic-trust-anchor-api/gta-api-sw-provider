@@ -294,3 +294,344 @@ err:
     return b_ret;
 }
 #endif
+
+/*
+ * The following three functions can be implemented to add support
+ * for a monotonic counter to enhance the protection of the information
+ * objects of the gta_sw_provider at rest.
+ */
+
+/*
+ * This function initializes a monotonic counter. The function
+ * can optionally use the parameters `metadata` and `metadata_len` to
+ * store context information needed for the counter operation. The
+ * memory for `metadata` must be allocated with `gta_secmem_calloc`.
+ *
+ * The function should return:
+ *   true, in case the initialization was successful.
+ *   false, on failure
+ */
+#ifndef ENABLE_TPM2_MONOTONIC_COUNTER
+bool init_monotonic_counter(gta_context_handle_t h_ctx, unsigned char ** metadata, size_t * metadata_len)
+{
+    (void)h_ctx;
+    *metadata = NULL;
+    *metadata_len = 0;
+
+    return true;
+}
+
+#else
+
+bool init_monotonic_counter(gta_context_handle_t h_ctx, unsigned char ** metadata, size_t * metadata_len)
+{
+    bool ret = false;
+    ESYS_CONTEXT * p_esys_ctx = NULL;
+    TSS2_TCTI_CONTEXT * p_tcti_ctx = NULL;
+
+    TSS2_RC r;
+    ESYS_TR nvHandle = ESYS_TR_NONE;
+
+    /* The NV index is accessed exclusively through the owner hierarchy
+       (TPMA_NV_OWNERWRITE / TPMA_NV_OWNERREAD), so no index-specific
+       authorization value is required and an empty auth is used. */
+    TPM2B_AUTH auth = {.size = 0, .buffer = {0}};
+
+    /* The NV index is a hardware monotonic counter (TPM2_NT_COUNTER) accessed via the owner
+       hierarchy. Its value is not secret (it is stored in cleartext inside the COSE-signed
+       provider state and only compared for freshness), so no read/write auth value and no
+       write-lock (TPMA_NV_WRITE_STCLEAR) are needed. The monotonicity guarantee that the
+       anti-rollback scheme relies on is provided by TPM2_NT_COUNTER itself. */
+    TPM2B_NV_PUBLIC publicInfo = {
+        .size = 0,
+        .nvPublic = {
+            .nvIndex = TPM2_NV_INDEX_FIRST, /* here the nv-index chosen is set
+                                               TPM2_NV_INDEX_FIRST is 0x1000000
+                                               to ensure that the chosen is not already
+                                               assigned by the tpm perhaps a code like in handle_no_index_specified()
+                                               in tpm2_nvdefine.c of tpm tools could be used? */
+            .nameAlg = TPM2_ALG_SHA256,
+            .attributes = (TPMA_NV_OWNERWRITE | TPMA_NV_OWNERREAD | TPM2_NT_COUNTER << TPMA_NV_TPM2_NT_SHIFT),
+            .authPolicy =
+                {
+                    .size = 0,
+                    .buffer = {0},
+                },
+            .dataSize = 8,
+        }};
+
+    uint8_t * buffer = NULL;
+    size_t buffer_size = 0;
+
+    /************/
+    /* tpm_open */
+    r = Tss2_TctiLdr_Initialize_Ex(TCTI_MODULE, TCTI_CONF_OR_NULL, &p_tcti_ctx);
+
+    if (TSS2_RC_SUCCESS != r) {
+        DEBUG_PRINT("Tss2_TctiLdr_Initialize_Ex failed\n");
+        goto error;
+    }
+
+    r = Esys_Initialize(&p_esys_ctx, p_tcti_ctx, NULL);
+
+    if (TSS2_RC_SUCCESS != r) {
+        DEBUG_PRINT("Esys_Initialize failed\n");
+        goto error;
+    }
+
+    /*
+     * Define the NV counter index. This only needs to happen once (the first time the
+     * gta api is used on this device). On subsequent runs the index already exists, in
+     * which case TPM2_RC_NV_DEFINED is returned and we simply obtain a handle to the
+     * existing index instead of defining and initializing it again.
+     */
+    r = Esys_NV_DefineSpace(
+        p_esys_ctx,
+        ESYS_TR_RH_OWNER,
+        ESYS_TR_PASSWORD, /* password for the owner hierarchy */
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        &auth, /* autorization value for the created nv index */
+        &publicInfo,
+        &nvHandle);
+
+    if (TPM2_RC_NV_DEFINED == r) {
+        /* Index already exists from a previous run: get its ESYS_TR handle. */
+        r = Esys_TR_FromTPMPublic(
+            p_esys_ctx, publicInfo.nvPublic.nvIndex, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, &nvHandle);
+
+        if (TSS2_RC_SUCCESS != r) {
+            DEBUG_PRINT("Esys_TR_FromTPMPublic failed\n");
+            goto error;
+        }
+    } else if (TSS2_RC_SUCCESS != r) {
+        DEBUG_PRINT("Esys_NV_DefineSpace failed\n");
+        goto error;
+    } else {
+        /* A freshly defined counter index must be initialized with a single
+           NV_Increment before it can be read. */
+        r = Esys_NV_Increment(p_esys_ctx, ESYS_TR_RH_OWNER, nvHandle, ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE);
+
+        if (TSS2_RC_SUCCESS != r) {
+            DEBUG_PRINT("Esys_NV_Increment failed\n");
+            goto error;
+        }
+    }
+
+    r = Esys_TR_Serialize(p_esys_ctx, nvHandle, &buffer, &buffer_size);
+    if (TSS2_RC_SUCCESS != r) {
+        DEBUG_PRINT("Esys_TR_Serialize failed\n");
+        goto error;
+    }
+
+    /* Allocate Memory for buffer ... */
+    gta_errinfo_t errinfo = GTA_ERROR_INTERNAL_ERROR;
+    *metadata = gta_secmem_calloc(h_ctx, 1, buffer_size, &errinfo);
+    if (NULL == *metadata) {
+        DEBUG_PRINT("gta_secmem_calloc failed\n");
+        goto error;
+    }
+
+    memcpy(*metadata, buffer, buffer_size);
+    *metadata_len = buffer_size;
+
+    ret = true;
+
+error:
+
+    if (buffer) {
+        Esys_Free(buffer);
+    }
+
+    /*************/
+    /* tpm_close */
+
+    /* Remove the TSS context */
+    if (NULL != p_esys_ctx) {
+        Esys_Finalize(&p_esys_ctx);
+    }
+
+    /* Remove the TSS context */
+    if (NULL != p_tcti_ctx) {
+        Tss2_TctiLdr_Finalize(&p_tcti_ctx);
+    }
+
+    return ret;
+}
+#endif
+
+/*
+ * This function reads the current value of the monotonic counter and
+ * returns it to the gta_sw_provider. The function gets access to the
+ * metadata, which is optionally initialized during
+ * `init_monotonic_counter`.
+ *
+ * The function should return:
+ *   true, in case the current counter value was written to counter_value.
+ *   false, on failure
+ */
+#ifndef ENABLE_TPM2_MONOTONIC_COUNTER
+bool read_monotonic_counter(unsigned char * metadata, size_t metadata_len, uint64_t * counter_value)
+{
+    (void)metadata;
+    (void)metadata_len;
+    *counter_value = 0;
+
+    return true;
+}
+
+#else
+
+bool read_monotonic_counter(unsigned char * metadata, size_t metadata_len, uint64_t * counter_value)
+{
+    bool ret = false;
+    ESYS_CONTEXT * p_esys_ctx = NULL;
+    TSS2_TCTI_CONTEXT * p_tcti_ctx = NULL;
+
+    TSS2_RC r;
+    ESYS_TR nvHandle = ESYS_TR_NONE;
+
+    TPM2B_MAX_NV_BUFFER * nv_test_data = NULL;
+
+    /************/
+    /* tpm_open */
+
+    r = Tss2_TctiLdr_Initialize_Ex(TCTI_MODULE, TCTI_CONF_OR_NULL, &p_tcti_ctx);
+
+    if (TSS2_RC_SUCCESS != r) {
+        DEBUG_PRINT("Tss2_TctiLdr_Initialize_Ex failed\n");
+        goto error;
+    }
+
+    r = Esys_Initialize(&p_esys_ctx, p_tcti_ctx, NULL);
+
+    if (TSS2_RC_SUCCESS != r) {
+        DEBUG_PRINT("Esys_Initialize failed\n");
+        goto error;
+    }
+
+    r = Esys_TR_Deserialize(p_esys_ctx, metadata, metadata_len, &nvHandle);
+
+    if (TSS2_RC_SUCCESS != r) {
+        DEBUG_PRINT("Esys_TR_Deserialize failed\n");
+        goto error;
+    }
+
+    r = Esys_NV_Read(
+        p_esys_ctx, ESYS_TR_RH_OWNER, nvHandle, ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE, 8, 0, &nv_test_data);
+
+    if (TSS2_RC_SUCCESS != r) {
+        DEBUG_PRINT("Esys_NV_Read failed\n");
+        goto error;
+    }
+
+    /* NV counter data is returned big-endian (most significant byte first) */
+    for (int i = 0; i < 8; ++i) {
+        *counter_value <<= 8;
+        *counter_value |= nv_test_data->buffer[i];
+    }
+
+    ret = true;
+
+error:
+
+    if (nv_test_data) {
+        Esys_Free(nv_test_data);
+    }
+
+    /*************/
+    /* tpm_close */
+
+    /* Remove the TSS context */
+    if (NULL != p_esys_ctx) {
+        Esys_Finalize(&p_esys_ctx);
+    }
+
+    /* Remove the TSS context */
+    if (NULL != p_tcti_ctx) {
+        Tss2_TctiLdr_Finalize(&p_tcti_ctx);
+    }
+
+    return ret;
+}
+#endif
+
+/*
+ * This function increments the monotonic counter. The function gets access to the
+ * metadata, which is optionally initialized during `init_monotonic_counter`.
+ *
+ * The function should return:
+ *   true, in case the counter was successfully incremented.
+ *   false, on failure
+ */
+#ifndef ENABLE_TPM2_MONOTONIC_COUNTER
+bool increment_monotonic_counter(unsigned char * metadata, size_t metadata_len)
+{
+    (void)metadata;
+    (void)metadata_len;
+
+    return true;
+}
+
+#else
+
+bool increment_monotonic_counter(unsigned char * metadata, size_t metadata_len)
+{
+    bool ret = false;
+    ESYS_CONTEXT * p_esys_ctx = NULL;
+    TSS2_TCTI_CONTEXT * p_tcti_ctx = NULL;
+
+    TSS2_RC r;
+    ESYS_TR nvHandle = ESYS_TR_NONE;
+
+    /************/
+    /* tpm_open */
+
+    r = Tss2_TctiLdr_Initialize_Ex(TCTI_MODULE, TCTI_CONF_OR_NULL, &p_tcti_ctx);
+
+    if (TSS2_RC_SUCCESS != r) {
+        DEBUG_PRINT("Tss2_TctiLdr_Initialize_Ex failed\n");
+        goto error;
+    }
+
+    r = Esys_Initialize(&p_esys_ctx, p_tcti_ctx, NULL);
+
+    if (TSS2_RC_SUCCESS != r) {
+        DEBUG_PRINT("Esys_Initialize failed\n");
+        goto error;
+    }
+
+    r = Esys_TR_Deserialize(p_esys_ctx, metadata, metadata_len, &nvHandle);
+
+    if (TSS2_RC_SUCCESS != r) {
+        DEBUG_PRINT("Esys_TR_Deserialize failed\n");
+        goto error;
+    }
+
+    r = Esys_NV_Increment(p_esys_ctx, ESYS_TR_RH_OWNER, nvHandle, ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE);
+
+    if (TSS2_RC_SUCCESS != r) {
+        DEBUG_PRINT("Esys_NV_Increment failed\n");
+        goto error;
+    }
+
+    ret = true;
+
+error:
+
+    /*************/
+    /* tpm_close */
+
+    /* Remove the TSS context */
+    if (NULL != p_esys_ctx) {
+        Esys_Finalize(&p_esys_ctx);
+    }
+
+    /* Remove the TSS context */
+    if (NULL != p_tcti_ctx) {
+        Tss2_TctiLdr_Finalize(&p_tcti_ctx);
+    }
+
+    return ret;
+}
+#endif
