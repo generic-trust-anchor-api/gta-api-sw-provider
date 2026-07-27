@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: Copyright 2024-2025 Siemens
+SPDX-FileCopyrightText: Copyright 2024-2026 Siemens
 
 SPDX-License-Identifier: Apache-2.0
 -->
@@ -15,15 +15,23 @@ intended for productive use.
 
 Nevertheless, the software provider is prepared to achieve a minimal security
 level by protecting its persisted state (i.e., device state, personalities,
-further metadata) with a hardware unique key. The 32 Byte platform specific
-hardware unique key needs to be provided to the function `get_hw_unique_key_32`
-in the file [key_management.c](src/key_management.c).
+further metadata) with a hardware unique key and a monotonic counter. The 32
+Byte platform specific hardware unique key needs to be provided to the function
+`get_hw_unique_key_32` in the file [key_management.c](src/key_management.c). The
+same file contains hooks to operate a monotonic counter.
 
 The GTA API software provider allows to develop an application which is based on
 the GTA API interfaces without having a secure element. The GTA API software
 provider can then be enhanced (e.g., by providing a hardware unique key) or
 replaced by another provider supporting some hardware secure element at a later
 stage.
+
+The software provider can be configured to use the TPM 2.0 to protect
+its persistent state. It then derives a hardware unique key from the Endorsement
+hierarchy of the TPM and initializes and uses an NV index as monotonic counter.
+See [Meson Options File](#meson-options-file) for the available configuration
+options.
+
 
 The cryptographic functions are computed using the
 [OpenSSL](https://openssl-library.org/) library as 3rd party cryptographic
@@ -65,6 +73,16 @@ The build and test of the GTA API SW provider depend on the GTA API Core and
 it's dependencies. To build the provider with Post-Quantum crypto algorithms,
 [liboqs](https://github.com/open-quantum-safe/liboqs) needs to be installed on
 the system.
+
+When the TPM 2.0 backend is enabled (`enable-tpm2-backend=true`, and optionally
+`enable-tpm2-monotonic-counter=true`), the provider links against the
+[tpm2-tss](https://github.com/tcg-tpm2-software/tpm2-tss) libraries. The
+Enhanced System API (ESAPI, `tss2-esys`) and the TCTI loader
+(`tss2-tctildr`) need to be installed on the system, including their
+development headers (`tss2/tss2_esys.h`, `tss2/tss2_tctildr.h`). On
+Debian/Ubuntu these are provided by the `libtss2-dev` package. At runtime a TPM
+2.0 must be reachable through the configured TCTI module (see the `tcti-module`
+option): `tcti-device` accesses a physical/firmware TPM (e.g., `/dev/tpm0`).
 
 ## Local build
 * In the project root, initialize build system and build directory (like ./configure for automake):
@@ -169,6 +187,16 @@ Currently the following options are available:
 | enable-post-quantum-crypto | boolean : { true, false } | This switch enables post quantum crypto algorithms. |
 | enable-test-log | boolean : { true, false } | This switch enables log messages for the provider tests. |
 | build-examples | boolean : { true, false } | This switch enables the build of examples. |
+
+The following options are available to enable the use of a TPM 2.0 to protect
+the persistent state of the software provider:
+
+| Option Name | Possible values | Description |
+| :---------- | :-------------- | :---------- |
+| enable-tpm2-backend | boolean : { true, false } | This switch enables the use of a TPM2 to protect the persisted state |
+| tcti-module | combo : { 'device', 'mssim' } | Select TCTI module in case TPM2 is enabled |
+| tcti-conf | string | Optional TCTI connection configuration appended to the selected module, e.g. `host=127.0.0.1,port=2321` for `mssim`. Leave empty to use the module's default. |
+| enable-tpm2-monotonic-counter | boolean' { true, false } |  This switch enables the use of a TPM2 based monotonic counter to enhance the protection of the persisted state. This option depends on enable-tpm2-backend=true |
 
 
 ## Coverage Report
