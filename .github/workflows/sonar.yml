@@ -18,7 +18,21 @@ jobs:
     steps:
       - name: Install dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y libcmocka-dev meson ninja-build build-essential libssl-dev cmake pkg-config git gcovr lcov
+          sudo apt-get update && sudo apt-get install -y libcmocka-dev meson ninja-build build-essential libssl-dev cmake pkg-config git gcovr lcov libtss2-dev tpm2-tools
+      - name: Download and verify TPM Simulator
+        run: |
+          wget -O ibmtpm1682.tar.gz https://sourceforge.net/projects/ibmswtpm2/files/ibmtpm1682.tar.gz/download
+          echo "3cb642f871a17b23d50b046e5f95f449c2287415fc1e7aeb4bdbb8920dbcb38f  ibmtpm1682.tar.gz" | sha256sum -c -
+      - name: Install TPM Simulator
+        run: |
+          mkdir tpm_simulator
+          cd tpm_simulator
+          tar -xf ../ibmtpm1682.tar.gz
+          cd src
+          make
+          ./tpm_server &
+          export TPM2TOOLS_TCTI="mssim:host=127.0.0.1,port=2321"
+          tpm2_startup -c
       - name: Checkout gta-api-core
         uses: actions/checkout@v4
         with:
@@ -36,9 +50,14 @@ jobs:
         uses: SonarSource/sonarqube-scan-action/install-build-wrapper@v6
       - name: Run Build Wrapper
         run: |
-          meson setup build
+          meson setup build -Denable-tpm2-backend=true -Dtcti-module='mssim' -Dtcti-conf='host=127.0.0.1,port=2321'
           build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} ninja -C build
-      - name: Create coverage report
+      - name: Create coverage report w/ TPM2
+        run: |
+          meson setup coverage_tpm -Denable-tpm2-backend=true -Dtcti-module='mssim' -Dtcti-conf='host=127.0.0.1,port=2321' -Db_coverage=true
+          ninja -C coverage_tpm test
+          ninja -C coverage_tpm coverage-sonarqube
+      - name: Create coverage report w/o TPM2
         run: |
           meson setup coverage -Db_coverage=true
           ninja -C coverage test
@@ -50,4 +69,4 @@ jobs:
         with:
           args: >
             --define sonar.cfamily.compile-commands=${{ env.BUILD_WRAPPER_OUT_DIR }}/compile_commands.json
-            --define sonar.coverageReportPaths=coverage/meson-logs/sonarqube.xml
+            --define sonar.coverageReportPaths=coverage_tpm/meson-logs/sonarqube.xml,coverage/meson-logs/sonarqube.xml
