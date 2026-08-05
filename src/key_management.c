@@ -157,9 +157,6 @@ bool get_hw_unique_key_32(struct hw_unique_key_32 * key)
 
     /*********************************/
     /* create primary and derive key */
-
-    TPM2B_AUTH auth_value_primary = {.size = 0, .buffer = {0}};
-
     TPM2B_SENSITIVE_CREATE in_sensitive_primary = {
         .size = 0,
         .sensitive =
@@ -176,7 +173,7 @@ bool get_hw_unique_key_32(struct hw_unique_key_32 * key)
                     },
             },
     };
-    in_sensitive_primary.sensitive.userAuth = auth_value_primary;
+
     TPM2B_PUBLIC in_public = {0};
 
     TPM2B_DATA outside_info = {
@@ -216,13 +213,6 @@ bool get_hw_unique_key_32(struct hw_unique_key_32 * key)
         goto err;
     }
 
-    tss2_ret = Esys_TR_SetAuth(p_esys_ctx, h_primary_key, &auth_value_primary);
-
-    if (TSS2_RC_SUCCESS != tss2_ret) {
-        DEBUG_PRINT("Esys_TR_SetAuth failed\n");
-        goto err;
-    }
-
     TPM2B_MAX_BUFFER dv_buffer = {.size = sizeof(HUK_DERIVATION_VALUE) - 1, .buffer = HUK_DERIVATION_VALUE};
 
     TPMA_SESSION session_attributes = TPMA_SESSION_ENCRYPT | TPMA_SESSION_DECRYPT;
@@ -249,7 +239,6 @@ bool get_hw_unique_key_32(struct hw_unique_key_32 * key)
 
     /*********************************************************************/
     /* Copy 32 bytes of derived key to hardware unique key output buffer */
-
     memcpy(key->data, p_out_hmac->buffer, HUK_SIZE_32);
 
     b_ret = true;
@@ -260,17 +249,17 @@ err:
     /* clean up everything */
 
     if (NULL != p_out_hmac) {
-        free(p_out_hmac);
+        Esys_Free(p_out_hmac);
     }
 
-    /* Flush endorsement key */
+    /* Flush HMAC key */
     if (ESYS_TR_NONE != h_primary_key) {
-        (void)Esys_FlushContext(p_esys_ctx, h_primary_key);
+        Esys_FlushContext(p_esys_ctx, h_primary_key);
     }
 
     /* Flush salt key */
     if (ESYS_TR_NONE != h_salt_key) {
-        (void)Esys_FlushContext(p_esys_ctx, h_salt_key);
+        Esys_FlushContext(p_esys_ctx, h_salt_key);
     }
 
     /*************/
@@ -491,7 +480,7 @@ bool read_monotonic_counter(unsigned char * metadata, size_t metadata_len, uint6
     TSS2_RC r;
     ESYS_TR nvHandle = ESYS_TR_NONE;
 
-    TPM2B_MAX_NV_BUFFER * nv_test_data = NULL;
+    TPM2B_MAX_NV_BUFFER * nv_counter = NULL;
 
     /************/
     /* tpm_open */
@@ -518,7 +507,7 @@ bool read_monotonic_counter(unsigned char * metadata, size_t metadata_len, uint6
     }
 
     r = Esys_NV_Read(
-        p_esys_ctx, ESYS_TR_RH_OWNER, nvHandle, ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE, 8, 0, &nv_test_data);
+        p_esys_ctx, ESYS_TR_RH_OWNER, nvHandle, ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE, 8, 0, &nv_counter);
 
     if (TSS2_RC_SUCCESS != r) {
         DEBUG_PRINT("Esys_NV_Read failed\n");
@@ -526,17 +515,18 @@ bool read_monotonic_counter(unsigned char * metadata, size_t metadata_len, uint6
     }
 
     /* NV counter data is returned big-endian (most significant byte first) */
+    *counter_value = 0;
     for (int i = 0; i < 8; ++i) {
         *counter_value <<= 8;
-        *counter_value |= nv_test_data->buffer[i];
+        *counter_value |= nv_counter->buffer[i];
     }
 
     ret = true;
 
 error:
 
-    if (nv_test_data) {
-        Esys_Free(nv_test_data);
+    if (nv_counter) {
+        Esys_Free(nv_counter);
     }
 
     /*************/
