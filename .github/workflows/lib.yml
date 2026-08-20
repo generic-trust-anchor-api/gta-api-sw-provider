@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright 2025 Siemens
+# SPDX-FileCopyrightText: Copyright 2025-2026 Siemens
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -10,11 +10,11 @@ on:
       - main
 jobs:
   build_static_lib:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Install dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y libcmocka-dev meson ninja-build build-essential libssl-dev cmake pkg-config git llvm
+          sudo apt-get update && sudo apt-get install -y libcmocka-dev meson ninja-build build-essential libssl-dev libjitterentropy3-dev cmake pkg-config git llvm
           cargo install armerge
       - name: Checkout gta-api-core
         uses: actions/checkout@v4
@@ -33,7 +33,7 @@ jobs:
           sudo ninja -C build
       - name: Generate merged static lib
         run: |
-          armerge --keep-symbols 'gta_sw_provider_init' --output build/libgta_sw_provider_merged.a build/src/libgta_sw_provider.a build/subprojects/openssl-3.0.8/libcrypto.a
+          armerge --keep-symbols 'gta_sw_provider_init' --output build/libgta_sw_provider_merged.a build/src/libgta_sw_provider.a /usr/lib/x86_64-linux-gnu/libcrypto.a
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
