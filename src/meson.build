@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright 2024-2025 Siemens
+# SPDX-FileCopyrightText: Copyright 2024-2026 Siemens
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -25,11 +25,6 @@ build_dep = [ dep_libcrypto,
               dep_t_cose,
               dep_gta_core,
             ]
-
-if enable_pqc
-    build_dep += [ dep_liboqs,
-                 ]
-endif
 
 gta_sw_provider_static = static_library('gta_sw_provider',
     gta_sw_provider_files,

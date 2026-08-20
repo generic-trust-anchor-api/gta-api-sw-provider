@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright 2024-2025 Siemens
+ * SPDX-FileCopyrightText: Copyright 2024-2026 Siemens
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -74,20 +74,14 @@ enum profile_t {
     PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC,
-#ifdef ENABLE_PQC
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM,
-#endif
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL,
     PROF_ORG_OPCFOUNDATION_ECC_NISTP256,
 };
-#ifdef ENABLE_PQC
 #define NUM_PROFILES 12
-#else
-#define NUM_PROFILES 11
-#endif
 static char supported_profiles[NUM_PROFILES][MAXLEN_PROFILE] = {
     [PROF_INVALID] = "INVALID",
     [PROF_CH_IEC_30168_BASIC_PASSCODE] = "ch.iec.30168.basic.passcode",
@@ -95,9 +89,7 @@ static char supported_profiles[NUM_PROFILES][MAXLEN_PROFILE] = {
     [PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION] = "ch.iec.30168.basic.local_data_protection",
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA] = "com.github.generic-trust-anchor-api.basic.rsa",
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC] = "com.github.generic-trust-anchor-api.basic.ec",
-#ifdef ENABLE_PQC
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM] = "com.github.generic-trust-anchor-api.basic.dilithium",
-#endif
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT] = "com.github.generic-trust-anchor-api.basic.jwt",
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE] = "com.github.generic-trust-anchor-api.basic.signature",
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = "com.github.generic-trust-anchor-api.basic.tls",
@@ -112,9 +104,7 @@ static bool profile_creation_supported[NUM_PROFILES] = {
     [PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION] = true,
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA] = true,
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC] = true,
-#ifdef ENABLE_PQC
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM] = true,
-#endif
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT] = false,
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE] = false,
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = false,
@@ -1854,7 +1844,6 @@ static void profile_signature(void ** state)
     assert_true(myio_close_ifilestream(&istream_data_to_seal, &errinfo));
 
     /* Test with third personality */
-#ifdef ENABLE_PQC
     h_ctx = gta_context_open(
         test_params->h_inst,
         get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM),
@@ -1875,8 +1864,6 @@ static void profile_signature(void ** state)
     DEBUG_PRINT(("\n"));
     assert_true(gta_context_close(h_ctx, &errinfo));
     assert_true(myio_close_ifilestream(&istream_data_to_seal, &errinfo));
-
-#endif
 }
 
 static void profile_tls(void ** state)
@@ -2081,7 +2068,6 @@ static void profile_tls(void ** state)
     assert_true(myio_close_ifilestream(&istream_data_to_seal, &errinfo));
 
     /* Test with third personality */
-#ifdef ENABLE_PQC
     h_ctx = gta_context_open(
         test_params->h_inst,
         get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM),
@@ -2102,8 +2088,6 @@ static void profile_tls(void ** state)
     DEBUG_PRINT(("\n"));
     assert_true(gta_context_close(h_ctx, &errinfo));
     assert_true(myio_close_ifilestream(&istream_data_to_seal, &errinfo));
-
-#endif
 }
 
 static void profile_opc_ecc(void ** state)

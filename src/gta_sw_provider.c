@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright 2024-2025 Siemens
+ * SPDX-FileCopyrightText: Copyright 2024-2026 Siemens
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -35,9 +35,7 @@ extern const struct profile_function_list_t fl_prof_ch_iec_30168_basic_local_dat
 extern const struct profile_function_list_t fl_prof_ch_iec_30168_basic_local_data_protection;
 extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_rsa;
 extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_ec;
-#ifdef ENABLE_PQC
 extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_dilithium;
-#endif
 extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_jwt;
 extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_signature;
 extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_enroll;
@@ -49,11 +47,7 @@ struct profile_list_t {
 };
 
 /* Supported profiles */
-#ifdef ENABLE_PQC
 #define NUM_PROFILES 12
-#else
-#define NUM_PROFILES 11
-#endif
 static struct profile_list_t supported_profiles[NUM_PROFILES] = {
     [PROF_INVALID] = {"INVALID", &fl_null},
     [PROF_CH_IEC_30168_BASIC_PASSCODE] = {"ch.iec.30168.basic.passcode", &fl_prof_ch_iec_30168_basic_passcode},
@@ -65,11 +59,9 @@ static struct profile_list_t supported_profiles[NUM_PROFILES] = {
         {"com.github.generic-trust-anchor-api.basic.rsa", &fl_prof_com_github_generic_trust_anchor_api_basic_rsa},
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC] =
         {"com.github.generic-trust-anchor-api.basic.ec", &fl_prof_com_github_generic_trust_anchor_api_basic_ec},
-#ifdef ENABLE_PQC
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM] =
         {"com.github.generic-trust-anchor-api.basic.dilithium",
          &fl_prof_com_github_generic_trust_anchor_api_basic_dilithium},
-#endif
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT] =
         {"com.github.generic-trust-anchor-api.basic.jwt", &fl_prof_com_github_generic_trust_anchor_api_basic_jwt},
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE] =

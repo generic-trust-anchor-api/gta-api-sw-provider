@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright 2024 Siemens
+# SPDX-FileCopyrightText: Copyright 2024-2026 Siemens
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -31,7 +31,6 @@ add_project_arguments(
 build_type = get_option('build')
 build_dep = get_option('build-dependencies')
 disable_deprecated = get_option('disable-deprecated-warnings')
-enable_pqc = get_option('enable-post-quantum-crypto')
 enable_test_log = get_option('enable-test-log')
 build_examples = get_option('build-examples')
 
@@ -66,15 +65,6 @@ elif target_os == 'windows'
    add_project_arguments(
    c_compiler.get_supported_arguments(
       '-DWINDOWS',
-   ),
-   language: 'c'
-)
-endif
-
-if enable_pqc
-   add_project_arguments(
-   c_compiler.get_supported_arguments(
-      '-DENABLE_PQC',
    ),
    language: 'c'
 )
@@ -122,15 +112,6 @@ else
    dep_qcbor      = qcbor_proj.get_variable('qcbor_dep')
    t_cose_proj    = subproject('t_cose')
    dep_t_cose     = t_cose_proj.get_variable('t_cose_dep')
-endif
-
-if enable_pqc
-   # TODO Building liboqs as meson CMake target does not work!
-   # Therefore, we are building liboqs natively and install it on /usr/local
-   # It seems that the CMake integration into meson is not fully functional
-   # and we have to write a meson file for liboqs in order to allow to
-   # integrate it into the build system as subproject.
-   dep_liboqs = dependency('liboqs', static: true)
 endif
 
 subdir('src') # Compile provider code as static library
