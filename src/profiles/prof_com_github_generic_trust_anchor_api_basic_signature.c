@@ -68,11 +68,6 @@ GTA_SWP_DEFINE_FUNCTION(
     /* get personality of the context */
     p_personality_content = p_context_params->p_personality_item->p_personality_content;
 
-    if (SECRET_TYPE_DER != p_personality_content->secret_type) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
-    }
-
     p_key = get_pkey_from_der(p_personality_content->secret_data, p_personality_content->secret_data_size, p_errinfo);
     if (NULL == p_key) {
         goto err;
@@ -121,11 +116,6 @@ GTA_SWP_DEFINE_FUNCTION(
 
     /* get Personality of the Context */
     p_personality_content = p_context_params->p_personality_item->p_personality_content;
-
-    if (SECRET_TYPE_DER != p_personality_content->secret_type) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
-    }
 
     evp_private_key =
         get_pkey_from_der(p_personality_content->secret_data, p_personality_content->secret_data_size, p_errinfo);
