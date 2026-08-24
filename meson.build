@@ -102,7 +102,7 @@ if build_dep
    t_cose_proj    = subproject('t_cose')
    dep_t_cose     = t_cose_proj.get_variable('t_cose_dep')
 else
-   dep_libcrypto = dependency('libcrypto', static: true)
+   dep_libcrypto = dependency('libcrypto', version : '>=3.5.0', static: true)
    dep_cmocka    = dependency('cmocka')
    # TODO: currently qcbor/t_cose are still handled by the build system because there
    # are no official distribution packages available. When it becomes easier
