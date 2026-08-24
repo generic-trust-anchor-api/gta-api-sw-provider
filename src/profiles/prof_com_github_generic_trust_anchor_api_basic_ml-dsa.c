@@ -61,6 +61,6 @@ err:
     return ret;
 }
 
-const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_dilithium = {
+const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_ml_dsa = {
     .personality_create = personality_create,
 };

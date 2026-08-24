@@ -74,7 +74,7 @@ enum profile_t {
     PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC,
-    PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM,
+    PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ML_DSA,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS,
@@ -89,7 +89,7 @@ static char supported_profiles[NUM_PROFILES][MAXLEN_PROFILE] = {
     [PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION] = "ch.iec.30168.basic.local_data_protection",
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA] = "com.github.generic-trust-anchor-api.basic.rsa",
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC] = "com.github.generic-trust-anchor-api.basic.ec",
-    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM] = "com.github.generic-trust-anchor-api.basic.dilithium",
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ML_DSA] = "com.github.generic-trust-anchor-api.basic.ml-dsa",
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT] = "com.github.generic-trust-anchor-api.basic.jwt",
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE] = "com.github.generic-trust-anchor-api.basic.signature",
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = "com.github.generic-trust-anchor-api.basic.tls",
@@ -104,7 +104,7 @@ static bool profile_creation_supported[NUM_PROFILES] = {
     [PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION] = true,
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA] = true,
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC] = true,
-    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM] = true,
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ML_DSA] = true,
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT] = false,
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE] = false,
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS] = false,
@@ -1846,7 +1846,7 @@ static void profile_signature(void ** state)
     /* Test with third personality */
     h_ctx = gta_context_open(
         test_params->h_inst,
-        get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM),
+        get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ML_DSA),
         supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE],
         &errinfo);
 
@@ -1854,7 +1854,7 @@ static void profile_signature(void ** state)
 
     assert_true(myio_open_ifilestream(&istream_data_to_seal, TEST_DATA_PAYLOAD, &errinfo));
 
-    DEBUG_PRINT(("\nSignature with Dilithium2\n"));
+    DEBUG_PRINT(("\nSignature with ML-DSA-44\n"));
     assert_true(gta_authenticate_data_detached(h_ctx, (gtaio_istream_t *)&istream_data_to_seal, ostream, &errinfo));
     DEBUG_PRINT(("\n"));
     assert_int_equal(0, errinfo);
@@ -2070,7 +2070,7 @@ static void profile_tls(void ** state)
     /* Test with third personality */
     h_ctx = gta_context_open(
         test_params->h_inst,
-        get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM),
+        get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ML_DSA),
         supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_TLS],
         &errinfo);
 
@@ -2078,7 +2078,7 @@ static void profile_tls(void ** state)
 
     assert_true(myio_open_ifilestream(&istream_data_to_seal, TEST_DATA_PAYLOAD, &errinfo));
 
-    DEBUG_PRINT(("\nSignature with Dilithium2\n"));
+    DEBUG_PRINT(("\nSignature with ML-DSA-44\n"));
     assert_true(gta_authenticate_data_detached(h_ctx, (gtaio_istream_t *)&istream_data_to_seal, ostream, &errinfo));
     DEBUG_PRINT(("\n"));
     assert_int_equal(0, errinfo);
