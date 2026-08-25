@@ -18,7 +18,6 @@
 #include <openssl/hmac.h>
 #include <openssl/kdf.h>
 #include <openssl/pem.h>
-#include <openssl/pkcs12.h>
 #include <openssl/rand.h>
 #include <openssl/types.h>
 #include <openssl/x509.h>

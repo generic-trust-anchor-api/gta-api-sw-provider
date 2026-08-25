@@ -6,7 +6,6 @@
 
 #include "../gta_sw_provider.h"
 #include "prof_helper_functions.h"
-#include <gta_api/gta_api.h>
 #include <gta_api/util/gta_memset.h>
 
 #define LOCAL_DATA_INTEGRITY_ONLY_SECRET_LEN 32

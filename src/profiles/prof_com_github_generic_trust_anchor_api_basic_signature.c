@@ -6,7 +6,6 @@
 
 #include "../gta_sw_provider.h"
 #include "prof_helper_functions.h"
-#include <gta_api/gta_api.h>
 
 GTA_SWP_DEFINE_FUNCTION(
     bool,

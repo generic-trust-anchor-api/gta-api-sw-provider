@@ -6,24 +6,17 @@
 
 #include "persistent_storage.h"
 
-#include "gta_debug.h"
 #include "gta_sw_provider.h"
 #include "key_management.h"
-#include "provider_data_model.h"
 #include "t_cose/t_cose_encrypt_dec.h"
 #include "t_cose/t_cose_encrypt_enc.h"
 #include "t_cose/t_cose_mac_compute.h"
 #include "t_cose/t_cose_mac_validate.h"
-#include <gta_api/gta_api.h>
-#include <gta_api/util/gta_list.h>
 #include <gta_api/util/gta_memset.h>
 #include <openssl/evp.h>
-#include <openssl/kdf.h>
 #include <qcbor/UsefulBuf.h>
 #include <qcbor/qcbor.h>
 #include <qcbor/qcbor_spiffy_decode.h>
-#include <stdbool.h>
-#include <stdlib.h>
 #include <t_cose/t_cose_common.h>
 
 /* File names for serialization */

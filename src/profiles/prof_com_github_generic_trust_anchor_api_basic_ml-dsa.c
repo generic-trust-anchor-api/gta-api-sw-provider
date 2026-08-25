@@ -5,7 +5,6 @@
  */
 
 #include "../gta_sw_provider.h"
-#include <gta_api/gta_api.h>
 #include <openssl/evp.h>
 
 #define PERS_ATTR_NAME_KEYTYPE "com.github.generic-trust-anchor-api.keytype.openssl"
