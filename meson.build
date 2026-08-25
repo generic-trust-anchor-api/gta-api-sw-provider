@@ -125,9 +125,10 @@ subdir('examples')
 # Looking for Valgrind
 prog_valgrind = find_program('valgrind', required: false)
 if prog_valgrind.found()
+   valgrind_suppressions = meson.project_source_root() / 'valgrind-openssl.supp'
    # Run valgrind memory leakage test
    run_target('gta_provider_memcheck',
-      command: [prog_valgrind, '--trace-children=yes', '--leak-check=full', '--show-leak-kinds=all', '--error-exitcode=99', '--errors-for-leak-kinds=all', gta_provider_test.full_path()],
+      command: [prog_valgrind, '--trace-children=yes', '--leak-check=full', '--show-leak-kinds=all', '--error-exitcode=99', '--errors-for-leak-kinds=all', '--suppressions=' + valgrind_suppressions, gta_provider_test.full_path()],
       depends: [gta_provider_test],
    )
 endif
