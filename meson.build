@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright 2024 Siemens
+# SPDX-FileCopyrightText: Copyright 2024-2026 Siemens
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -31,7 +31,6 @@ add_project_arguments(
 build_type = get_option('build')
 build_dep = get_option('build-dependencies')
 disable_deprecated = get_option('disable-deprecated-warnings')
-enable_pqc = get_option('enable-post-quantum-crypto')
 enable_test_log = get_option('enable-test-log')
 build_examples = get_option('build-examples')
 
@@ -71,15 +70,6 @@ elif target_os == 'windows'
 )
 endif
 
-if enable_pqc
-   add_project_arguments(
-   c_compiler.get_supported_arguments(
-      '-DENABLE_PQC',
-   ),
-   language: 'c'
-)
-endif
-
 if enable_test_log
    add_project_arguments(
    c_compiler.get_supported_arguments(
@@ -112,7 +102,7 @@ if build_dep
    t_cose_proj    = subproject('t_cose')
    dep_t_cose     = t_cose_proj.get_variable('t_cose_dep')
 else
-   dep_libcrypto = dependency('libcrypto', static: true)
+   dep_libcrypto = dependency('libcrypto', version : '>=3.5.0', static: true)
    dep_cmocka    = dependency('cmocka')
    # TODO: currently qcbor/t_cose are still handled by the build system because there
    # are no official distribution packages available. When it becomes easier
@@ -122,15 +112,6 @@ else
    dep_qcbor      = qcbor_proj.get_variable('qcbor_dep')
    t_cose_proj    = subproject('t_cose')
    dep_t_cose     = t_cose_proj.get_variable('t_cose_dep')
-endif
-
-if enable_pqc
-   # TODO Building liboqs as meson CMake target does not work!
-   # Therefore, we are building liboqs natively and install it on /usr/local
-   # It seems that the CMake integration into meson is not fully functional
-   # and we have to write a meson file for liboqs in order to allow to
-   # integrate it into the build system as subproject.
-   dep_liboqs = dependency('liboqs', static: true)
 endif
 
 subdir('src') # Compile provider code as static library
@@ -144,9 +125,10 @@ subdir('examples')
 # Looking for Valgrind
 prog_valgrind = find_program('valgrind', required: false)
 if prog_valgrind.found()
+   valgrind_suppressions = meson.project_source_root() / 'valgrind-openssl.supp'
    # Run valgrind memory leakage test
    run_target('gta_provider_memcheck',
-      command: [prog_valgrind, '--trace-children=yes', '--leak-check=full', '--show-leak-kinds=all', '--error-exitcode=99', '--errors-for-leak-kinds=all', gta_provider_test.full_path()],
+      command: [prog_valgrind, '--trace-children=yes', '--leak-check=full', '--show-leak-kinds=all', '--error-exitcode=99', '--errors-for-leak-kinds=all', '--suppressions=' + valgrind_suppressions, gta_provider_test.full_path()],
       depends: [gta_provider_test],
    )
 endif

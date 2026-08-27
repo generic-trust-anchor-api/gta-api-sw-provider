@@ -7,7 +7,6 @@
 #include "provider_data_model.h"
 
 #include "gta_debug.h"
-#include <gta_api/gta_api.h>
 #include <gta_api/util/gta_list.h>
 
 /* free an Attribute of a Personality */

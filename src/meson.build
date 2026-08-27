@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright 2024-2025 Siemens
+# SPDX-FileCopyrightText: Copyright 2024-2026 Siemens
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -12,7 +12,7 @@ gta_sw_provider_files = files (
   'profiles/prof_ch_iec_30168_basic_local_data_protection.c',
   'profiles/prof_com_github_generic_trust_anchor_api_basic_rsa.c',
   'profiles/prof_com_github_generic_trust_anchor_api_basic_ec.c',
-  'profiles/prof_com_github_generic_trust_anchor_api_basic_dilithium.c',
+  'profiles/prof_com_github_generic_trust_anchor_api_basic_ml-dsa.c',
   'profiles/prof_com_github_generic_trust_anchor_api_basic_jwt.c',
   'profiles/prof_com_github_generic_trust_anchor_api_basic_signature.c',
   'profiles/prof_com_github_generic_trust_anchor_api_basic_enroll.c',
@@ -25,11 +25,6 @@ build_dep = [ dep_libcrypto,
               dep_t_cose,
               dep_gta_core,
             ]
-
-if enable_pqc
-    build_dep += [ dep_liboqs,
-                 ]
-endif
 
 gta_sw_provider_static = static_library('gta_sw_provider',
     gta_sw_provider_files,

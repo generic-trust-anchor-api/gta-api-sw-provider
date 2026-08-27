@@ -6,24 +6,17 @@
 
 #include "persistent_storage.h"
 
-#include "gta_debug.h"
 #include "gta_sw_provider.h"
 #include "key_management.h"
-#include "provider_data_model.h"
 #include "t_cose/t_cose_encrypt_dec.h"
 #include "t_cose/t_cose_encrypt_enc.h"
 #include "t_cose/t_cose_mac_compute.h"
 #include "t_cose/t_cose_mac_validate.h"
-#include <gta_api/gta_api.h>
-#include <gta_api/util/gta_list.h>
 #include <gta_api/util/gta_memset.h>
 #include <openssl/evp.h>
-#include <openssl/kdf.h>
 #include <qcbor/UsefulBuf.h>
 #include <qcbor/qcbor.h>
 #include <qcbor/qcbor_spiffy_decode.h>
-#include <stdbool.h>
-#include <stdlib.h>
 #include <t_cose/t_cose_common.h>
 
 /* File names for serialization */
@@ -288,7 +281,9 @@ static bool personality_content_serialize(
     t_cose_encrypt_enc_init(&enc_ctx, T_COSE_OPT_MESSAGE_TYPE_ENCRYPT0, T_COSE_ALGORITHM_A256GCM);
 
     /* get & set the COSE Key */
-    get_derived_key(raw_key, AES_256_KEY_LEN, INFO_KEY_ENC, sizeof(INFO_KEY_ENC) - 1);
+    if (!get_derived_key(raw_key, AES_256_KEY_LEN, INFO_KEY_ENC, sizeof(INFO_KEY_ENC) - 1)) {
+        goto err;
+    }
     t_cose_key_init_symmetric(T_COSE_ALGORITHM_A256GCM, Q_USEFUL_BUF_FROM_BYTE_ARRAY_LITERAL(raw_key), &cek);
     t_cose_encrypt_set_cek(&enc_ctx, cek);
 
@@ -433,7 +428,9 @@ bool provider_serialize(const char * se_dir, struct devicestate_stack_item_t * p
     t_cose_mac_compute_init(&mac_ctx, 0, T_COSE_ALGORITHM_HMAC256);
 
     /* get & set the COSE Key */
-    get_derived_key(raw_key, HMAC_256_KEY_LEN, INFO_KEY_MAC, sizeof(INFO_KEY_MAC) - 1);
+    if (!get_derived_key(raw_key, HMAC_256_KEY_LEN, INFO_KEY_MAC, sizeof(INFO_KEY_MAC) - 1)) {
+        goto err;
+    }
     t_cose_key_init_symmetric(T_COSE_ALGORITHM_HMAC256, Q_USEFUL_BUF_FROM_BYTE_ARRAY_LITERAL(raw_key), &key);
     t_cose_mac_set_computing_key(&mac_ctx, key, NULL_Q_USEFUL_BUF_C);
 
@@ -708,7 +705,9 @@ static bool personality_content_deserialize(
     t_cose_encrypt_dec_init(&dec_ctx, T_COSE_OPT_MESSAGE_TYPE_ENCRYPT0);
 
     /* get & set the COSE Key */
-    get_derived_key(raw_key, AES_256_KEY_LEN, INFO_KEY_ENC, sizeof(INFO_KEY_ENC) - 1);
+    if (!get_derived_key(raw_key, AES_256_KEY_LEN, INFO_KEY_ENC, sizeof(INFO_KEY_ENC) - 1)) {
+        goto err;
+    }
     t_cose_key_init_symmetric(T_COSE_ALGORITHM_A256GCM, Q_USEFUL_BUF_FROM_BYTE_ARRAY_LITERAL(raw_key), &cek);
     t_cose_encrypt_dec_set_cek(&dec_ctx, cek);
 
@@ -1126,7 +1125,9 @@ bool provider_deserialize(
         t_cose_mac_validate_init(&validate_ctx, 0);
 
         /* get & set the COSE Key */
-        get_derived_key(raw_key, HMAC_256_KEY_LEN, INFO_KEY_MAC, sizeof(INFO_KEY_MAC) - 1);
+        if (!get_derived_key(raw_key, HMAC_256_KEY_LEN, INFO_KEY_MAC, sizeof(INFO_KEY_MAC) - 1)) {
+            goto err;
+        }
         t_cose_key_init_symmetric(T_COSE_ALGORITHM_HMAC256, Q_USEFUL_BUF_FROM_BYTE_ARRAY_LITERAL(raw_key), &key);
         t_cose_mac_set_validate_key(&validate_ctx, key);
 

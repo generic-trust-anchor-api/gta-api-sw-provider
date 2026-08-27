@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: Copyright 2024-2025 Siemens
+SPDX-FileCopyrightText: Copyright 2024-2026 Siemens
 
 SPDX-License-Identifier: Apache-2.0
 -->
@@ -52,7 +52,7 @@ for more profiles will be added.
 | :white_check_mark: | ch.iec.30168.basic.passcode | [ISO/IEC TS 30168](https://www.iso.org/standard/53288.html) Annex B.1 | Simple authentication method for personality derived access tokens |
 | :white_check_mark: | ch.iec.30168.basic.local_data_integrity_only | [ISO/IEC TS 30168](https://www.iso.org/standard/53288.html) Annex B.2 | Integrity protection of local data on the device |
 | :white_check_mark: | ch.iec.30168.basic.local_data_protection | [ISO/IEC TS 30168](https://www.iso.org/standard/53288.html) Annex B.3 | Integrity and confidentiality protection of local data on the device |
-| :white_check_mark: | com.github.generic-trust-anchor-api.basic.dilithium | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.dilithium.md) | Creation of a Dilithium based personality |
+| :white_check_mark: | com.github.generic-trust-anchor-api.basic.ml-dsa | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.ml-dsa.md) | Creation of a ML-DSA-65 based personality |
 | :white_check_mark:| com.github.generic-trust-anchor-api.basic.ec | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.ec.md) | Creation of an Elliptic Curve based personality |
 | :white_check_mark: | com.github.generic-trust-anchor-api.basic.enroll | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.enroll.md) | Creation of a Certificate Signing Request (CSR) |
 | :white_check_mark:| com.github.generic-trust-anchor-api.basic.jwt | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.jwt.md) | Creation of signed JWT |
@@ -62,9 +62,8 @@ for more profiles will be added.
 
 ## Dependencies
 The build and test of the GTA API SW provider depend on the GTA API Core and
-it's dependencies. To build the provider with Post-Quantum crypto algorithms,
-[liboqs](https://github.com/open-quantum-safe/liboqs) needs to be installed on
-the system.
+it's dependencies. Post-Quantum crypto algorithms (ML-DSA-65) are supported
+natively via OpenSSL 3.5 and do not require any additional libraries.
 
 ## Local build
 * In the project root, initialize build system and build directory (like ./configure for automake):
@@ -166,7 +165,6 @@ Currently the following options are available:
 | build       | combo: { 'debug', 'release' } | Select the build type with associated tool configuration (e.g., compiler flags for debugging). |
 | build-dependencies | boolean : { true, false } | Select whether to build dependencies locally rather than use system installed libraries. |
 | disable-deprecated-warnings | boolean : { true, false } | Select whether or not warnings for deprecated functions are displayed. |
-| enable-post-quantum-crypto | boolean : { true, false } | This switch enables post quantum crypto algorithms. |
 | enable-test-log | boolean : { true, false } | This switch enables log messages for the provider tests. |
 | build-examples | boolean : { true, false } | This switch enables the build of examples. |
 

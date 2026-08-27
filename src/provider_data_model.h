@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright 2024-2025 Siemens
+ * SPDX-FileCopyrightText: Copyright 2024-2026 Siemens
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -85,8 +85,6 @@ typedef enum {
     SECRET_TYPE_RAW_BYTES,
     /* Human readable characters (external input) */
     SECRET_TYPE_PASSCODE,
-    /* Temporary, Dilithium2 raw key as raw bytes */
-    SECRET_TYPE_DILITHIUM2,
 } personality_secret_type_t;
 
 /* internal representation of a personality */
