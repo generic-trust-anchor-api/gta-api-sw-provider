@@ -8,7 +8,7 @@
 #include <openssl/evp.h>
 
 #define PERS_ATTR_NAME_KEYTYPE "com.github.generic-trust-anchor-api.keytype.openssl"
-#define PERS_ATTR_KEYTYPE_MLDSA44 "ML-DSA-44"
+#define PERS_ATTR_KEYTYPE_MLDSA44 "ML-DSA-65"
 
 GTA_SWP_DEFINE_FUNCTION(
     bool,
@@ -25,7 +25,7 @@ GTA_SWP_DEFINE_FUNCTION(
     EVP_PKEY * p_key = NULL;
     bool ret = false;
 
-    p_key = EVP_PKEY_Q_keygen(NULL, NULL, "ML-DSA-44");
+    p_key = EVP_PKEY_Q_keygen(NULL, NULL, "ML-DSA-65");
     if (NULL == p_key) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;

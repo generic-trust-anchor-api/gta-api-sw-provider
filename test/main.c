@@ -1854,7 +1854,7 @@ static void profile_signature(void ** state)
 
     assert_true(myio_open_ifilestream(&istream_data_to_seal, TEST_DATA_PAYLOAD, &errinfo));
 
-    DEBUG_PRINT(("\nSignature with ML-DSA-44\n"));
+    DEBUG_PRINT(("\nSignature with ML-DSA-65\n"));
     assert_true(gta_authenticate_data_detached(h_ctx, (gtaio_istream_t *)&istream_data_to_seal, ostream, &errinfo));
     DEBUG_PRINT(("\n"));
     assert_int_equal(0, errinfo);
@@ -2078,7 +2078,7 @@ static void profile_tls(void ** state)
 
     assert_true(myio_open_ifilestream(&istream_data_to_seal, TEST_DATA_PAYLOAD, &errinfo));
 
-    DEBUG_PRINT(("\nSignature with ML-DSA-44\n"));
+    DEBUG_PRINT(("\nSignature with ML-DSA-65\n"));
     assert_true(gta_authenticate_data_detached(h_ctx, (gtaio_istream_t *)&istream_data_to_seal, ostream, &errinfo));
     DEBUG_PRINT(("\n"));
     assert_int_equal(0, errinfo);
