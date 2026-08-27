@@ -52,7 +52,7 @@ for more profiles will be added.
 | :white_check_mark: | ch.iec.30168.basic.passcode | [ISO/IEC TS 30168](https://www.iso.org/standard/53288.html) Annex B.1 | Simple authentication method for personality derived access tokens |
 | :white_check_mark: | ch.iec.30168.basic.local_data_integrity_only | [ISO/IEC TS 30168](https://www.iso.org/standard/53288.html) Annex B.2 | Integrity protection of local data on the device |
 | :white_check_mark: | ch.iec.30168.basic.local_data_protection | [ISO/IEC TS 30168](https://www.iso.org/standard/53288.html) Annex B.3 | Integrity and confidentiality protection of local data on the device |
-| :white_check_mark: | com.github.generic-trust-anchor-api.basic.ml-dsa | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.ml-dsa.md) | Creation of a ML-DSA-44 based personality |
+| :white_check_mark: | com.github.generic-trust-anchor-api.basic.ml-dsa | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.ml-dsa.md) | Creation of a ML-DSA-65 based personality |
 | :white_check_mark:| com.github.generic-trust-anchor-api.basic.ec | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.ec.md) | Creation of an Elliptic Curve based personality |
 | :white_check_mark: | com.github.generic-trust-anchor-api.basic.enroll | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.enroll.md) | Creation of a Certificate Signing Request (CSR) |
 | :white_check_mark:| com.github.generic-trust-anchor-api.basic.jwt | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.jwt.md) | Creation of signed JWT |
@@ -62,7 +62,7 @@ for more profiles will be added.
 
 ## Dependencies
 The build and test of the GTA API SW provider depend on the GTA API Core and
-it's dependencies. Post-Quantum crypto algorithms (ML-DSA-44) are supported
+it's dependencies. Post-Quantum crypto algorithms (ML-DSA-65) are supported
 natively via OpenSSL 3.5 and do not require any additional libraries.
 
 ## Local build
