@@ -155,6 +155,15 @@ bool get_hw_unique_key_32(struct hw_unique_key_32 * key)
         goto err;
     }
 
+    TPMA_SESSION session_attributes = TPMA_SESSION_CONTINUESESSION | TPMA_SESSION_ENCRYPT | TPMA_SESSION_DECRYPT;
+
+    tss2_ret = Esys_TRSess_SetAttributes(p_esys_ctx, h_session, session_attributes, 0xff);
+
+    if (TSS2_RC_SUCCESS != tss2_ret) {
+        DEBUG_PRINT("Esys_TRSess_SetAttributes failed\n");
+        goto err;
+    }
+
     /*********************************/
     /* create primary and derive key */
     TPM2B_SENSITIVE_CREATE in_sensitive_primary = {
@@ -196,7 +205,7 @@ bool get_hw_unique_key_32(struct hw_unique_key_32 * key)
         p_esys_ctx,
         ESYS_TR_RH_ENDORSEMENT,
         ESYS_TR_PASSWORD,
-        ESYS_TR_NONE,
+        h_session,
         ESYS_TR_NONE,
         &in_sensitive_primary,
         &in_public,
@@ -215,7 +224,7 @@ bool get_hw_unique_key_32(struct hw_unique_key_32 * key)
 
     TPM2B_MAX_BUFFER dv_buffer = {.size = sizeof(HUK_DERIVATION_VALUE) - 1, .buffer = HUK_DERIVATION_VALUE};
 
-    TPMA_SESSION session_attributes = TPMA_SESSION_ENCRYPT | TPMA_SESSION_DECRYPT;
+    session_attributes = TPMA_SESSION_ENCRYPT | TPMA_SESSION_DECRYPT;
 
     tss2_ret = Esys_TRSess_SetAttributes(p_esys_ctx, h_session, session_attributes, 0xff);
 
