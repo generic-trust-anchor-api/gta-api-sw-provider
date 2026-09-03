@@ -161,7 +161,7 @@ bool get_derived_key(unsigned char * derived_key, size_t derived_key_len, char *
     }
 
 err:
-    /* TODO: clean master key */
+    gta_memset(&master_key, sizeof(master_key), 0, sizeof(master_key));
 
     if (NULL != ctx) {
         EVP_KDF_CTX_free(ctx);
