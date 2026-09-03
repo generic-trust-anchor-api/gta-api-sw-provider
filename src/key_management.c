@@ -7,6 +7,7 @@
 #include "key_management.h"
 
 #include "gta_debug.h"
+#include <gta_api/util/gta_memset.h>
 #include <string.h>
 
 #ifdef ENABLE_TPM2_BACKEND
@@ -275,6 +276,8 @@ err:
     /* clean up everything */
 
     if (NULL != p_out_hmac) {
+        /* The HMAC output holds the derived HUK; wipe it before releasing the buffer. */
+        gta_memset(p_out_hmac->buffer, sizeof(p_out_hmac->buffer), 0, p_out_hmac->size);
         Esys_Free(p_out_hmac);
     }
 
