@@ -597,6 +597,11 @@ bool read_monotonic_counter(unsigned char * metadata, size_t metadata_len, uint6
         goto error;
     }
 
+    if (8 > nv_counter->size) {
+        DEBUG_PRINT("Esys_NV_Read returned fewer than 8 bytes\n");
+        goto error;
+    }
+
     /* NV counter data is returned big-endian (most significant byte first) */
     *counter_value = 0;
     for (int i = 0; i < 8; ++i) {
