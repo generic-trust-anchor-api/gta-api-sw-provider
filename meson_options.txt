@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright 2024 Siemens
+# SPDX-FileCopyrightText: Copyright 2024-2026 Siemens
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -8,3 +8,9 @@ option('disable-deprecated-warnings', type : 'boolean', value : true, descriptio
 option('enable-post-quantum-crypto', type : 'boolean', value : false, description : 'This switch enables post quantum crypto algorithms.')
 option('enable-test-log', type : 'boolean', value : false, description : 'This switch enables log messages for the provider tests.')
 option('build-examples', type : 'boolean', value : false, description : 'This switch enables the build of examples.')
+
+# Configuration options to enable the use of a TPM 2.0 to protect the persistent state of the SW provider
+option('enable-tpm2-backend', type : 'boolean', value : false, description : 'This switch enables the use of a TPM2 to protect the persisted state')
+option('tcti-module', type : 'combo', choices : ['device', 'mssim'], value : 'device', description : 'Select TCTI module in case TPM2 is enabled')
+option('tcti-conf', type : 'string', value : '', description : 'Optional TCTI connection configuration appended to the selected module (e.g. host=127.0.0.1,port=2321 for tcti-mssim). Empty uses the module default.')
+option('enable-tpm2-monotonic-counter', type : 'boolean', value : true, description : 'This switch enables the use of a TPM2 based monotonic counter to enhance the protection of the persisted state. This option depends on enable-tpm2-backend=true')

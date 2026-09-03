@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright 2024-2025 Siemens
+ * SPDX-FileCopyrightText: Copyright 2024-2026 Siemens
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -492,6 +492,9 @@ GTA_DEFINE_FUNCTION(
     p_provider_params->provider_instance_auth_token_info.issuing_token_issued = false;
     p_provider_params->provider_instance_auth_token_info.issuing_token_revoked = false;
     p_provider_params->provider_instance_auth_token_info.physical_presence_token_issued = false;
+    p_provider_params->monotonic_counter.metadata = NULL;
+    p_provider_params->monotonic_counter.metadata_len = 0;
+    p_provider_params->monotonic_counter.value = 0;
 
     /* Create random token issuing token */
     if (1 != RAND_bytes(
@@ -520,10 +523,7 @@ GTA_DEFINE_FUNCTION(
     /* de-serialize the persisted device state */
     if (serialized_file_exists(p_provider_params->p_serializ_path)) {
         DEBUG_PRINT(("Performing DESERIALIZATION.\n"));
-        if (!provider_deserialize(
-                p_provider_params->p_serializ_path,
-                &(p_provider_params->p_devicestate_stack),
-                p_provider_params->h_ctx)) {
+        if (!provider_deserialize(p_provider_params->p_serializ_path, p_provider_params)) {
             DEBUG_PRINT(("Error while DESERIALIZATION. Cleaning up.\n"));
             devicestate_stack_list_destroy(h_ctx, p_provider_params->p_devicestate_stack, p_errinfo);
             /* Fail when Deserialization error. In order to start just remove existing serialization files */
@@ -545,6 +545,12 @@ GTA_DEFINE_FUNCTION(
         p_provider_params->p_devicestate_stack->owner_lock_count = 0;
         p_provider_params->p_devicestate_stack->p_identifier_list = NULL;
         p_provider_params->p_devicestate_stack->p_personality_name_list = NULL;
+
+        /* Initialize serialization */
+        if (!provider_serialize_init(p_provider_params->p_serializ_path, p_provider_params)) {
+            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+            goto err;
+        }
     }
 
     return &g_my_function_list;
@@ -1374,7 +1380,7 @@ GTA_DEFINE_FUNCTION(
     p_provider_params->p_devicestate_stack->owner_lock_count = (uint8_t)owner_lock_count;
 
     /* Serialize */
-    if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
+    if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params)) {
         goto err;
     }
     return true;
@@ -1467,7 +1473,7 @@ GTA_DEFINE_FUNCTION(
     }
 
     /* Serialize */
-    b_ret = provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack);
+    b_ret = provider_serialize(p_provider_params->p_serializ_path, p_provider_params);
 
     return b_ret;
 }
@@ -1536,7 +1542,7 @@ GTA_DEFINE_FUNCTION(
                     p_identifier_list_item);
                 p_provider_params->p_devicestate_stack->p_identifier_list = p_identifier_list_item;
 
-                ret = provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack);
+                ret = provider_serialize(p_provider_params->p_serializ_path, p_provider_params);
                 if (false == ret) {
                     *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
                     identifier_list_item_free(p_provider_params->h_ctx, p_identifier_list_item, &errinfo_tmp);
@@ -2200,7 +2206,7 @@ static bool personality_deploy_create(
         (struct list_t **)(&(p_provider_params->p_devicestate_stack->p_personality_name_list)),
         p_personality_name_list_item);
 
-    if (provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
+    if (provider_serialize(p_provider_params->p_serializ_path, p_provider_params)) {
         return true;
     }
 
@@ -2385,7 +2391,7 @@ GTA_DEFINE_FUNCTION(
     }
 
     /* Serialize the new device state */
-    if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
+    if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params)) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
@@ -2429,7 +2435,7 @@ GTA_DEFINE_FUNCTION(
     p_context_params->p_personality_item->activated = false;
 
     /* Serialize the new device state */
-    if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
+    if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params)) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
@@ -2485,7 +2491,7 @@ GTA_DEFINE_FUNCTION(
     p_context_params->p_personality_item->activated = true;
 
     /* Serialize the new device state */
-    if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
+    if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params)) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
@@ -2558,7 +2564,7 @@ bool personality_add_attribute(
             p_errinfo)) {
 
         /* Serialize the new device state */
-        if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
+        if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params)) {
             *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
             goto err;
         }
@@ -2788,7 +2794,7 @@ GTA_DEFINE_FUNCTION(
     personality_attribute_list_item_free(p_provider_params->h_ctx, p_attribute, &errinfo_tmp);
 
     /* Serialize the new device state */
-    if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
+    if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params)) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
@@ -2838,7 +2844,7 @@ GTA_DEFINE_FUNCTION(
     p_attribute->activated = false;
 
     /* Serialize the new device state */
-    if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
+    if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params)) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
@@ -2900,7 +2906,7 @@ GTA_DEFINE_FUNCTION(
     p_attribute->activated = true;
 
     /* Serialize the new device state */
-    if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params->p_devicestate_stack)) {
+    if (!provider_serialize(p_provider_params->p_serializ_path, p_provider_params)) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }

@@ -3277,6 +3277,46 @@ static void provider_deserialize(void ** state)
     assert_true(gta_instance_final(h_inst, &errinfo));
 }
 
+/*
+ * This test creates a new instance to test the serialization of a second state.
+ */
+static void provider_serialize(void ** state)
+{
+    DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
+    gta_errinfo_t errinfo = 0;
+    gta_instance_handle_t h_inst = GTA_HANDLE_INVALID;
+
+    /* Clean the state directory */
+    remove_folder_files(DIRECTORY_CLEAN_STATE);
+
+    struct gta_instance_params_t inst_params = {
+        NULL,
+        {
+            .calloc = &calloc,
+            .free = &free,
+            .mutex_create = NULL,
+            .mutex_destroy = NULL,
+            .mutex_lock = NULL,
+            .mutex_unlock = NULL,
+        },
+        NULL};
+    istream_from_buf_t init_config = {0};
+    istream_from_buf_init(&init_config, DIRECTORY_CLEAN_STATE, sizeof(DIRECTORY_CLEAN_STATE) - 1);
+
+    h_inst = gta_instance_init(&inst_params, &errinfo);
+    assert_non_null(h_inst);
+
+    /* register a profile to trigger serialization */
+    assert_true(gta_sw_provider_gta_register_provider(
+        h_inst,
+        (gtaio_istream_t *)&init_config,
+        supported_profiles[PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION],
+        &errinfo));
+    assert_int_equal(0, errinfo);
+
+    assert_true(gta_instance_final(h_inst, &errinfo));
+}
+
 /*-----------------------------------------------------------------------------
  * group tests
  */
@@ -3315,6 +3355,7 @@ int ts_gta_sw_provider(void)
         cmocka_unit_test(access_policies_and_access_tokens),
         /* Tests for persistent storage */
         cmocka_unit_test(provider_deserialize),
+        cmocka_unit_test(provider_serialize),
     };
 
     return cmocka_run_group_tests_name(

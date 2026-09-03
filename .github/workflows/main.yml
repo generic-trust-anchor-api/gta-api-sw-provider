@@ -12,7 +12,21 @@ jobs:
     steps:
       - name: Install dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y libcmocka-dev meson ninja-build build-essential libssl-dev cmake pkg-config git valgrind
+          sudo apt-get update && sudo apt-get install -y libcmocka-dev meson ninja-build build-essential libssl-dev cmake pkg-config git valgrind libtss2-dev tpm2-tools
+      - name: Download and verify TPM Simulator
+        run: |
+          wget -O ibmtpm1682.tar.gz https://sourceforge.net/projects/ibmswtpm2/files/ibmtpm1682.tar.gz/download
+          echo "3cb642f871a17b23d50b046e5f95f449c2287415fc1e7aeb4bdbb8920dbcb38f  ibmtpm1682.tar.gz" | sha256sum -c -
+      - name: Install TPM Simulator
+        run: |
+          mkdir tpm_simulator
+          cd tpm_simulator
+          tar -xf ../ibmtpm1682.tar.gz
+          cd src
+          make
+          ./tpm_server &
+          export TPM2TOOLS_TCTI="mssim:host=127.0.0.1,port=2321"
+          tpm2_startup -c
       - name: Checkout liboqs
         uses: actions/checkout@v4
         with:
@@ -55,6 +69,16 @@ jobs:
       - name: Valgrind w/ PQC
         run: |
           ninja -C build gta_provider_memcheck
+      - name: Build gta-api-sw-provider w/ TPM2
+        run: |
+          meson setup build --reconfigure --werror -Denable-tpm2-backend=true -Dtcti-module='mssim' -Dtcti-conf='host=127.0.0.1,port=2321'
+          ninja -C build
+      - name: Test gta-api-sw-provider w/ TPM2
+        run: |
+          ninja -C build test
+#      - name: Valgrind w/ TPM2
+#        run: |
+#          ninja -C build gta_provider_memcheck
 
   style-check:
     runs-on: ubuntu-latest

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright 2024-2025 Siemens
+ * SPDX-FileCopyrightText: Copyright 2024-2026 Siemens
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -29,6 +29,10 @@
 /* File names for serialization */
 #define FILE_PERSONALITY "PERS_"
 #define FILE_DEVICESTATES_STACK "DEVICESTATES_STACK"
+
+/* Labels used in CBOR Map - Monotonic Counter */
+#define LABEL_MC_VALUE "MonotonicCounterValue"
+#define LABEL_MC_METADATA "MonotonicCounterMetadata"
 
 /* Labels used in CBOR Map - Device State */
 #define LABEL_AUTH_RECEDE_LIST "AuthRecedeList"
@@ -157,7 +161,7 @@ bool get_derived_key(unsigned char * derived_key, size_t derived_key_len, char *
     }
 
 err:
-    /* TODO: clean master key */
+    gta_memset(&master_key, sizeof(master_key), 0, sizeof(master_key));
 
     if (NULL != ctx) {
         EVP_KDF_CTX_free(ctx);
@@ -328,9 +332,60 @@ err:
     return ret;
 }
 
-bool provider_serialize(const char * se_dir, struct devicestate_stack_item_t * p_devicestate_stack)
+/*
+ * Helper function for provider_serialize() and provider_serialize_init() to
+ * sign the overall serialized state and write it to the file system.
+ */
+static bool cose_sign_and_write(const char * se_dir, UsefulBufC encoded_data)
+{
+    /* Encode COSE Protection */
+    Q_USEFUL_BUF_MAKE_STACK_UB(signed_cose_buffer, COSE_DATA_LEN);
+    struct q_useful_buf_c signed_cose;
+    enum t_cose_err_t t_cose_result;
+    struct t_cose_mac_calculate_ctx mac_ctx;
+    struct t_cose_key key;
+    unsigned char raw_key[HMAC_256_KEY_LEN];
+    bool ret = false;
+
+    t_cose_mac_compute_init(&mac_ctx, 0, T_COSE_ALGORITHM_HMAC256);
+
+    /* get & set the COSE Key */
+    get_derived_key(raw_key, HMAC_256_KEY_LEN, INFO_KEY_MAC, sizeof(INFO_KEY_MAC) - 1);
+    t_cose_key_init_symmetric(T_COSE_ALGORITHM_HMAC256, Q_USEFUL_BUF_FROM_BYTE_ARRAY_LITERAL(raw_key), &key);
+    t_cose_mac_set_computing_key(&mac_ctx, key, NULL_Q_USEFUL_BUF_C);
+
+    t_cose_result = t_cose_mac_compute(&mac_ctx, NULL_Q_USEFUL_BUF_C, encoded_data, signed_cose_buffer, &signed_cose);
+
+    /* TODO clean Keys */
+
+    if (T_COSE_SUCCESS != t_cose_result) {
+        goto err;
+    }
+
+    /* File Name */
+    char filename[FILENAME_MAX] = {0};
+    if (!get_se_filename(SE_FILE_DEVICESTATES_STACK, "", se_dir, filename)) {
+        goto err;
+    }
+
+    /* File IO */
+    FILE * fp = NULL;
+    if (NULL == (fp = fopen(filename, "wb"))) {
+        goto err;
+    }
+    fwrite(signed_cose.ptr, signed_cose.len, 1, fp);
+    fclose(fp);
+
+    ret = true;
+
+err:
+    return ret;
+}
+
+bool provider_serialize(const char * se_dir, struct gta_sw_provider_params_t * provider_params)
 {
     bool ret = false;
+    struct devicestate_stack_item_t * p_devicestate_stack = provider_params->p_devicestate_stack;
     struct devicestate_stack_item_t * p_devicestate_stack_item;
 
     /* CBOR related stuff */
@@ -340,14 +395,36 @@ bool provider_serialize(const char * se_dir, struct devicestate_stack_item_t * p
     UsefulBufC encoded_data;
     QCBORError qcbor_result;
 
-    /* COSE related stuff */
-    Q_USEFUL_BUF_MAKE_STACK_UB(signed_cose_buffer, COSE_DATA_LEN);
-    struct q_useful_buf_c signed_cose;
-    enum t_cose_err_t t_cose_result;
+    /* Increment monotonic counter */
+    uint64_t counter_value = 0;
+    if (!increment_monotonic_counter(
+            provider_params->monotonic_counter.metadata, provider_params->monotonic_counter.metadata_len)) {
+        goto err;
+    }
+
+    /* Read monotonic counter value */
+    if (!read_monotonic_counter(
+            provider_params->monotonic_counter.metadata,
+            provider_params->monotonic_counter.metadata_len,
+            &counter_value)) {
+        goto err;
+    }
+
+    /* Write new value to datamodel */
+    provider_params->monotonic_counter.value = counter_value;
 
     QCBOREncode_Init(&encode_ctx, encode_buffer);
 
-    /* TODO review all String Zero terminated assumed below */
+    /* Assume all Strings below are Zero terminated */
+
+    /* Map for Monotonic Counter */
+    QCBOREncode_OpenMap(&encode_ctx);
+    QCBOREncode_AddUInt64ToMap(&encode_ctx, LABEL_MC_VALUE, counter_value);
+    UsefulBufC mc_metadata;
+    mc_metadata.ptr = provider_params->monotonic_counter.metadata;
+    mc_metadata.len = provider_params->monotonic_counter.metadata_len;
+    QCBOREncode_AddBytesToMap(&encode_ctx, LABEL_MC_METADATA, mc_metadata);
+    QCBOREncode_CloseMap(&encode_ctx);
 
     /* Array of all Device States */
     QCBOREncode_OpenArray(&encode_ctx);
@@ -426,38 +503,91 @@ bool provider_serialize(const char * se_dir, struct devicestate_stack_item_t * p
     }
 
     /* Encode COSE Protection */
-    struct t_cose_mac_calculate_ctx mac_ctx;
-    struct t_cose_key key;
-    unsigned char raw_key[HMAC_256_KEY_LEN];
-
-    t_cose_mac_compute_init(&mac_ctx, 0, T_COSE_ALGORITHM_HMAC256);
-
-    /* get & set the COSE Key */
-    get_derived_key(raw_key, HMAC_256_KEY_LEN, INFO_KEY_MAC, sizeof(INFO_KEY_MAC) - 1);
-    t_cose_key_init_symmetric(T_COSE_ALGORITHM_HMAC256, Q_USEFUL_BUF_FROM_BYTE_ARRAY_LITERAL(raw_key), &key);
-    t_cose_mac_set_computing_key(&mac_ctx, key, NULL_Q_USEFUL_BUF_C);
-
-    t_cose_result = t_cose_mac_compute(&mac_ctx, NULL_Q_USEFUL_BUF_C, encoded_data, signed_cose_buffer, &signed_cose);
-
-    /* TODO clean Keys */
-
-    if (T_COSE_SUCCESS != t_cose_result) {
+    if (!cose_sign_and_write(se_dir, encoded_data)) {
         goto err;
     }
 
-    /* File Name */
-    char filename[FILENAME_MAX] = {0};
-    if (!get_se_filename(SE_FILE_DEVICESTATES_STACK, "", se_dir, filename)) {
+    ret = true;
+
+err:
+    return ret;
+}
+
+bool provider_serialize_init(const char * se_dir, struct gta_sw_provider_params_t * provider_params)
+{
+    bool ret = false;
+    const struct devicestate_stack_item_t * p_devicestate_stack_item = provider_params->p_devicestate_stack;
+
+    /* CBOR related stuff */
+    QCBOREncodeContext encode_ctx;
+    UsefulBuf_MAKE_STACK_UB(encode_buffer, ENCODED_DATA_LEN);
+    UsefulBufC encoded_data;
+    QCBORError qcbor_result;
+
+    /* Initialize monotonic counter */
+    if (!init_monotonic_counter(
+            provider_params->h_ctx,
+            &provider_params->monotonic_counter.metadata,
+            &provider_params->monotonic_counter.metadata_len)) {
         goto err;
     }
 
-    /* File IO */
-    FILE * fp = NULL;
-    if (NULL == (fp = fopen(filename, "wb"))) {
+    /* Read monotonic counter value */
+    if (!read_monotonic_counter(
+            provider_params->monotonic_counter.metadata,
+            provider_params->monotonic_counter.metadata_len,
+            &provider_params->monotonic_counter.value)) {
         goto err;
     }
-    fwrite(signed_cose.ptr, signed_cose.len, 1, fp);
-    fclose(fp);
+
+    QCBOREncode_Init(&encode_ctx, encode_buffer);
+
+    /* TODO review all String Zero terminated assumed below */
+
+    /* Map for Monotonic Counter */
+    QCBOREncode_OpenMap(&encode_ctx);
+    QCBOREncode_AddUInt64ToMap(&encode_ctx, LABEL_MC_VALUE, provider_params->monotonic_counter.value);
+    UsefulBufC mc_metadata;
+    mc_metadata.ptr = provider_params->monotonic_counter.metadata;
+    mc_metadata.len = provider_params->monotonic_counter.metadata_len;
+    QCBOREncode_AddBytesToMap(&encode_ctx, LABEL_MC_METADATA, mc_metadata);
+    QCBOREncode_CloseMap(&encode_ctx);
+
+    /* Array of all Device States */
+    QCBOREncode_OpenArray(&encode_ctx);
+
+    /* Map of a Device State */
+    QCBOREncode_OpenMap(&encode_ctx);
+
+    /* Auth recede of the Device State (empty) */
+    QCBOREncode_OpenArrayInMap(&encode_ctx, LABEL_AUTH_RECEDE_LIST);
+    QCBOREncode_CloseArray(&encode_ctx);
+
+    /* Scalars of the Device State */
+    QCBOREncode_AddUInt64ToMap(&encode_ctx, LABEL_DEVICE_STATE_LOCK, p_devicestate_stack_item->owner_lock_count);
+
+    /* Array of Identifiers associated with the Device State (empty) */
+    QCBOREncode_OpenArrayInMap(&encode_ctx, LABEL_IDENTIFIERS);
+    QCBOREncode_CloseArray(&encode_ctx);
+
+    /* Array of Personalities associated with the Device State (empty) */
+    QCBOREncode_OpenArrayInMap(&encode_ctx, LABEL_PERSONALITIES);
+    QCBOREncode_CloseArray(&encode_ctx);
+
+    /* Close map containing a Device State */
+    QCBOREncode_CloseMap(&encode_ctx);
+
+    /* Close array of all Device States */
+    QCBOREncode_CloseArray(&encode_ctx);
+    qcbor_result = QCBOREncode_Finish(&encode_ctx, &encoded_data);
+    if (QCBOR_SUCCESS != qcbor_result) {
+        goto err;
+    }
+
+    /* Encode COSE Protection and write state */
+    if (!cose_sign_and_write(se_dir, encoded_data)) {
+        goto err;
+    }
 
     ret = true;
 
@@ -1081,10 +1211,58 @@ err:
     return ret;
 }
 
-bool provider_deserialize(
-    const char * se_dir,
-    struct devicestate_stack_item_t ** pp_devicestate_stack,
+static bool decode_monotonic_counter(
+    QCBORDecodeContext * p_decode_ctx,
+    struct gta_sw_provider_params_t * provider_params,
     gta_context_handle_t h_ctx)
+{
+    bool ret = false;
+    gta_errinfo_t errinfo = GTA_ERROR_INTERNAL_ERROR;
+
+    /* CBOR related stuff */
+    UsefulBufC tmp_bytes;
+    QCBORItem Item;
+    QCBORError qcbor_result;
+
+    /* Enter map of monotonic counter */
+    QCBORDecode_EnterMap(p_decode_ctx, &Item);
+    qcbor_result = QCBORDecode_GetError(p_decode_ctx);
+
+    if (qcbor_result == QCBOR_ERR_NO_MORE_ITEMS) {
+        goto err;
+    }
+    if (qcbor_result != QCBOR_SUCCESS) {
+        goto err;
+    }
+
+    /* Decode Counter Value */
+    QCBORDecode_GetUInt64InMapSZ(p_decode_ctx, LABEL_MC_VALUE, &provider_params->monotonic_counter.value);
+
+    /* Decode Counter Metadata */
+    QCBORDecode_GetByteStringInMapSZ(p_decode_ctx, LABEL_MC_METADATA, &tmp_bytes);
+    provider_params->monotonic_counter.metadata = gta_secmem_calloc(h_ctx, 1, tmp_bytes.len, &errinfo);
+    if (NULL == provider_params->monotonic_counter.metadata) {
+        goto err;
+    }
+    memcpy(provider_params->monotonic_counter.metadata, tmp_bytes.ptr, tmp_bytes.len);
+    provider_params->monotonic_counter.metadata_len = tmp_bytes.len;
+
+    /* Close map containing Monotonic Counter */
+    QCBORDecode_ExitMap(p_decode_ctx);
+
+    qcbor_result = QCBORDecode_GetError(p_decode_ctx);
+    if (QCBOR_SUCCESS != qcbor_result) {
+        DEBUG_PRINT(("DESERIALIZATION Failed. QCBOR error: %d\n", qcbor_result));
+        goto err;
+    }
+
+    ret = true;
+
+err:
+    return ret;
+}
+
+bool provider_deserialize(const char * se_dir, struct gta_sw_provider_params_t * provider_params)
 {
     bool ret = false;
     gta_errinfo_t errinfo;
@@ -1104,7 +1282,7 @@ bool provider_deserialize(
             fseek(fp, 0L, SEEK_END);
             size_t file_size = ftell(fp);
             rewind(fp);
-            if (NULL != (file_buffer = gta_secmem_calloc(h_ctx, 1, file_size, &errinfo))) {
+            if (NULL != (file_buffer = gta_secmem_calloc(provider_params->h_ctx, 1, file_size, &errinfo))) {
                 file_buffer_size = fread(file_buffer, sizeof(char), file_size, fp);
             }
             fclose(fp);
@@ -1146,22 +1324,43 @@ bool provider_deserialize(
 
         QCBORDecode_Init(&decode_ctx, returned_payload, QCBOR_DECODE_MODE_NORMAL);
 
+        /* Decode Monotonic Counter */
+        if (!decode_monotonic_counter(&decode_ctx, provider_params, provider_params->h_ctx)) {
+            DEBUG_PRINT(("DESERIALIZATION Failed. Error while decoding Monotonic Counter\n"));
+            goto err;
+        }
+
         /* Decode Device States */
         QCBORDecode_EnterArray(&decode_ctx, &Item);
-        if (!decode_devicestates(se_dir, &decode_ctx, pp_devicestate_stack, h_ctx)) {
+        if (!decode_devicestates(se_dir, &decode_ctx, &provider_params->p_devicestate_stack, provider_params->h_ctx)) {
             DEBUG_PRINT(("DESERIALIZATION Failed. Error while decoding Device States\n"));
             goto err;
         }
         QCBORDecode_ExitArray(&decode_ctx);
 
         QCBORDecode_Finish(&decode_ctx);
+
+        /* Read current value of monotonic counter */
+        uint64_t counter_value = 0;
+        if (!read_monotonic_counter(
+                provider_params->monotonic_counter.metadata,
+                provider_params->monotonic_counter.metadata_len,
+                &counter_value)) {
+            goto err;
+        }
+
+        /* Check if counters match */
+        if (provider_params->monotonic_counter.value != counter_value) {
+            DEBUG_PRINT(("Counters do not match: Possible downgrade/replay attack!\n"));
+            goto err;
+        }
     }
 
     ret = true;
 
 err:
     if (NULL != file_buffer) {
-        gta_secmem_free(h_ctx, file_buffer, &errinfo);
+        gta_secmem_free(provider_params->h_ctx, file_buffer, &errinfo);
     }
 
     return ret;
