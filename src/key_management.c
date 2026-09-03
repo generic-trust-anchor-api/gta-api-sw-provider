@@ -577,63 +577,123 @@ bool read_monotonic_counter(unsigned char * metadata, size_t metadata_len, uint6
 
 #else
 
-bool read_monotonic_counter(unsigned char * metadata, size_t metadata_len, uint64_t * counter_value)
+/*
+ * Shared setup for the monotonic-counter read/increment operations: open the TPM, restore
+ * the NV counter handle from the serialized metadata, bind the index's derived
+ * authorization value to it, and start an integrity-protected session for the NV command.
+ *
+ * On success *pp_tcti_ctx, *pp_esys_ctx, *p_nv_handle, *p_h_salt_key and *p_h_session are
+ * set. On failure any resources that were already created are still written to the output
+ * parameters. In both cases the caller must release everything with close_counter_session().
+ * The caller must initialize all outputs (contexts to NULL, handles to ESYS_TR_NONE) first.
+ */
+static bool open_counter_session(
+    const unsigned char * metadata,
+    size_t metadata_len,
+    TSS2_TCTI_CONTEXT ** pp_tcti_ctx,
+    ESYS_CONTEXT ** pp_esys_ctx,
+    ESYS_TR * p_nv_handle,
+    ESYS_TR * p_h_salt_key,
+    ESYS_TR * p_h_session)
 {
     bool ret = false;
-    ESYS_CONTEXT * p_esys_ctx = NULL;
-    TSS2_TCTI_CONTEXT * p_tcti_ctx = NULL;
-
     TSS2_RC r;
-    ESYS_TR nvHandle = ESYS_TR_NONE;
-    ESYS_TR h_salt_key = ESYS_TR_NONE;
-    ESYS_TR h_session = ESYS_TR_NONE;
-
     TPM2B_AUTH auth = {.size = 0, .buffer = {0}};
-    TPM2B_MAX_NV_BUFFER * nv_counter = NULL;
 
     /************/
     /* tpm_open */
 
-    r = Tss2_TctiLdr_Initialize_Ex(TCTI_MODULE, TCTI_CONF_OR_NULL, &p_tcti_ctx);
+    r = Tss2_TctiLdr_Initialize_Ex(TCTI_MODULE, TCTI_CONF_OR_NULL, pp_tcti_ctx);
 
     if (TSS2_RC_SUCCESS != r) {
         DEBUG_PRINT("Tss2_TctiLdr_Initialize_Ex failed\n");
-        goto error;
+        goto out;
     }
 
-    r = Esys_Initialize(&p_esys_ctx, p_tcti_ctx, NULL);
+    r = Esys_Initialize(pp_esys_ctx, *pp_tcti_ctx, NULL);
 
     if (TSS2_RC_SUCCESS != r) {
         DEBUG_PRINT("Esys_Initialize failed\n");
-        goto error;
+        goto out;
     }
 
-    r = Esys_TR_Deserialize(p_esys_ctx, metadata, metadata_len, &nvHandle);
+    r = Esys_TR_Deserialize(*pp_esys_ctx, metadata, metadata_len, p_nv_handle);
 
     if (TSS2_RC_SUCCESS != r) {
         DEBUG_PRINT("Esys_TR_Deserialize failed\n");
-        goto error;
+        goto out;
     }
 
-    /* Re-derive the index authorization value and bind it to the handle so the NV read is
-       authorized with the index's own auth rather than the owner hierarchy. */
+    /* Re-derive the index authorization value and bind it to the handle so the NV command
+       is authorized with the index's own auth rather than the owner hierarchy. */
     if (!derive_device_key_32(
-            p_esys_ctx, COUNTER_AUTH_DERIVATION_VALUE, sizeof(COUNTER_AUTH_DERIVATION_VALUE) - 1, auth.buffer)) {
+            *pp_esys_ctx, COUNTER_AUTH_DERIVATION_VALUE, sizeof(COUNTER_AUTH_DERIVATION_VALUE) - 1, auth.buffer)) {
         DEBUG_PRINT("derive_device_key_32 (counter auth) failed\n");
-        goto error;
+        goto out;
     }
     auth.size = HUK_SIZE_32;
 
-    r = Esys_TR_SetAuth(p_esys_ctx, nvHandle, &auth);
+    r = Esys_TR_SetAuth(*pp_esys_ctx, *p_nv_handle, &auth);
 
     if (TSS2_RC_SUCCESS != r) {
         DEBUG_PRINT("Esys_TR_SetAuth failed\n");
-        goto error;
+        goto out;
     }
 
-    /* Integrity-protect the returned counter value against a bus attacker. */
-    if (!start_integrity_session(p_esys_ctx, &h_salt_key, &h_session)) {
+    /* Integrity-protect the NV command and its response against a bus attacker. */
+    if (!start_integrity_session(*pp_esys_ctx, p_h_salt_key, p_h_session)) {
         DEBUG_PRINT("start_integrity_session failed\n");
+        goto out;
+    }
+
+    ret = true;
+
+out:
+    /* The derived auth is now held by the ESYS handle object; wipe our copy. */
+    gta_memset(auth.buffer, sizeof(auth.buffer), 0, sizeof(auth.buffer));
+    return ret;
+}
+
+/* Release everything acquired by open_counter_session(). Safe to call with unset (NULL /
+   ESYS_TR_NONE) values so it can be used on the error path of a partial open. */
+static void
+close_counter_session(TSS2_TCTI_CONTEXT * p_tcti_ctx, ESYS_CONTEXT * p_esys_ctx, ESYS_TR h_salt_key, ESYS_TR h_session)
+{
+    /* Flush integrity session and its salt key */
+    if (ESYS_TR_NONE != h_session) {
+        Esys_FlushContext(p_esys_ctx, h_session);
+    }
+
+    if (ESYS_TR_NONE != h_salt_key) {
+        Esys_FlushContext(p_esys_ctx, h_salt_key);
+    }
+
+    /*************/
+    /* tpm_close */
+
+    /* Remove the TSS context */
+    if (NULL != p_esys_ctx) {
+        Esys_Finalize(&p_esys_ctx);
+    }
+
+    /* Remove the TSS context */
+    if (NULL != p_tcti_ctx) {
+        Tss2_TctiLdr_Finalize(&p_tcti_ctx);
+    }
+}
+
+bool read_monotonic_counter(unsigned char * metadata, size_t metadata_len, uint64_t * counter_value)
+{
+    bool ret = false;
+    TSS2_TCTI_CONTEXT * p_tcti_ctx = NULL;
+    ESYS_CONTEXT * p_esys_ctx = NULL;
+    ESYS_TR nvHandle = ESYS_TR_NONE;
+    ESYS_TR h_salt_key = ESYS_TR_NONE;
+    ESYS_TR h_session = ESYS_TR_NONE;
+    TPM2B_MAX_NV_BUFFER * nv_counter = NULL;
+    TSS2_RC r;
+
+    if (!open_counter_session(metadata, metadata_len, &p_tcti_ctx, &p_esys_ctx, &nvHandle, &h_salt_key, &h_session)) {
         goto error;
     }
 
@@ -664,30 +724,7 @@ error:
         Esys_Free(nv_counter);
     }
 
-    /* Wipe the derived authorization value. */
-    gta_memset(auth.buffer, sizeof(auth.buffer), 0, sizeof(auth.buffer));
-
-    /* Flush integrity session and its salt key */
-    if (ESYS_TR_NONE != h_session) {
-        Esys_FlushContext(p_esys_ctx, h_session);
-    }
-
-    if (ESYS_TR_NONE != h_salt_key) {
-        Esys_FlushContext(p_esys_ctx, h_salt_key);
-    }
-
-    /*************/
-    /* tpm_close */
-
-    /* Remove the TSS context */
-    if (NULL != p_esys_ctx) {
-        Esys_Finalize(&p_esys_ctx);
-    }
-
-    /* Remove the TSS context */
-    if (NULL != p_tcti_ctx) {
-        Tss2_TctiLdr_Finalize(&p_tcti_ctx);
-    }
+    close_counter_session(p_tcti_ctx, p_esys_ctx, h_salt_key, h_session);
 
     return ret;
 }
@@ -715,58 +752,14 @@ bool increment_monotonic_counter(unsigned char * metadata, size_t metadata_len)
 bool increment_monotonic_counter(unsigned char * metadata, size_t metadata_len)
 {
     bool ret = false;
-    ESYS_CONTEXT * p_esys_ctx = NULL;
     TSS2_TCTI_CONTEXT * p_tcti_ctx = NULL;
-
-    TSS2_RC r;
+    ESYS_CONTEXT * p_esys_ctx = NULL;
     ESYS_TR nvHandle = ESYS_TR_NONE;
     ESYS_TR h_salt_key = ESYS_TR_NONE;
     ESYS_TR h_session = ESYS_TR_NONE;
+    TSS2_RC r;
 
-    TPM2B_AUTH auth = {.size = 0, .buffer = {0}};
-
-    /************/
-    /* tpm_open */
-
-    r = Tss2_TctiLdr_Initialize_Ex(TCTI_MODULE, TCTI_CONF_OR_NULL, &p_tcti_ctx);
-
-    if (TSS2_RC_SUCCESS != r) {
-        DEBUG_PRINT("Tss2_TctiLdr_Initialize_Ex failed\n");
-        goto error;
-    }
-
-    r = Esys_Initialize(&p_esys_ctx, p_tcti_ctx, NULL);
-
-    if (TSS2_RC_SUCCESS != r) {
-        DEBUG_PRINT("Esys_Initialize failed\n");
-        goto error;
-    }
-
-    r = Esys_TR_Deserialize(p_esys_ctx, metadata, metadata_len, &nvHandle);
-
-    if (TSS2_RC_SUCCESS != r) {
-        DEBUG_PRINT("Esys_TR_Deserialize failed\n");
-        goto error;
-    }
-
-    /* Use an integrity-protected session so the TPM's response is authenticated and a
-       bus attacker cannot spoof a successful increment without it actually happening. */
-    if (!derive_device_key_32(
-            p_esys_ctx, COUNTER_AUTH_DERIVATION_VALUE, sizeof(COUNTER_AUTH_DERIVATION_VALUE) - 1, auth.buffer)) {
-        DEBUG_PRINT("derive_device_key_32 (counter auth) failed\n");
-        goto error;
-    }
-    auth.size = HUK_SIZE_32;
-
-    r = Esys_TR_SetAuth(p_esys_ctx, nvHandle, &auth);
-
-    if (TSS2_RC_SUCCESS != r) {
-        DEBUG_PRINT("Esys_TR_SetAuth failed\n");
-        goto error;
-    }
-
-    if (!start_integrity_session(p_esys_ctx, &h_salt_key, &h_session)) {
-        DEBUG_PRINT("start_integrity_session failed\n");
+    if (!open_counter_session(metadata, metadata_len, &p_tcti_ctx, &p_esys_ctx, &nvHandle, &h_salt_key, &h_session)) {
         goto error;
     }
 
@@ -781,30 +774,7 @@ bool increment_monotonic_counter(unsigned char * metadata, size_t metadata_len)
 
 error:
 
-    /* Wipe the derived authorization value. */
-    gta_memset(auth.buffer, sizeof(auth.buffer), 0, sizeof(auth.buffer));
-
-    /* Flush integrity session and its salt key */
-    if (ESYS_TR_NONE != h_session) {
-        Esys_FlushContext(p_esys_ctx, h_session);
-    }
-
-    if (ESYS_TR_NONE != h_salt_key) {
-        Esys_FlushContext(p_esys_ctx, h_salt_key);
-    }
-
-    /*************/
-    /* tpm_close */
-
-    /* Remove the TSS context */
-    if (NULL != p_esys_ctx) {
-        Esys_Finalize(&p_esys_ctx);
-    }
-
-    /* Remove the TSS context */
-    if (NULL != p_tcti_ctx) {
-        Tss2_TctiLdr_Finalize(&p_tcti_ctx);
-    }
+    close_counter_session(p_tcti_ctx, p_esys_ctx, h_salt_key, h_session);
 
     return ret;
 }
