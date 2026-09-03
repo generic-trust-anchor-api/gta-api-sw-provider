@@ -18,6 +18,10 @@
 /* Derivation value used to derive the hardware unique key (HUK) from the TPM primary key */
 #define HUK_DERIVATION_VALUE "gta-api-sw-provider-tpm-huk"
 
+/* Derivation value used to derive the NV monotonic counter's authorization value from the
+   same TPM primary key as the HUK. */
+#define COUNTER_AUTH_DERIVATION_VALUE "gta-api-sw-provider-tpm-counter-auth"
+
 /* TCTI_CONF is compiled from the (optional) tcti-conf Meson option. An empty string
    means "use the module default", which Tss2_TctiLdr_Initialize_Ex() expects as NULL. */
 #define TCTI_CONF_OR_NULL (TCTI_CONF[0] != '\0' ? TCTI_CONF : NULL)
@@ -150,6 +154,120 @@ static bool start_integrity_session(ESYS_CONTEXT * p_esys_ctx, ESYS_TR * p_h_sal
     return true;
 }
 
+/*
+ * Derive a 32-byte device-unique value by computing an HMAC over the given derivation
+ * value with a primary HMAC key in the endorsement hierarchy. The primary key is
+ * deterministically re-created from the endorsement primary seed on each call, so the same
+ * derivation value always yields the same value on the same device. The HMAC runs over a
+ * salted session so the derivation value and the result are protected on the TPM bus.
+ *
+ * Using distinct derivation values yields independent keys from the same device root, e.g.
+ * the HUK and the NV counter authorization value.
+ *
+ * out must point to at least HUK_SIZE_32 bytes. Returns true on success.
+ */
+static bool
+derive_device_key_32(ESYS_CONTEXT * p_esys_ctx, const char * derivation_value, size_t derivation_len, uint8_t * out)
+{
+    bool ret = false;
+    TSS2_RC r;
+    ESYS_TR h_salt_key = ESYS_TR_NONE;
+    ESYS_TR h_session = ESYS_TR_NONE;
+    ESYS_TR h_primary_key = ESYS_TR_NONE;
+    TPM2B_DIGEST * p_out_hmac = NULL;
+
+    TPM2B_MAX_BUFFER dv_buffer = {.size = 0, .buffer = {0}};
+
+    if ((NULL == out) || (NULL == derivation_value) || (0 == derivation_len) ||
+        (derivation_len > sizeof(dv_buffer.buffer))) {
+        goto err;
+    }
+
+    /* range check already done */
+    dv_buffer.size = (uint16_t)derivation_len;
+    memcpy(dv_buffer.buffer, derivation_value, derivation_len);
+
+    /* Salted session protects the derivation value and the result on the TPM bus. */
+    if (!start_integrity_session(p_esys_ctx, &h_salt_key, &h_session)) {
+        DEBUG_PRINT("start_integrity_session failed\n");
+        goto err;
+    }
+
+    TPM2B_SENSITIVE_CREATE in_sensitive_primary = {
+        .size = 0,
+        .sensitive = {.userAuth = {.size = 0, .buffer = {0}}, .data = {.size = 0, .buffer = {0}}},
+    };
+    TPM2B_PUBLIC in_public = {0};
+    TPM2B_DATA outside_info = {.size = 0, .buffer = {0}};
+    TPML_PCR_SELECTION creation_pcr = {.count = 0};
+
+    in_public.publicArea.nameAlg = TPM2_ALG_SHA256;
+    in_public.publicArea.type = TPM2_ALG_KEYEDHASH;
+    in_public.publicArea.objectAttributes |= TPMA_OBJECT_SIGN_ENCRYPT;
+    in_public.publicArea.objectAttributes |= TPMA_OBJECT_USERWITHAUTH;
+    in_public.publicArea.objectAttributes |= TPMA_OBJECT_SENSITIVEDATAORIGIN;
+    in_public.publicArea.parameters.keyedHashDetail.scheme.scheme = TPM2_ALG_HMAC;
+    in_public.publicArea.parameters.keyedHashDetail.scheme.details.hmac.hashAlg = TPM2_ALG_SHA256;
+
+    r = Esys_CreatePrimary(
+        p_esys_ctx,
+        ESYS_TR_RH_ENDORSEMENT,
+        ESYS_TR_PASSWORD,
+        h_session,
+        ESYS_TR_NONE,
+        &in_sensitive_primary,
+        &in_public,
+        &outside_info,
+        &creation_pcr,
+        &h_primary_key,
+        NULL,
+        NULL,
+        NULL,
+        NULL);
+
+    if (TSS2_RC_SUCCESS != r) {
+        DEBUG_PRINT("Esys_CreatePrimary failed\n");
+        goto err;
+    }
+
+    r = Esys_HMAC(
+        p_esys_ctx, h_primary_key, ESYS_TR_PASSWORD, h_session, ESYS_TR_NONE, &dv_buffer, TPM2_ALG_SHA256, &p_out_hmac);
+
+    if (TSS2_RC_SUCCESS != r) {
+        DEBUG_PRINT("Esys_HMAC failed\n");
+        goto err;
+    }
+
+    if (HUK_SIZE_32 > p_out_hmac->size) {
+        DEBUG_PRINT("HUK_SIZE_32 > p_out_hmac->size\n");
+        goto err;
+    }
+
+    memcpy(out, p_out_hmac->buffer, HUK_SIZE_32);
+    ret = true;
+
+err:
+    if (NULL != p_out_hmac) {
+        /* Holds derived key material; wipe before releasing the buffer. */
+        gta_memset(p_out_hmac->buffer, sizeof(p_out_hmac->buffer), 0, p_out_hmac->size);
+        Esys_Free(p_out_hmac);
+    }
+
+    if (ESYS_TR_NONE != h_primary_key) {
+        Esys_FlushContext(p_esys_ctx, h_primary_key);
+    }
+
+    if (ESYS_TR_NONE != h_session) {
+        Esys_FlushContext(p_esys_ctx, h_session);
+    }
+
+    if (ESYS_TR_NONE != h_salt_key) {
+        Esys_FlushContext(p_esys_ctx, h_salt_key);
+    }
+
+    return ret;
+}
+
 bool get_hw_unique_key_32(struct hw_unique_key_32 * key)
 {
 
@@ -157,10 +275,6 @@ bool get_hw_unique_key_32(struct hw_unique_key_32 * key)
     TSS2_RC tss2_ret = TSS2_TCTI_RC_GENERAL_FAILURE;
     ESYS_CONTEXT * p_esys_ctx = NULL;
     TSS2_TCTI_CONTEXT * p_tcti_ctx = NULL;
-    ESYS_TR h_session = ESYS_TR_NONE;
-    ESYS_TR h_salt_key = ESYS_TR_NONE;
-    ESYS_TR h_primary_key = ESYS_TR_NONE;
-    TPM2B_DIGEST * p_out_hmac = NULL;
 
     if (NULL == key) {
         goto err;
@@ -180,124 +294,17 @@ bool get_hw_unique_key_32(struct hw_unique_key_32 * key)
         goto err;
     }
 
-    /*
-     * Create the salted HMAC session used to protect the derivation value and the
-     * returned HUK on the TPM bus. The helper creates the session with
-     * TPMA_SESSION_CONTINUESESSION | ENCRYPT | DECRYPT, so it can be reused for the
-     * subsequent Esys_CreatePrimary and Esys_HMAC calls below.
-     */
-    if (!start_integrity_session(p_esys_ctx, &h_salt_key, &h_session)) {
-        DEBUG_PRINT("start_integrity_session failed\n");
+    if (!derive_device_key_32(p_esys_ctx, HUK_DERIVATION_VALUE, sizeof(HUK_DERIVATION_VALUE) - 1, key->data)) {
+        DEBUG_PRINT("derive_device_key_32 (HUK) failed\n");
         goto err;
     }
-
-    /*********************************/
-    /* create primary and derive key */
-    TPM2B_SENSITIVE_CREATE in_sensitive_primary = {
-        .size = 0,
-        .sensitive =
-            {
-                .userAuth =
-                    {
-                        .size = 0,
-                        .buffer = {0},
-                    },
-                .data =
-                    {
-                        .size = 0,
-                        .buffer = {0},
-                    },
-            },
-    };
-
-    TPM2B_PUBLIC in_public = {0};
-
-    TPM2B_DATA outside_info = {
-        .size = 0,
-        .buffer = {0},
-    };
-    TPML_PCR_SELECTION creation_pcr = {
-        .count = 0,
-    };
-
-    in_public.publicArea.nameAlg = TPM2_ALG_SHA256;
-    in_public.publicArea.type = TPM2_ALG_KEYEDHASH;
-    in_public.publicArea.objectAttributes |= TPMA_OBJECT_SIGN_ENCRYPT;
-    in_public.publicArea.objectAttributes |= TPMA_OBJECT_USERWITHAUTH;
-    in_public.publicArea.objectAttributes |= TPMA_OBJECT_SENSITIVEDATAORIGIN;
-    in_public.publicArea.parameters.keyedHashDetail.scheme.scheme = TPM2_ALG_HMAC;
-    in_public.publicArea.parameters.keyedHashDetail.scheme.details.hmac.hashAlg = TPM2_ALG_SHA256;
-
-    tss2_ret = Esys_CreatePrimary(
-        p_esys_ctx,
-        ESYS_TR_RH_ENDORSEMENT,
-        ESYS_TR_PASSWORD,
-        h_session,
-        ESYS_TR_NONE,
-        &in_sensitive_primary,
-        &in_public,
-        &outside_info,
-        &creation_pcr,
-        &h_primary_key,
-        NULL,
-        NULL,
-        NULL,
-        NULL);
-
-    if (tss2_ret != TSS2_RC_SUCCESS) {
-        DEBUG_PRINT("Esys_CreatePrimary failed\n");
-        goto err;
-    }
-
-    TPM2B_MAX_BUFFER dv_buffer = {.size = sizeof(HUK_DERIVATION_VALUE) - 1, .buffer = HUK_DERIVATION_VALUE};
-
-    tss2_ret = Esys_HMAC(
-        p_esys_ctx, h_primary_key, ESYS_TR_PASSWORD, h_session, ESYS_TR_NONE, &dv_buffer, TPM2_ALG_SHA256, &p_out_hmac);
-
-    if (TSS2_RC_SUCCESS != tss2_ret) {
-        DEBUG_PRINT("Esys_HMAC failed\n");
-        goto err;
-    }
-
-    if (HUK_SIZE_32 > p_out_hmac->size) {
-        DEBUG_PRINT("HUK_SIZE_32 > p_out_hmac->size\n");
-        goto err;
-    }
-
-    /*********************************************************************/
-    /* Copy 32 bytes of derived key to hardware unique key output buffer */
-    memcpy(key->data, p_out_hmac->buffer, HUK_SIZE_32);
 
     b_ret = true;
 
 err:
 
-    /***********************/
-    /* clean up everything */
-
-    if (NULL != p_out_hmac) {
-        /* The HMAC output holds the derived HUK; wipe it before releasing the buffer. */
-        gta_memset(p_out_hmac->buffer, sizeof(p_out_hmac->buffer), 0, p_out_hmac->size);
-        Esys_Free(p_out_hmac);
-    }
-
-    /* Flush HMAC key */
-    if (ESYS_TR_NONE != h_primary_key) {
-        Esys_FlushContext(p_esys_ctx, h_primary_key);
-    }
-
-    /* Flush salt key */
-    if (ESYS_TR_NONE != h_salt_key) {
-        Esys_FlushContext(p_esys_ctx, h_salt_key);
-    }
-
     /*************/
     /* tpm_close */
-
-    /* Close open HMAC-Session */
-    if (ESYS_TR_NONE != h_session) {
-        Esys_FlushContext(p_esys_ctx, h_session);
-    }
 
     /* Remove the TSS context */
     if (NULL != p_esys_ctx) {
@@ -352,15 +359,17 @@ bool init_monotonic_counter(gta_context_handle_t h_ctx, unsigned char ** metadat
     ESYS_TR h_salt_key = ESYS_TR_NONE;
     ESYS_TR h_session = ESYS_TR_NONE;
 
-    /* The NV index is accessed exclusively through the owner hierarchy
-       (TPMA_NV_OWNERWRITE / TPMA_NV_OWNERREAD), so no index-specific
-       authorization value is required and an empty auth is used. */
+    /* The NV index is bound to an index-specific authorization value derived from the same
+       device-unique TPM key as the HUK (see COUNTER_AUTH_DERIVATION_VALUE). The value is
+       filled in below once the ESYS context is available. Binding the index to this auth
+       (TPMA_NV_AUTHWRITE / TPMA_NV_AUTHREAD) prevents the counter from being modified or
+       read through the bare owner hierarchy, mitigating a DoS vector. */
     TPM2B_AUTH auth = {.size = 0, .buffer = {0}};
 
-    /* The NV index is a hardware monotonic counter (TPM2_NT_COUNTER) accessed via the owner
-       hierarchy. Its value is not secret (it is stored in cleartext inside the COSE-signed
-       provider state and only compared for freshness), so no read/write auth value and no
-       write-lock (TPMA_NV_WRITE_STCLEAR) are needed. The monotonicity guarantee that the
+    /* The NV index is a hardware monotonic counter (TPM2_NT_COUNTER). Its value is not
+       secret (it is stored in cleartext inside the COSE-signed provider state and only
+       compared for freshness), but write/read are gated by the derived auth value above so
+       that only this provider can advance or read it. The monotonicity guarantee the
        anti-rollback scheme relies on is provided by TPM2_NT_COUNTER itself. */
     TPM2B_NV_PUBLIC publicInfo = {
         .size = 0,
@@ -371,7 +380,7 @@ bool init_monotonic_counter(gta_context_handle_t h_ctx, unsigned char ** metadat
                                                assigned by the tpm perhaps a code like in handle_no_index_specified()
                                                in tpm2_nvdefine.c of tpm tools could be used? */
             .nameAlg = TPM2_ALG_SHA256,
-            .attributes = (TPMA_NV_OWNERWRITE | TPMA_NV_OWNERREAD | TPM2_NT_COUNTER << TPMA_NV_TPM2_NT_SHIFT),
+            .attributes = (TPMA_NV_AUTHWRITE | TPMA_NV_AUTHREAD | TPM2_NT_COUNTER << TPMA_NV_TPM2_NT_SHIFT),
             .authPolicy =
                 {
                     .size = 0,
@@ -398,6 +407,14 @@ bool init_monotonic_counter(gta_context_handle_t h_ctx, unsigned char ** metadat
         DEBUG_PRINT("Esys_Initialize failed\n");
         goto error;
     }
+
+    /* Derive the index authorization value from the device-unique TPM key. */
+    if (!derive_device_key_32(
+            p_esys_ctx, COUNTER_AUTH_DERIVATION_VALUE, sizeof(COUNTER_AUTH_DERIVATION_VALUE) - 1, auth.buffer)) {
+        DEBUG_PRINT("derive_device_key_32 (counter auth) failed\n");
+        goto error;
+    }
+    auth.size = HUK_SIZE_32;
 
     /*
      * Define the NV counter index. This only needs to happen once (the first time the
@@ -447,8 +464,7 @@ bool init_monotonic_counter(gta_context_handle_t h_ctx, unsigned char ** metadat
             (p_nv_public_out->nvPublic.nameAlg == publicInfo.nvPublic.nameAlg) &&
             (p_nv_public_out->nvPublic.dataSize == publicInfo.nvPublic.dataSize) &&
             (((existing_attributes & TPMA_NV_TPM2_NT_MASK) >> TPMA_NV_TPM2_NT_SHIFT) == TPM2_NT_COUNTER) &&
-            ((existing_attributes & (TPMA_NV_OWNERWRITE | TPMA_NV_OWNERREAD)) ==
-             (TPMA_NV_OWNERWRITE | TPMA_NV_OWNERREAD));
+            ((existing_attributes & (TPMA_NV_AUTHWRITE | TPMA_NV_AUTHREAD)) == (TPMA_NV_AUTHWRITE | TPMA_NV_AUTHREAD));
 
         Esys_Free(p_nv_public_out);
         Esys_Free(p_nv_name_out);
@@ -462,14 +478,22 @@ bool init_monotonic_counter(gta_context_handle_t h_ctx, unsigned char ** metadat
         goto error;
     } else {
         /* A freshly defined counter index must be initialized with a single
-           NV_Increment before it can be read. Use an integrity-protected session
-           so the TPM's response to the increment is authenticated. */
+           NV_Increment before it can be read. Authorize with the index's derived auth
+           value over an integrity-protected session so the TPM's response is
+           authenticated. */
+        r = Esys_TR_SetAuth(p_esys_ctx, nvHandle, &auth);
+
+        if (TSS2_RC_SUCCESS != r) {
+            DEBUG_PRINT("Esys_TR_SetAuth failed\n");
+            goto error;
+        }
+
         if (!start_integrity_session(p_esys_ctx, &h_salt_key, &h_session)) {
             DEBUG_PRINT("start_integrity_session failed\n");
             goto error;
         }
 
-        r = Esys_NV_Increment(p_esys_ctx, ESYS_TR_RH_OWNER, nvHandle, h_session, ESYS_TR_NONE, ESYS_TR_NONE);
+        r = Esys_NV_Increment(p_esys_ctx, nvHandle, nvHandle, h_session, ESYS_TR_NONE, ESYS_TR_NONE);
 
         if (TSS2_RC_SUCCESS != r) {
             DEBUG_PRINT("Esys_NV_Increment failed\n");
@@ -497,6 +521,9 @@ bool init_monotonic_counter(gta_context_handle_t h_ctx, unsigned char ** metadat
     ret = true;
 
 error:
+
+    /* Wipe the derived authorization value. */
+    gta_memset(auth.buffer, sizeof(auth.buffer), 0, sizeof(auth.buffer));
 
     if (buffer) {
         Esys_Free(buffer);
@@ -561,6 +588,7 @@ bool read_monotonic_counter(unsigned char * metadata, size_t metadata_len, uint6
     ESYS_TR h_salt_key = ESYS_TR_NONE;
     ESYS_TR h_session = ESYS_TR_NONE;
 
+    TPM2B_AUTH auth = {.size = 0, .buffer = {0}};
     TPM2B_MAX_NV_BUFFER * nv_counter = NULL;
 
     /************/
@@ -587,13 +615,29 @@ bool read_monotonic_counter(unsigned char * metadata, size_t metadata_len, uint6
         goto error;
     }
 
+    /* Re-derive the index authorization value and bind it to the handle so the NV read is
+       authorized with the index's own auth rather than the owner hierarchy. */
+    if (!derive_device_key_32(
+            p_esys_ctx, COUNTER_AUTH_DERIVATION_VALUE, sizeof(COUNTER_AUTH_DERIVATION_VALUE) - 1, auth.buffer)) {
+        DEBUG_PRINT("derive_device_key_32 (counter auth) failed\n");
+        goto error;
+    }
+    auth.size = HUK_SIZE_32;
+
+    r = Esys_TR_SetAuth(p_esys_ctx, nvHandle, &auth);
+
+    if (TSS2_RC_SUCCESS != r) {
+        DEBUG_PRINT("Esys_TR_SetAuth failed\n");
+        goto error;
+    }
+
     /* Integrity-protect the returned counter value against a bus attacker. */
     if (!start_integrity_session(p_esys_ctx, &h_salt_key, &h_session)) {
         DEBUG_PRINT("start_integrity_session failed\n");
         goto error;
     }
 
-    r = Esys_NV_Read(p_esys_ctx, ESYS_TR_RH_OWNER, nvHandle, h_session, ESYS_TR_NONE, ESYS_TR_NONE, 8, 0, &nv_counter);
+    r = Esys_NV_Read(p_esys_ctx, nvHandle, nvHandle, h_session, ESYS_TR_NONE, ESYS_TR_NONE, 8, 0, &nv_counter);
 
     if (TSS2_RC_SUCCESS != r) {
         DEBUG_PRINT("Esys_NV_Read failed\n");
@@ -619,6 +663,9 @@ error:
     if (nv_counter) {
         Esys_Free(nv_counter);
     }
+
+    /* Wipe the derived authorization value. */
+    gta_memset(auth.buffer, sizeof(auth.buffer), 0, sizeof(auth.buffer));
 
     /* Flush integrity session and its salt key */
     if (ESYS_TR_NONE != h_session) {
@@ -676,6 +723,8 @@ bool increment_monotonic_counter(unsigned char * metadata, size_t metadata_len)
     ESYS_TR h_salt_key = ESYS_TR_NONE;
     ESYS_TR h_session = ESYS_TR_NONE;
 
+    TPM2B_AUTH auth = {.size = 0, .buffer = {0}};
+
     /************/
     /* tpm_open */
 
@@ -702,12 +751,26 @@ bool increment_monotonic_counter(unsigned char * metadata, size_t metadata_len)
 
     /* Use an integrity-protected session so the TPM's response is authenticated and a
        bus attacker cannot spoof a successful increment without it actually happening. */
+    if (!derive_device_key_32(
+            p_esys_ctx, COUNTER_AUTH_DERIVATION_VALUE, sizeof(COUNTER_AUTH_DERIVATION_VALUE) - 1, auth.buffer)) {
+        DEBUG_PRINT("derive_device_key_32 (counter auth) failed\n");
+        goto error;
+    }
+    auth.size = HUK_SIZE_32;
+
+    r = Esys_TR_SetAuth(p_esys_ctx, nvHandle, &auth);
+
+    if (TSS2_RC_SUCCESS != r) {
+        DEBUG_PRINT("Esys_TR_SetAuth failed\n");
+        goto error;
+    }
+
     if (!start_integrity_session(p_esys_ctx, &h_salt_key, &h_session)) {
         DEBUG_PRINT("start_integrity_session failed\n");
         goto error;
     }
 
-    r = Esys_NV_Increment(p_esys_ctx, ESYS_TR_RH_OWNER, nvHandle, h_session, ESYS_TR_NONE, ESYS_TR_NONE);
+    r = Esys_NV_Increment(p_esys_ctx, nvHandle, nvHandle, h_session, ESYS_TR_NONE, ESYS_TR_NONE);
 
     if (TSS2_RC_SUCCESS != r) {
         DEBUG_PRINT("Esys_NV_Increment failed\n");
@@ -717,6 +780,9 @@ bool increment_monotonic_counter(unsigned char * metadata, size_t metadata_len)
     ret = true;
 
 error:
+
+    /* Wipe the derived authorization value. */
+    gta_memset(auth.buffer, sizeof(auth.buffer), 0, sizeof(auth.buffer));
 
     /* Flush integrity session and its salt key */
     if (ESYS_TR_NONE != h_session) {
