@@ -402,6 +402,39 @@ bool init_monotonic_counter(gta_context_handle_t h_ctx, unsigned char ** metadat
             DEBUG_PRINT("Esys_TR_FromTPMPublic failed\n");
             goto error;
         }
+
+        /*
+         * The index at this location already existed. Before trusting it as our
+         * anti-rollback counter, verify that its public area matches the definition
+         * we would have created ourselves.
+         */
+        TPM2B_NV_PUBLIC * p_nv_public_out = NULL;
+        TPM2B_NAME * p_nv_name_out = NULL;
+
+        r = Esys_NV_ReadPublic(
+            p_esys_ctx, nvHandle, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, &p_nv_public_out, &p_nv_name_out);
+
+        if (TSS2_RC_SUCCESS != r) {
+            DEBUG_PRINT("Esys_NV_ReadPublic failed\n");
+            goto error;
+        }
+
+        const TPMA_NV existing_attributes = p_nv_public_out->nvPublic.attributes;
+        const bool valid_counter =
+            (p_nv_public_out->nvPublic.nvIndex == publicInfo.nvPublic.nvIndex) &&
+            (p_nv_public_out->nvPublic.nameAlg == publicInfo.nvPublic.nameAlg) &&
+            (p_nv_public_out->nvPublic.dataSize == publicInfo.nvPublic.dataSize) &&
+            (((existing_attributes & TPMA_NV_TPM2_NT_MASK) >> TPMA_NV_TPM2_NT_SHIFT) == TPM2_NT_COUNTER) &&
+            ((existing_attributes & (TPMA_NV_OWNERWRITE | TPMA_NV_OWNERREAD)) ==
+             (TPMA_NV_OWNERWRITE | TPMA_NV_OWNERREAD));
+
+        Esys_Free(p_nv_public_out);
+        Esys_Free(p_nv_name_out);
+
+        if (!valid_counter) {
+            DEBUG_PRINT("Existing NV index does not match expected monotonic counter definition\n");
+            goto error;
+        }
     } else if (TSS2_RC_SUCCESS != r) {
         DEBUG_PRINT("Esys_NV_DefineSpace failed\n");
         goto error;
