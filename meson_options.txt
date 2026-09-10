@@ -4,6 +4,7 @@
 
 option('build', type : 'combo', choices : ['debug', 'release' ], value : 'debug', description : 'Select build type with associated tool configuration')
 option('build-dependencies', type : 'boolean', value : false, yield: true, description : 'Select whether to build dependencies locally rather than use system installed libraries.')
+option('enable-post-quantum-crypto', type : 'boolean', value : false, description : 'Enable Post-Quantum crypto profiles (e.g., com.github.generic-trust-anchor-api.basic.ml-dsa). Requires OpenSSL >= 3.5 and build-dependencies=false.')
 option('disable-deprecated-warnings', type : 'boolean', value : true, description : 'Select whether or not warnings for deprecated functions are displayed.')
 option('enable-test-log', type : 'boolean', value : false, description : 'This switch enables log messages for the provider tests.')
 option('build-examples', type : 'boolean', value : false, description : 'This switch enables the build of examples.')

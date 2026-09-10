@@ -36,11 +36,11 @@ jobs:
         uses: SonarSource/sonarqube-scan-action/install-build-wrapper@v6
       - name: Run Build Wrapper
         run: |
-          meson setup build
+          meson setup build -Denable-post-quantum-crypto=true
           build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} ninja -C build
       - name: Create coverage report
         run: |
-          meson setup coverage -Db_coverage=true
+          meson setup coverage -Db_coverage=true -Denable-post-quantum-crypto=true
           ninja -C coverage test
           ninja -C coverage coverage-sonarqube
       - name: SonarQube Scan

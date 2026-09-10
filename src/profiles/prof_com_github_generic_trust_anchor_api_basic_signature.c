@@ -29,11 +29,20 @@ GTA_SWP_DEFINE_FUNCTION(
 
         /*
          * Check profile restrictions on personality:
+    #ifdef ENABLE_PQC
          * RSA 2048, ECC P-256, and ML-DSA-65 are allowed.
+    #else
+           * Only RSA 2048 and ECC P-256 are allowed.
+    #endif
          */
+#ifdef ENABLE_PQC
         if (!(((EVP_PKEY_RSA == key_id) && (2048 == pkey_bits(evp_private_key))) ||
               ((EVP_PKEY_EC == key_id) && (NID_X9_62_prime256v1 == pkey_ec_nid(evp_private_key))) ||
               (EVP_PKEY_is_a(evp_private_key, "ML-DSA-65")))) {
+#else
+        if (!(((EVP_PKEY_RSA == key_id) && (2048 == pkey_bits(evp_private_key))) ||
+              ((EVP_PKEY_EC == key_id) && (NID_X9_62_prime256v1 == pkey_ec_nid(evp_private_key))))) {
+#endif
 
             DEBUG_PRINT(("gta_sw_provider_gta_context_open: Profile requirements not fulfilled \n"));
             *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
@@ -128,6 +137,7 @@ GTA_SWP_DEFINE_FUNCTION(
         goto err;
     }
 
+#ifdef ENABLE_PQC
     if (EVP_PKEY_is_a(evp_private_key, "ML-DSA-65")) {
         /* ML-DSA requires one-shot EVP_DigestSign (no streaming support) */
         if (1 != EVP_DigestSignInit(mdctx, NULL, NULL, NULL, evp_private_key)) {
@@ -154,7 +164,9 @@ GTA_SWP_DEFINE_FUNCTION(
             *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
             goto err;
         }
-    } else {
+    } else
+#endif
+    {
         /* RSA/EC: streaming DigestSign with SHA-256 */
         if (1 != EVP_DigestSignInit(mdctx, NULL, EVP_sha256(), NULL, evp_private_key)) {
             *p_errinfo = GTA_ERROR_INTERNAL_ERROR;

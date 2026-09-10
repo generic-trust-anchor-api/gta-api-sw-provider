@@ -29,7 +29,7 @@ jobs:
         uses: actions/checkout@v4
       - name: Build gta-api-sw-provider
         run: |
-          meson setup build
+          meson setup build -Denable-post-quantum-crypto=true
           sudo ninja -C build
       - name: Generate merged static lib
         run: |

@@ -12,13 +12,16 @@ gta_sw_provider_files = files (
   'profiles/prof_ch_iec_30168_basic_local_data_protection.c',
   'profiles/prof_com_github_generic_trust_anchor_api_basic_rsa.c',
   'profiles/prof_com_github_generic_trust_anchor_api_basic_ec.c',
-  'profiles/prof_com_github_generic_trust_anchor_api_basic_ml-dsa.c',
   'profiles/prof_com_github_generic_trust_anchor_api_basic_jwt.c',
   'profiles/prof_com_github_generic_trust_anchor_api_basic_signature.c',
   'profiles/prof_com_github_generic_trust_anchor_api_basic_enroll.c',
   'profiles/prof_helper_functions.c',
   'profiles/prof_org_opcfoundation_ecc_nistp256.c'  
   )
+
+if enable_pqc
+  gta_sw_provider_files += files('profiles/prof_com_github_generic_trust_anchor_api_basic_ml-dsa.c')
+endif
 
 build_dep = [ dep_libcrypto,
               dep_qcbor,

@@ -30,9 +30,23 @@ add_project_arguments(
 # Get custom build options from meson_options.txt
 build_type = get_option('build')
 build_dep = get_option('build-dependencies')
+enable_pqc = get_option('enable-post-quantum-crypto')
 disable_deprecated = get_option('disable-deprecated-warnings')
 enable_test_log = get_option('enable-test-log')
 build_examples = get_option('build-examples')
+
+if enable_pqc
+   add_project_arguments(
+   c_compiler.get_supported_arguments(
+      '-DENABLE_PQC',
+   ),
+   language: 'c'
+)
+
+   if build_dep
+      error('Option enable-post-quantum-crypto=true requires build-dependencies=false. PQC needs OpenSSL >= 3.5, while subprojects/openssl.wrap is currently OpenSSL 3.0.8.')
+   endif
+endif
 
 # TODO consider to use more generic override_options for build targets
 if build_type == 'release'
@@ -102,7 +116,11 @@ if build_dep
    t_cose_proj    = subproject('t_cose')
    dep_t_cose     = t_cose_proj.get_variable('t_cose_dep')
 else
-   dep_libcrypto = dependency('libcrypto', version : '>=3.5.0', static: true)
+   if enable_pqc
+      dep_libcrypto = dependency('libcrypto', version : '>=3.5.0', static: true)
+   else
+      dep_libcrypto = dependency('libcrypto', version : '>=3.0.0', static: true)
+   endif
    dep_cmocka    = dependency('cmocka')
    # TODO: currently qcbor/t_cose are still handled by the build system because there
    # are no official distribution packages available. When it becomes easier

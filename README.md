@@ -62,8 +62,15 @@ for more profiles will be added.
 
 ## Dependencies
 The build and test of the GTA API SW provider depend on the GTA API Core and
-it's dependencies. Post-Quantum crypto algorithms (ML-DSA-65) are supported
-natively via OpenSSL 3.5 and do not require any additional libraries.
+it's dependencies.
+
+Post-Quantum support (e.g., com.github.generic-trust-anchor-api.basic.ml-dsa) is
+controlled by the Meson option `enable-post-quantum-crypto`:
+* `enable-post-quantum-crypto=true`: requires `build-dependencies=false` and
+  system OpenSSL >= 3.5.0.
+* `enable-post-quantum-crypto=false`: requires OpenSSL >= 3.0.0 and supports
+  both `build-dependencies=false` (system OpenSSL) and
+  `build-dependencies=true` (OpenSSL from `subprojects/openssl.wrap`).
 
 ## Local build
 * In the project root, initialize build system and build directory (like ./configure for automake):
@@ -164,6 +171,7 @@ Currently the following options are available:
 | :---------- | :-------------- | :---------- |
 | build       | combo: { 'debug', 'release' } | Select the build type with associated tool configuration (e.g., compiler flags for debugging). |
 | build-dependencies | boolean : { true, false } | Select whether to build dependencies locally rather than use system installed libraries. |
+| enable-post-quantum-crypto | boolean : { true, false } | Enable Post-Quantum crypto profiles (e.g., com.github.generic-trust-anchor-api.basic.ml-dsa). If true, `build-dependencies` must be false and OpenSSL >= 3.5.0 is required. |
 | disable-deprecated-warnings | boolean : { true, false } | Select whether or not warnings for deprecated functions are displayed. |
 | enable-test-log | boolean : { true, false } | This switch enables log messages for the provider tests. |
 | build-examples | boolean : { true, false } | This switch enables the build of examples. |

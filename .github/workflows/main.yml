@@ -9,6 +9,20 @@ on:
 jobs:
   build-test:
     runs-on: ubuntu-26.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: pq-off-system
+            meson_args: '--werror'
+            run_valgrind: true
+          - name: pq-off-wrap
+            meson_args: -Dbuild-dependencies=true
+            run_valgrind: false
+          - name: pq-on-system
+            meson_args: --werror -Denable-post-quantum-crypto=true
+            run_valgrind: true
+    name: build-test (${{ matrix.name }})
     steps:
       - name: Install dependencies
         run: |
@@ -26,12 +40,13 @@ jobs:
         uses: actions/checkout@v4
       - name: Build gta-api-sw-provider
         run: |
-          meson setup build --werror
+          meson setup build ${{ matrix.meson_args }}
           ninja -C build
       - name: Test gta-api-sw-provider
         run: |
           ninja -C build test
       - name: Valgrind
+        if: matrix.run_valgrind
         run: |
           ninja -C build gta_provider_memcheck
 
