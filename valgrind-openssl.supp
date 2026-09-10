@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: Copyright 2026 Siemens
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Suppressions for known OpenSSL false positives under Valgrind.
+#
+# OpenSSL's software AES-GCM implementation (used when AES-NI hardware
+# instructions are unavailable, e.g. on typical CI VMs) processes data
+# through GHASH in a way that makes conditional branches depend on values
+# that Valgrind cannot track correctly through the GCM state machine.
+# The computation is correct; Valgrind simply cannot follow the data flow
+# through the GCM polynomial multiplication internals.
+#
+# Reported upstream: https://github.com/openssl/openssl/issues/16139
+{
+   openssl_gcm_cipher_internal_cond
+   Memcheck:Cond
+   fun:gcm_cipher_internal
+}
+{
+   openssl_gcm_cipher_internal_value8
+   Memcheck:Value8
+   fun:gcm_cipher_internal
+}
+# OpenSSL process-global FIPS lock allocated once via pthread_once and
+# intentionally not freed until process exit. Not a real leak.
+{
+   openssl_fips_global_lock_reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   fun:CRYPTO_malloc
+   fun:CRYPTO_zalloc
+   fun:CRYPTO_THREAD_lock_new
+   fun:do_fips_lock_init_ossl_
+}

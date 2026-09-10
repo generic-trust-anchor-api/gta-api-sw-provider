@@ -6,7 +6,6 @@
 
 #include "../gta_sw_provider.h"
 #include "prof_helper_functions.h"
-#include <gta_api/gta_api.h>
 #include <openssl/x509v3.h>
 
 #define CTX_ATTR_TYPE_CSR_SUBJECT_DER "org.opcfoundation.csr.subject"

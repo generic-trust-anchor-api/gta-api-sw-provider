@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright 2025 Siemens
+# SPDX-FileCopyrightText: Copyright 2025-2026 Siemens
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -8,22 +8,25 @@ on:
 
 jobs:
   build-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: pq-off-system
+            meson_args: '--werror'
+            run_valgrind: true
+          - name: pq-off-wrap
+            meson_args: -Dbuild-dependencies=true
+            run_valgrind: false
+          - name: pq-on-system
+            meson_args: --werror -Denable-post-quantum-crypto=true
+            run_valgrind: true
+    name: build-test (${{ matrix.name }})
     steps:
       - name: Install dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y libcmocka-dev meson ninja-build build-essential libssl-dev cmake pkg-config git valgrind
-      - name: Checkout liboqs
-        uses: actions/checkout@v4
-        with:
-          repository: 'open-quantum-safe/liboqs'
-          ref: '0.9.1'
-      - name: Build and install liboqs
-        run: |
-          mkdir build
-          cd build
-          cmake -GNinja ..
-          sudo ninja install
+          sudo apt-get update && sudo apt-get install -y libcmocka-dev meson ninja-build build-essential libssl-dev libjitterentropy3-dev cmake pkg-config git valgrind
       - name: Checkout gta-api-core
         uses: actions/checkout@v4
         with:
@@ -35,29 +38,20 @@ jobs:
           sudo ninja -C build install
       - name: Checkout gta-api-sw-provider
         uses: actions/checkout@v4
-      - name: Build gta-api-sw-provider w/o PQC
+      - name: Build gta-api-sw-provider
         run: |
-          meson setup build --werror
+          meson setup build ${{ matrix.meson_args }}
           ninja -C build
-      - name: Test gta-api-sw-provider w/o PQC
+      - name: Test gta-api-sw-provider
         run: |
           ninja -C build test
-      - name: Valgrind w/o PQC
-        run: |
-          ninja -C build gta_provider_memcheck
-      - name: Build gta-api-sw-provider w/ PQC
-        run: |
-          meson setup build --reconfigure --werror -Denable-post-quantum-crypto=true
-          ninja -C build
-      - name: Test gta-api-sw-provider w/ PQC
-        run: |
-          ninja -C build test
-      - name: Valgrind w/ PQC
+      - name: Valgrind
+        if: matrix.run_valgrind
         run: |
           ninja -C build gta_provider_memcheck
 
   style-check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout gta-api-sw-provider
         uses: actions/checkout@v4
@@ -67,7 +61,7 @@ jobs:
           clang-format --dry-run --Werror $FILES
 
   reuse-compliance-check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout gta-api-sw-provider
         uses: actions/checkout@v4
