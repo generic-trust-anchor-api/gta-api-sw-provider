@@ -117,8 +117,10 @@ GTA_SWP_DEFINE_FUNCTION(
 
     EVP_MD_CTX * mdctx = NULL;
     EVP_PKEY * evp_private_key = NULL;
+#ifdef ENABLE_PQC
     unsigned char * p_buffer_in = NULL;
     size_t buffer_idx_in = 0;
+#endif
 
     struct personality_t * p_personality_content = NULL;
 
@@ -209,7 +211,9 @@ GTA_SWP_DEFINE_FUNCTION(
 
 err:
     OPENSSL_free(signature);
+#ifdef ENABLE_PQC
     OPENSSL_clear_free(p_buffer_in, buffer_idx_in);
+#endif
     EVP_MD_CTX_free(mdctx);
     EVP_PKEY_free(evp_private_key);
 

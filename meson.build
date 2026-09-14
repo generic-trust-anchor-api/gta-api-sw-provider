@@ -36,16 +36,16 @@ enable_test_log = get_option('enable-test-log')
 build_examples = get_option('build-examples')
 
 if enable_pqc
-   add_project_arguments(
-   c_compiler.get_supported_arguments(
-      '-DENABLE_PQC',
-   ),
-   language: 'c'
-)
-
    if build_dep
       error('Option enable-post-quantum-crypto=true requires build-dependencies=false. PQC needs OpenSSL >= 3.5, while subprojects/openssl.wrap is currently OpenSSL 3.0.8.')
    endif
+
+   add_project_arguments(
+      c_compiler.get_supported_arguments(
+         '-DENABLE_PQC',
+      ),
+      language: 'c'
+   )
 endif
 
 # TODO consider to use more generic override_options for build targets
