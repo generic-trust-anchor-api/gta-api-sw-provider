@@ -37,9 +37,8 @@ jobs:
       - name: Download and run swtpm
         if: matrix.need_swtpm
         run: |
-          sudo apt-get update && sudo apt-get install -y swtpm libtss2-dev tpm2-tools swtpm
-          swtpm socket -d --tpmstate dir=/tmp --tpm2 --ctrl type=tcp,port=2322 --server type=tcp,port=2321 --flags not-need-init
-          tpm2_startup -c
+          sudo apt-get update && sudo apt-get install -y swtpm libtss2-dev swtpm
+          swtpm socket -d --tpmstate dir=/tmp --tpm2 --ctrl type=tcp,port=2322 --server type=tcp,port=2321 --flags not-need-init,startup-clear
       - name: Checkout gta-api-core
         uses: actions/checkout@v4
         with:

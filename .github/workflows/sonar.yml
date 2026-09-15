@@ -18,11 +18,10 @@ jobs:
     steps:
       - name: Install dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y libcmocka-dev meson ninja-build build-essential libssl-dev libjitterentropy3-dev cmake pkg-config git gcovr lcov swtpm libtss2-dev tpm2-tools
+          sudo apt-get update && sudo apt-get install -y libcmocka-dev meson ninja-build build-essential libssl-dev libjitterentropy3-dev cmake pkg-config git gcovr lcov swtpm libtss2-dev
       - name: Start swtpm
         run: |
-          swtpm socket -d --tpmstate dir=/tmp --tpm2 --ctrl type=tcp,port=2322 --server type=tcp,port=2321 --flags not-need-init
-          tpm2_startup -c
+          swtpm socket -d --tpmstate dir=/tmp --tpm2 --ctrl type=tcp,port=2322 --server type=tcp,port=2321 --flags not-need-init,startup-clear
       - name: Checkout gta-api-core
         uses: actions/checkout@v4
         with:
