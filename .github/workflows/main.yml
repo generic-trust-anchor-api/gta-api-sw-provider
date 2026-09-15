@@ -16,17 +16,29 @@ jobs:
           - name: pq-off-system
             meson_args: '--werror'
             run_valgrind: true
+            need_swtpm: false
           - name: pq-off-wrap
             meson_args: -Dbuild-dependencies=true
             run_valgrind: false
+            need_swtpm: false
           - name: pq-on-system
             meson_args: --werror -Denable-post-quantum-crypto=true
             run_valgrind: true
+            need_swtpm: false
+          - name: pq-on-system-with-tpm-backend
+            meson_args: --werror -Denable-post-quantum-crypto=true -Denable-tpm2-backend=true -Dtcti-module='swtpm' -Dtcti-conf='host=127.0.0.1,port=2321'
+            run_valgrind: true
+            need_swtpm: true
     name: build-test (${{ matrix.name }})
     steps:
       - name: Install dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y libcmocka-dev meson ninja-build build-essential libssl-dev libjitterentropy3-dev cmake pkg-config git valgrind
+      - name: Download and run swtpm
+        if: matrix.need_swtpm
+        run: |
+          sudo apt-get update && sudo apt-get install -y swtpm libtss2-dev swtpm
+          swtpm socket -d --tpmstate dir=/tmp --tpm2 --ctrl type=tcp,port=2322 --server type=tcp,port=2321 --flags not-need-init,startup-clear
       - name: Checkout gta-api-core
         uses: actions/checkout@v4
         with:

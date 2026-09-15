@@ -11,7 +11,7 @@ project('Generic Trust Anchor API SW Provider',
         'buildtype=plain',
     ],
     license: 'Apache-2.0',
-    meson_version: '>=0.56.0',
+    meson_version: '>=0.57.0',
     version: '0.2'
 )
 
@@ -48,6 +48,11 @@ if enable_pqc
    )
 endif
 
+enable_tpm2_backend = get_option('enable-tpm2-backend')
+tcti_module = get_option('tcti-module')
+tcti_conf = get_option('tcti-conf')
+enable_tpm2_monotonic_counter = get_option('enable-tpm2-monotonic-counter')
+
 # TODO consider to use more generic override_options for build targets
 if build_type == 'release'
 add_project_arguments(
@@ -82,6 +87,25 @@ elif target_os == 'windows'
    ),
    language: 'c'
 )
+endif
+
+if enable_tpm2_backend
+   add_project_arguments(
+      c_compiler.get_supported_arguments(
+         '-DENABLE_TPM2_BACKEND',
+         '-DTCTI_MODULE="'+tcti_module+'"',
+         '-DTCTI_CONF="'+tcti_conf+'"',
+      ),
+      language: 'c'
+   )
+   if enable_tpm2_monotonic_counter
+      add_project_arguments(
+         c_compiler.get_supported_arguments(
+            '-DENABLE_TPM2_MONOTONIC_COUNTER',
+         ),
+         language: 'c'
+      )
+   endif
 endif
 
 if enable_test_log
@@ -130,6 +154,14 @@ else
    dep_qcbor      = qcbor_proj.get_variable('qcbor_dep')
    t_cose_proj    = subproject('t_cose')
    dep_t_cose     = t_cose_proj.get_variable('t_cose_dep')
+endif
+
+if enable_tpm2_backend
+   dep_esys = dependency('tss2-esys')
+   dep_tctildr = dependency('tss2-tctildr')
+   # The pkg-config module is named tss2-tcti-<module> whereas the runtime TCTI name
+   # passed to Tss2_TctiLdr_Initialize_ex() is the bare <module> (e.g. mssim/device).
+   dep_tcti = dependency('tss2-tcti-'+tcti_module)
 endif
 
 subdir('src') # Compile provider code as static library
