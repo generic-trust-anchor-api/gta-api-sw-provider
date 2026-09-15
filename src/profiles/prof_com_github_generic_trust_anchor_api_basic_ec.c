@@ -1,14 +1,15 @@
 /*
- * SPDX-FileCopyrightText: Copyright 2025 Siemens
+ * SPDX-FileCopyrightText: Copyright 2025-2026 Siemens
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include "../gta_sw_provider.h"
-#include <gta_api/gta_api.h>
+#include <openssl/evp.h>
 
 #define PERS_ATTR_NAME_KEYTYPE "com.github.generic-trust-anchor-api.keytype.openssl"
-#define PERS_ATTR_KEYTYPE_EC "EC"
+#define PERS_PKEY_TYPE "EC"
+#define PERS_PKEY_PARAMS "P-256"
 
 GTA_SWP_DEFINE_FUNCTION(
     bool,
@@ -23,29 +24,41 @@ GTA_SWP_DEFINE_FUNCTION(
      gta_errinfo_t * p_errinfo))
 {
     EVP_PKEY * p_key = NULL;
-    p_key = EVP_EC_gen("P-256");
+    bool ret = false;
+
+    p_key = EVP_PKEY_Q_keygen(NULL, NULL, PERS_PKEY_TYPE, PERS_PKEY_PARAMS);
+    if (NULL == p_key) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        goto err;
+    }
+
     *p_pers_secret_length = i2d_PrivateKey(p_key, p_pers_secret_buffer);
-    EVP_PKEY_free(p_key);
+    if (*p_pers_secret_length <= 0) {
+        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        goto err;
+    }
+
     *p_pers_secret_type = SECRET_TYPE_DER;
     /* Calculate personality fingerprint */
     SHA512(*p_pers_secret_buffer, *p_pers_secret_length, (unsigned char *)pers_fingerprint);
 
-    /* Add profile specific personality attribute */
     if (!add_personality_attribute_list_item(
             p_provider_params,
             p_pers_attribute,
             PAT_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_KEYTYPE_OPENSSL,
             (unsigned char *)PERS_ATTR_NAME_KEYTYPE,
             sizeof(PERS_ATTR_NAME_KEYTYPE),
-            (unsigned char *)PERS_ATTR_KEYTYPE_EC,
-            sizeof(PERS_ATTR_KEYTYPE_EC),
+            (unsigned char *)PERS_PKEY_TYPE,
+            sizeof(PERS_PKEY_TYPE),
             true,
             p_errinfo)) {
-
-        return false;
+        goto err;
     }
 
-    return true;
+    ret = true;
+err:
+    EVP_PKEY_free(p_key);
+    return ret;
 }
 
 const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_ec = {
