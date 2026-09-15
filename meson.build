@@ -11,7 +11,7 @@ project('Generic Trust Anchor API SW Provider',
         'buildtype=plain',
     ],
     license: 'Apache-2.0',
-    meson_version: '>=0.56.0',
+    meson_version: '>=0.57.0',
     version: '0.2'
 )
 
@@ -51,6 +51,7 @@ endif
 enable_tpm2_backend = get_option('enable-tpm2-backend')
 tcti_module = get_option('tcti-module')
 tcti_conf = get_option('tcti-conf')
+enable_tpm2_monotonic_counter = get_option('enable-tpm2-monotonic-counter')
 
 # TODO consider to use more generic override_options for build targets
 if build_type == 'release'
@@ -97,6 +98,14 @@ if enable_tpm2_backend
       ),
       language: 'c'
    )
+   if enable_tpm2_monotonic_counter
+      add_project_arguments(
+         c_compiler.get_supported_arguments(
+            '-DENABLE_TPM2_MONOTONIC_COUNTER',
+         ),
+         language: 'c'
+      )
+   endif
 endif
 
 if enable_test_log

@@ -98,6 +98,13 @@ struct gta_sw_provider_params_t {
 
     /* Path used for Serialization files */
     char p_serializ_path[SERIALIZE_PATH_LEN_MAX + 2];
+
+    /* Monotonic counter related variables */
+    struct monotonic_counter_t {
+        uint64_t value;
+        unsigned char * metadata;
+        size_t metadata_len;
+    } monotonic_counter;
 };
 
 /* provider local context specific data */
