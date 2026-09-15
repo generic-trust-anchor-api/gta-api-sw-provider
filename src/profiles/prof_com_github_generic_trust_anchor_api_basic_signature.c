@@ -117,6 +117,7 @@ GTA_SWP_DEFINE_FUNCTION(
 
     EVP_MD_CTX * mdctx = NULL;
     EVP_PKEY * evp_private_key = NULL;
+    EVP_PKEY_CTX * pctx = NULL;
 #ifdef ENABLE_PQC
     unsigned char * p_buffer_in = NULL;
     size_t buffer_idx_in = 0;
@@ -170,7 +171,15 @@ GTA_SWP_DEFINE_FUNCTION(
 #endif
     {
         /* RSA/EC: streaming DigestSign with SHA-256 */
-        if (1 != EVP_DigestSignInit(mdctx, NULL, EVP_sha256(), NULL, evp_private_key)) {
+        if (1 != EVP_DigestSignInit(mdctx, &pctx, EVP_sha256(), NULL, evp_private_key)) {
+            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+            goto err;
+        }
+
+        /* In case of RSA, we need to set the padding and saltlen */
+        if ((EVP_PKEY_RSA == EVP_PKEY_id(evp_private_key)) &&
+            ((1 != EVP_PKEY_CTX_set_rsa_padding(pctx, RSA_PKCS1_PSS_PADDING)) ||
+             (1 != EVP_PKEY_CTX_set_rsa_pss_saltlen(pctx, RSA_PSS_SALTLEN_DIGEST)))) {
             *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
             goto err;
         }
