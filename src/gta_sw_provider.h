@@ -1,21 +1,11 @@
 /*
- * SPDX-FileCopyrightText: Copyright 2025 Siemens
+ * SPDX-FileCopyrightText: Copyright 2025-2026 Siemens
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #ifndef GTA_SW_PROVIDER_H
 #define GTA_SW_PROVIDER_H
-
-#include <stdbool.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#ifdef ENABLE_PQC
-#include <oqs/oqs.h>
-#endif
 
 #include "gta_debug.h"
 #include "provider_data_model.h"
@@ -28,10 +18,14 @@
 #include <openssl/hmac.h>
 #include <openssl/kdf.h>
 #include <openssl/pem.h>
-#include <openssl/pkcs12.h>
 #include <openssl/rand.h>
 #include <openssl/types.h>
 #include <openssl/x509.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define GTA_SWP_DEFINE_FUNCTION(return_type, function_name, argument_list)                                             \
     static return_type function_name argument_list
@@ -53,7 +47,7 @@ enum profile_t {
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_RSA,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC,
 #ifdef ENABLE_PQC
-    PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM,
+    PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ML_DSA,
 #endif
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT,
     PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE,

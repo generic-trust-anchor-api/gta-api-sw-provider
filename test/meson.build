@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright 2024 Siemens
+# SPDX-FileCopyrightText: Copyright 2024-2026 Siemens
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -11,11 +11,6 @@ build_dep = [ dep_cmocka,
               dep_libcrypto,
               dep_gta_core,
             ]
-
-if enable_pqc
-    build_dep += [ dep_liboqs,
-                 ]
-endif
 
 gta_provider_test = executable(
     'gta_provider_test',

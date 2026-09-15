@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright 2024-2025 Siemens
+ * SPDX-FileCopyrightText: Copyright 2024-2026 Siemens
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -36,7 +36,7 @@ extern const struct profile_function_list_t fl_prof_ch_iec_30168_basic_local_dat
 extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_rsa;
 extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_ec;
 #ifdef ENABLE_PQC
-extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_dilithium;
+extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_ml_dsa;
 #endif
 extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_jwt;
 extern const struct profile_function_list_t fl_prof_com_github_generic_trust_anchor_api_basic_signature;
@@ -66,9 +66,8 @@ static struct profile_list_t supported_profiles[NUM_PROFILES] = {
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC] =
         {"com.github.generic-trust-anchor-api.basic.ec", &fl_prof_com_github_generic_trust_anchor_api_basic_ec},
 #ifdef ENABLE_PQC
-    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_DILITHIUM] =
-        {"com.github.generic-trust-anchor-api.basic.dilithium",
-         &fl_prof_com_github_generic_trust_anchor_api_basic_dilithium},
+    [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ML_DSA] =
+        {"com.github.generic-trust-anchor-api.basic.ml-dsa", &fl_prof_com_github_generic_trust_anchor_api_basic_ml_dsa},
 #endif
     [PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_JWT] =
         {"com.github.generic-trust-anchor-api.basic.jwt", &fl_prof_com_github_generic_trust_anchor_api_basic_jwt},

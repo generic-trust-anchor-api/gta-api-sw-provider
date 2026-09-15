@@ -6,7 +6,6 @@
 
 #include "../gta_sw_provider.h"
 #include "prof_helper_functions.h"
-#include <gta_api/gta_api.h>
 
 #define P256_COORDINATE_LEN 32
 

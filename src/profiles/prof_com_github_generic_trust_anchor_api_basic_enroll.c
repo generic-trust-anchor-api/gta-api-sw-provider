@@ -6,7 +6,6 @@
 
 #include "../gta_sw_provider.h"
 #include "prof_helper_functions.h"
-#include <gta_api/gta_api.h>
 
 #define CTX_ATTR_TYPE_SUBJECT_RDN "com.github.generic-trust-anchor-api.enroll.subject_rdn"
 
