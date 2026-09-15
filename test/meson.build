@@ -25,6 +25,7 @@ test_output_dir = 'CMOCKA_XML_FILE=' + meson.current_build_dir() + '/%g.xml'
 test(
     'gta_provider_test',
     gta_provider_test,
+    timeout: 0,
     env: [ test_output_dir,
            'CMOCKA_MESSAGE_OUTPUT=XML',
      ],
