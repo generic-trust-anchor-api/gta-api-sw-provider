@@ -20,7 +20,7 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y libcmocka-dev meson ninja-build build-essential libssl-dev libjitterentropy3-dev cmake pkg-config git gcovr lcov
       - name: Checkout gta-api-core
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
         with:
           repository: 'generic-trust-anchor-api/gta-api-core'
           ref: 'main'
@@ -29,11 +29,11 @@ jobs:
           meson setup build
           sudo ninja -C build install
       - name: Checkout gta-api-sw-provider
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
         with:
           fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
       - name: Install Build Wrapper
-        uses: SonarSource/sonarqube-scan-action/install-build-wrapper@v6
+        uses: SonarSource/sonarqube-scan-action/install-build-wrapper@22918119ff8e1ca75a623e15c8296b6ea4fbe28f #v8.2.1
       - name: Run Build Wrapper
         run: |
           meson setup build -Denable-post-quantum-crypto=true
@@ -44,7 +44,7 @@ jobs:
           ninja -C coverage test
           ninja -C coverage coverage-sonarqube
       - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@v6
+        uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f #v8.2.1
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
