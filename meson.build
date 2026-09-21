@@ -48,6 +48,8 @@ if enable_pqc
    )
 endif
 
+allow_huk_caching = get_option('allow-huk-caching')
+
 enable_tpm2_backend = get_option('enable-tpm2-backend')
 tcti_module = get_option('tcti-module')
 tcti_conf = get_option('tcti-conf')
@@ -87,6 +89,15 @@ elif target_os == 'windows'
    ),
    language: 'c'
 )
+endif
+
+if allow_huk_caching
+   add_project_arguments(
+      c_compiler.get_supported_arguments(
+         '-DALLOW_HUK_CACHING',
+      ),
+      language: 'c'
+   )
 endif
 
 if enable_tpm2_backend

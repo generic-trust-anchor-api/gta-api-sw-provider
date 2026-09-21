@@ -491,6 +491,9 @@ GTA_DEFINE_FUNCTION(
     p_provider_params->provider_instance_auth_token_info.issuing_token_issued = false;
     p_provider_params->provider_instance_auth_token_info.issuing_token_revoked = false;
     p_provider_params->provider_instance_auth_token_info.physical_presence_token_issued = false;
+#ifdef ALLOW_HUK_CACHING
+    p_provider_params->huk_32 = NULL;
+#endif
     p_provider_params->monotonic_counter.metadata = NULL;
     p_provider_params->monotonic_counter.metadata_len = 0;
     p_provider_params->monotonic_counter.value = 0;

@@ -8,6 +8,7 @@
 #define GTA_SW_PROVIDER_H
 
 #include "gta_debug.h"
+#include "key_management.h"
 #include "provider_data_model.h"
 #include <gta_api/gta_api.h>
 #include <gta_api/util/gta_list.h>
@@ -99,6 +100,10 @@ struct gta_sw_provider_params_t {
     /* Path used for Serialization files */
     char p_serializ_path[SERIALIZE_PATH_LEN_MAX + 2];
 
+#ifdef ALLOW_HUK_CACHING
+    /* Hardware Unique Key */
+    uint8_t * huk_32;
+#endif
     /* Monotonic counter related variables */
     struct monotonic_counter_t {
         uint64_t value;
