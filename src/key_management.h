@@ -15,6 +15,7 @@
 
 struct hw_unique_key_32 {
     uint8_t data[HUK_SIZE_32];
+    bool allow_caching;
 };
 
 bool get_hw_unique_key_32(struct hw_unique_key_32 * key);

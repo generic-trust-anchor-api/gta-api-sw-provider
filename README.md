@@ -193,6 +193,7 @@ Currently the following options are available:
 | disable-deprecated-warnings | boolean : { true, false } | Select whether or not warnings for deprecated functions are displayed. |
 | enable-test-log | boolean : { true, false } | This switch enables log messages for the provider tests. |
 | build-examples | boolean : { true, false } | This switch enables the build of examples. |
+| allow-huk-caching | boolean : { true, false } | This switch allows caching of the hardware unique key when the `allow_caching` flag in `hw_unique_key_32` is set. |
 
 The following options are available to enable the use of a TPM 2.0 to protect
 the persistent state of the software provider:

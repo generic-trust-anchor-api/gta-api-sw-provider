@@ -120,9 +120,14 @@ bool serialized_file_exists(const char * se_dir)
 #define INFO_KEY_MAC "Key for Device State protection"
 #define INFO_KEY_ENC "Key for Personality protection"
 
-bool get_derived_key(unsigned char * derived_key, size_t derived_key_len, char * info, size_t info_len)
+bool get_derived_key(
+    struct gta_sw_provider_params_t * provider_params,
+    unsigned char * derived_key,
+    size_t derived_key_len,
+    char * info,
+    size_t info_len)
 {
-    struct hw_unique_key_32 master_key;
+    struct hw_unique_key_32 master_key = {0};
     bool ret = false;
 
     /* any larger output can be provided by the derivation, when requested */
@@ -130,9 +135,26 @@ bool get_derived_key(unsigned char * derived_key, size_t derived_key_len, char *
         goto err1;
     }
 
-    if (!get_hw_unique_key_32(&master_key)) {
-        goto err1;
+#ifdef ALLOW_HUK_CACHING
+    if (NULL != provider_params->huk_32) {
+        /* Cached HUK available */
+        memcpy(master_key.data, provider_params->huk_32, HUK_SIZE_32);
+    } else {
+#endif
+        if (!get_hw_unique_key_32(&master_key)) {
+            goto err1;
+        }
+#ifdef ALLOW_HUK_CACHING
+        if (master_key.allow_caching) {
+            gta_errinfo_t errinfo = GTA_ERROR_INTERNAL_ERROR;
+            provider_params->huk_32 = gta_secmem_calloc(provider_params->h_ctx, 1, HUK_SIZE_32, &errinfo);
+            if (NULL == provider_params->huk_32) {
+                goto err1;
+            }
+            memcpy(provider_params->huk_32, master_key.data, HUK_SIZE_32);
+        }
     }
+#endif
 
     EVP_KDF * kdf = EVP_KDF_fetch(NULL, "HKDF", NULL);
     EVP_KDF_CTX * ctx = EVP_KDF_CTX_new(kdf);
@@ -209,6 +231,7 @@ auth_info_list_serialize(QCBOREncodeContext * p_encode_ctx, const struct auth_in
 
 static bool personality_content_serialize(
     const char * se_dir,
+    struct gta_sw_provider_params_t * provider_params,
     struct personality_t * p_personality,
     gta_personality_name_t personality_name,
     UsefulBuf * hash)
@@ -285,7 +308,7 @@ static bool personality_content_serialize(
     t_cose_encrypt_enc_init(&enc_ctx, T_COSE_OPT_MESSAGE_TYPE_ENCRYPT0, T_COSE_ALGORITHM_A256GCM);
 
     /* get & set the COSE Key */
-    if (!get_derived_key(raw_key, AES_256_KEY_LEN, INFO_KEY_ENC, sizeof(INFO_KEY_ENC) - 1)) {
+    if (!get_derived_key(provider_params, raw_key, AES_256_KEY_LEN, INFO_KEY_ENC, sizeof(INFO_KEY_ENC) - 1)) {
         goto err;
     }
     t_cose_key_init_symmetric(T_COSE_ALGORITHM_A256GCM, Q_USEFUL_BUF_FROM_BYTE_ARRAY_LITERAL(raw_key), &cek);
@@ -331,7 +354,8 @@ err:
  * Helper function for provider_serialize() and provider_serialize_init() to
  * sign the overall serialized state and write it to the file system.
  */
-static bool cose_sign_and_write(const char * se_dir, UsefulBufC encoded_data)
+static bool
+cose_sign_and_write(const char * se_dir, struct gta_sw_provider_params_t * provider_params, UsefulBufC encoded_data)
 {
     /* Encode COSE Protection */
     Q_USEFUL_BUF_MAKE_STACK_UB(signed_cose_buffer, COSE_DATA_LEN);
@@ -345,7 +369,7 @@ static bool cose_sign_and_write(const char * se_dir, UsefulBufC encoded_data)
     t_cose_mac_compute_init(&mac_ctx, 0, T_COSE_ALGORITHM_HMAC256);
 
     /* get & set the COSE Key */
-    get_derived_key(raw_key, HMAC_256_KEY_LEN, INFO_KEY_MAC, sizeof(INFO_KEY_MAC) - 1);
+    get_derived_key(provider_params, raw_key, HMAC_256_KEY_LEN, INFO_KEY_MAC, sizeof(INFO_KEY_MAC) - 1);
     t_cose_key_init_symmetric(T_COSE_ALGORITHM_HMAC256, Q_USEFUL_BUF_FROM_BYTE_ARRAY_LITERAL(raw_key), &key);
     t_cose_mac_set_computing_key(&mac_ctx, key, NULL_Q_USEFUL_BUF_C);
 
@@ -473,6 +497,7 @@ bool provider_serialize(const char * se_dir, struct gta_sw_provider_params_t * p
             /* Serialize Personality content & add the hash of it */
             if (!personality_content_serialize(
                     se_dir,
+                    provider_params,
                     p_personality_name_list_item->p_personality_content,
                     p_personality_name_list_item->personality_name,
                     &perso_hash)) {
@@ -498,7 +523,7 @@ bool provider_serialize(const char * se_dir, struct gta_sw_provider_params_t * p
     }
 
     /* Encode COSE Protection */
-    if (!cose_sign_and_write(se_dir, encoded_data)) {
+    if (!cose_sign_and_write(se_dir, provider_params, encoded_data)) {
         goto err;
     }
 
@@ -580,7 +605,7 @@ bool provider_serialize_init(const char * se_dir, struct gta_sw_provider_params_
     }
 
     /* Encode COSE Protection and write state */
-    if (!cose_sign_and_write(se_dir, encoded_data)) {
+    if (!cose_sign_and_write(se_dir, provider_params, encoded_data)) {
         goto err;
     }
 
@@ -766,6 +791,7 @@ err:
 
 static bool personality_content_deserialize(
     const char * se_dir,
+    struct gta_sw_provider_params_t * provider_params,
     struct personality_t * p_personality,
     gta_personality_name_t personality_name,
     struct q_useful_buf_c * expected_hash,
@@ -833,7 +859,7 @@ static bool personality_content_deserialize(
     t_cose_encrypt_dec_init(&dec_ctx, T_COSE_OPT_MESSAGE_TYPE_ENCRYPT0);
 
     /* get & set the COSE Key */
-    if (!get_derived_key(raw_key, AES_256_KEY_LEN, INFO_KEY_ENC, sizeof(INFO_KEY_ENC) - 1)) {
+    if (!get_derived_key(provider_params, raw_key, AES_256_KEY_LEN, INFO_KEY_ENC, sizeof(INFO_KEY_ENC) - 1)) {
         goto err;
     }
     t_cose_key_init_symmetric(T_COSE_ALGORITHM_A256GCM, Q_USEFUL_BUF_FROM_BYTE_ARRAY_LITERAL(raw_key), &cek);
@@ -995,6 +1021,7 @@ err:
 
 static bool decode_personalities(
     const char * se_dir,
+    struct gta_sw_provider_params_t * provider_params,
     QCBORDecodeContext * p_decode_ctx,
     struct devicestate_stack_item_t * p_devicestack_item,
     gta_context_handle_t h_ctx)
@@ -1093,7 +1120,12 @@ static bool decode_personalities(
         /* expected Hash */
         QCBORDecode_GetByteStringInMapSZ(p_decode_ctx, LABEL_PERSONALITY_PROTECTION, &tmp_str);
         if (!personality_content_deserialize(
-                se_dir, p_personality, p_personality_name_list_item->personality_name, &tmp_str, h_ctx)) {
+                se_dir,
+                provider_params,
+                p_personality,
+                p_personality_name_list_item->personality_name,
+                &tmp_str,
+                h_ctx)) {
             DEBUG_PRINT(("DESERIALIZATION Failed. Error while decoding Personality Content\n"));
             goto err;
         }
@@ -1123,6 +1155,7 @@ err:
 
 static bool decode_devicestates(
     const char * se_dir,
+    struct gta_sw_provider_params_t * provider_params,
     QCBORDecodeContext * p_decode_ctx,
     struct devicestate_stack_item_t ** pp_devicestate_stack,
     gta_context_handle_t h_ctx)
@@ -1186,7 +1219,7 @@ static bool decode_devicestates(
 
         /* Decode Personalities */
         QCBORDecode_EnterArrayFromMapSZ(p_decode_ctx, LABEL_PERSONALITIES);
-        if (!decode_personalities(se_dir, p_decode_ctx, p_devicestack_item, h_ctx)) {
+        if (!decode_personalities(se_dir, provider_params, p_decode_ctx, p_devicestack_item, h_ctx)) {
             DEBUG_PRINT(("DESERIALIZATION Failed. Error while decoding Personalities\n"));
             goto err;
         }
@@ -1301,7 +1334,7 @@ bool provider_deserialize(const char * se_dir, struct gta_sw_provider_params_t *
         t_cose_mac_validate_init(&validate_ctx, 0);
 
         /* get & set the COSE Key */
-        if (!get_derived_key(raw_key, HMAC_256_KEY_LEN, INFO_KEY_MAC, sizeof(INFO_KEY_MAC) - 1)) {
+        if (!get_derived_key(provider_params, raw_key, HMAC_256_KEY_LEN, INFO_KEY_MAC, sizeof(INFO_KEY_MAC) - 1)) {
             goto err;
         }
         t_cose_key_init_symmetric(T_COSE_ALGORITHM_HMAC256, Q_USEFUL_BUF_FROM_BYTE_ARRAY_LITERAL(raw_key), &key);
@@ -1331,7 +1364,8 @@ bool provider_deserialize(const char * se_dir, struct gta_sw_provider_params_t *
 
         /* Decode Device States */
         QCBORDecode_EnterArray(&decode_ctx, &Item);
-        if (!decode_devicestates(se_dir, &decode_ctx, &provider_params->p_devicestate_stack, provider_params->h_ctx)) {
+        if (!decode_devicestates(
+                se_dir, provider_params, &decode_ctx, &provider_params->p_devicestate_stack, provider_params->h_ctx)) {
             DEBUG_PRINT(("DESERIALIZATION Failed. Error while decoding Device States\n"));
             goto err;
         }

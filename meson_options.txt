@@ -8,7 +8,8 @@ option('enable-post-quantum-crypto', type : 'boolean', value : false, descriptio
 option('disable-deprecated-warnings', type : 'boolean', value : true, description : 'Select whether or not warnings for deprecated functions are displayed.')
 option('enable-test-log', type : 'boolean', value : false, description : 'This switch enables log messages for the provider tests.')
 option('build-examples', type : 'boolean', value : false, description : 'This switch enables the build of examples.')
-
+# Configuration option for the hardware unique key
+option('allow-huk-caching', type : 'boolean', value : true, description : 'This switch allows the caching of the hardware unique key in case the `allow_caching` flag in `hw_unique_key_32` is set')
 # Configuration options to enable the use of a TPM 2.0 to protect the persistent state of the SW provider
 option('enable-tpm2-backend', type : 'boolean', value : false, description : 'This switch enables the use of a TPM2 to protect the persisted state')
 option('tcti-module', type : 'combo', choices : ['device', 'mssim', 'swtpm'], value : 'device', description : 'Select TCTI module in case TPM2 is enabled')

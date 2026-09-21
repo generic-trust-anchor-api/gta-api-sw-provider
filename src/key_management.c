@@ -35,7 +35,9 @@
  * can only be used on the device which created it (device binding).
  *
  * The function should return:
- *   true, in case 32 byte hardware unique key are written to key->data
+ *   true, in case 32 byte hardware unique key are written to key->data together
+ *         with an indication in key->allow_caching to state if caching of the
+ *         key is allowed or not
  *   false, on failure
  */
 #ifndef ENABLE_TPM2_BACKEND
@@ -50,6 +52,7 @@ bool get_hw_unique_key_32(struct hw_unique_key_32 * key)
     }
 
     memcpy(key->data, hardcoded_key, HUK_SIZE_32);
+    key->allow_caching = false;
 
     return true;
 }
@@ -299,6 +302,7 @@ bool get_hw_unique_key_32(struct hw_unique_key_32 * key)
         goto err;
     }
 
+    key->allow_caching = true;
     b_ret = true;
 
 err:
