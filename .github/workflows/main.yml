@@ -25,8 +25,12 @@ jobs:
             meson_args: --werror -Denable-post-quantum-crypto=true
             run_valgrind: true
             need_swtpm: false
-          - name: pq-on-system-with-tpm-backend
+          - name: pq-on-system-with-tpm-backend-with-caching
             meson_args: --werror -Denable-post-quantum-crypto=true -Denable-tpm2-backend=true -Dtcti-module='swtpm' -Dtcti-conf='host=127.0.0.1,port=2321'
+            run_valgrind: true
+            need_swtpm: true
+          - name: pq-on-system-with-tpm-backend-without-caching
+            meson_args: --werror -Denable-post-quantum-crypto=true -Denable-tpm2-backend=true -Dallow-huk-caching=false -Dtcti-module='swtpm' -Dtcti-conf='host=127.0.0.1,port=2321'
             run_valgrind: true
             need_swtpm: true
     name: build-test (${{ matrix.name }})
