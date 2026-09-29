@@ -18,7 +18,7 @@ jobs:
           tar -xf jwt-linux.tar.gz
           sudo cp ./jwt /usr/local/bin
       - name: Checkout gta-api-core
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
         with:
           repository: 'generic-trust-anchor-api/gta-api-core'
           ref: 'main'
@@ -27,13 +27,13 @@ jobs:
           meson setup build
           sudo ninja -C build install
       - name: Checkout gta-api-sw-provider
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
       - name: Build and install gta-api-sw-provider
         run: |
           meson setup build
           sudo ninja -C build install
       - name: Checkout gta-cli
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
         with:
           repository: 'generic-trust-anchor-api/gta-cli'
           ref: 'main'

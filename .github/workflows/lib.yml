@@ -17,7 +17,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y libcmocka-dev meson ninja-build build-essential libssl-dev libjitterentropy3-dev cmake pkg-config git llvm
           cargo install armerge
       - name: Checkout gta-api-core
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
         with:
           repository: 'generic-trust-anchor-api/gta-api-core'
           ref: 'main'
@@ -26,7 +26,7 @@ jobs:
           meson setup build
           sudo ninja -C build install
       - name: Checkout gta-api-sw-provider
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
       - name: Build gta-api-sw-provider
         run: |
           meson setup build -Denable-post-quantum-crypto=true
@@ -35,7 +35,7 @@ jobs:
         run: |
           armerge --keep-symbols 'gta_sw_provider_init' --output build/libgta_sw_provider_merged.a build/src/libgta_sw_provider.a /usr/lib/x86_64-linux-gnu/libcrypto.a
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
         with:
           name: libgta_sw_provider_merged.a
           path: build/libgta_sw_provider_merged.a
