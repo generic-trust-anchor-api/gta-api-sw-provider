@@ -25,6 +25,7 @@ GTA_SWP_DEFINE_FUNCTION(
 {
     EVP_PKEY * p_key = NULL;
     bool ret = false;
+    int length = 0;
 
     p_key = EVP_PKEY_Q_keygen(NULL, NULL, PERS_PKEY_TYPE, PERS_PKEY_PARAMS);
     if (NULL == p_key) {
@@ -32,12 +33,14 @@ GTA_SWP_DEFINE_FUNCTION(
         goto err;
     }
 
-    *p_pers_secret_length = i2d_PrivateKey(p_key, p_pers_secret_buffer);
-    if (*p_pers_secret_length <= 0) {
+    length = i2d_PrivateKey(p_key, p_pers_secret_buffer);
+    if (0 >= length) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
         goto err;
     }
 
+    /* length > 0 checked before */
+    *p_pers_secret_length = (size_t)length;
     *p_pers_secret_type = SECRET_TYPE_DER;
     /* Calculate personality fingerprint */
     SHA512(*p_pers_secret_buffer, *p_pers_secret_length, (unsigned char *)pers_fingerprint);
