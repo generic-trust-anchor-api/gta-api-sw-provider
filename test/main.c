@@ -3275,6 +3275,71 @@ static void provider_deserialize(void ** state)
     assert_true(gta_instance_final(h_inst, &errinfo));
 }
 
+static void non_implemented_functions(void ** state)
+{
+    DEBUG_PRINT(("gta_sw_provider tests: %s\n", __func__));
+    struct test_params_t * test_params = (struct test_params_t *)(*state);
+    gta_errinfo_t errinfo = 0;
+    gta_context_handle_t h_ctx = GTA_HANDLE_INVALID;
+    gta_context_handle_t h_ctx2 = GTA_HANDLE_INVALID;
+    gtaio_ostream_t * ostream = NULL;
+    gtaio_istream_t istream = {0};
+    bool finished = false;
+
+#ifdef LOG_TEST_OUTPUT
+    myio_ofilestream_t ofilestream = {0};
+    ofilestream.write = (gtaio_stream_write_t)myio_ofilestream_write;
+    ofilestream.finish = (gtaio_stream_finish_t)myio_ofilestream_finish;
+    ofilestream.file = stdout;
+    ostream = (gtaio_ostream_t *)&ofilestream;
+#else
+    gtaio_ostream_t ostream_null = {0};
+    ostream_null.write = (gtaio_stream_write_t)ostream_null_write;
+    ostream_null.finish = (gtaio_stream_finish_t)ostream_finish;
+    ostream = &ostream_null;
+#endif
+
+    h_ctx = gta_context_open(
+        test_params->h_inst,
+        "ec_access_control",
+        supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE],
+        &errinfo);
+
+    assert_non_null(h_ctx);
+    assert_int_equal(0, errinfo);
+
+    h_ctx2 = gta_context_open(
+        test_params->h_inst,
+        "ec_access_control",
+        supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_SIGNATURE],
+        &errinfo);
+
+    assert_non_null(h_ctx2);
+    assert_int_equal(0, errinfo);
+
+    assert_false(gta_context_auth_get_challenge(h_ctx, ostream, &errinfo));
+    assert_false(gta_context_auth_set_random(h_ctx, &istream, &errinfo));
+    assert_false(gta_devicestate_attestate(h_ctx, &istream, ostream, &errinfo));
+    assert_false(gta_personality_enroll_auth(h_ctx, h_ctx2, ostream, &errinfo));
+    assert_false(gta_personality_attestate(h_ctx, "ec_access_control", &istream, ostream, &errinfo));
+
+    assert_false(gta_security_association_initialize(h_ctx, &istream, ostream, &finished, &errinfo));
+    assert_false(gta_security_association_accept(h_ctx, &istream, ostream, &finished, &errinfo));
+    assert_false(gta_security_association_destroy(h_ctx, &errinfo));
+    assert_false(gta_seal_message(h_ctx, &istream, ostream, &errinfo));
+    assert_false(gta_unseal_message(h_ctx, &istream, ostream, &errinfo));
+    assert_false(gta_get_random_bytes(test_params->h_inst, 10, ostream, &errinfo));
+    assert_false(gta_attestate(h_ctx, &istream, ostream, &errinfo));
+    /*
+    assert_false(gta_trustex_function_install());
+    assert_false(gta_trustex_function_uninstall());
+    assert_false(gta_trustex_function_execute());
+    assert_false(gta_trustex_function_terminate());
+    */
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_true(gta_context_close(h_ctx2, &errinfo));
+}
+
 /*-----------------------------------------------------------------------------
  * group tests
  */
@@ -3313,6 +3378,8 @@ int ts_gta_sw_provider(void)
         cmocka_unit_test(access_policies_and_access_tokens),
         /* Tests for persistent storage */
         cmocka_unit_test(provider_deserialize),
+        /* Tests for non-implemented functions */
+        cmocka_unit_test(non_implemented_functions),
     };
 
     return cmocka_run_group_tests_name(
