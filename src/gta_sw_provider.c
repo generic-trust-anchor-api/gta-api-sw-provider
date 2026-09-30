@@ -3263,7 +3263,7 @@ GTA_DEFINE_FUNCTION(
 GTA_DEFINE_FUNCTION(
     bool,
     gta_sw_provider_gta_get_random_bytes,
-    (size_t num_bytes, gtaio_ostream_t * rnd_stream, gta_errinfo_t * p_errinfo))
+    (gta_instance_handle_t h_inst, size_t num_bytes, gtaio_ostream_t * rnd_stream, gta_errinfo_t * p_errinfo))
 {
     bool ret = false;
 
@@ -3291,6 +3291,7 @@ GTA_DEFINE_FUNCTION(
     return ret;
 }
 
+#if 0
 GTA_DEFINE_FUNCTION(
     bool,
     gta_sw_provider_gta_trustex_function_install,
@@ -3350,6 +3351,7 @@ GTA_DEFINE_FUNCTION(
 
     return ret;
 }
+#endif
 
 static const struct gta_function_list_t g_my_function_list = {
     gta_sw_provider_gta_access_token_get_physical_presence,
@@ -3398,9 +3400,17 @@ static const struct gta_function_list_t g_my_function_list = {
     gta_sw_provider_gta_unseal_message,
     gta_sw_provider_gta_get_random_bytes,
     gta_sw_provider_gta_attestate,
+#if 0
     gta_sw_provider_gta_trustex_function_install,
     gta_sw_provider_gta_trustex_function_uninstall,
     gta_sw_provider_gta_trustex_function_execute,
-    gta_sw_provider_gta_trustex_function_terminate};
+    gta_sw_provider_gta_trustex_function_terminate
+#else
+    NULL,
+    NULL,
+    NULL,
+    NULL
+#endif
+};
 
 /*** end of file ***/
