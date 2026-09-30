@@ -3263,7 +3263,7 @@ GTA_DEFINE_FUNCTION(
 GTA_DEFINE_FUNCTION(
     bool,
     gta_sw_provider_gta_get_random_bytes,
-    (size_t num_bytes, gtaio_ostream_t * rnd_stream, gta_errinfo_t * p_errinfo))
+    (gta_instance_handle_t h_inst, size_t num_bytes, gtaio_ostream_t * rnd_stream, gta_errinfo_t * p_errinfo))
 {
     bool ret = false;
 
