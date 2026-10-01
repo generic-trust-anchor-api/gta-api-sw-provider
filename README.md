@@ -67,6 +67,7 @@ for more profiles will be added.
 | :white_check_mark:| com.github.generic-trust-anchor-api.basic.rsa | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.rsa.md) | Creation of a RSA based personality |
 | :white_check_mark:| com.github.generic-trust-anchor-api.basic.signature | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.signature.md) | Creation of a digital signature |
 | :white_check_mark:| com.github.generic-trust-anchor-api.basic.tls | [Link](https://github.com/generic-trust-anchor-api/gta-api-profiles/blob/main/doc/profile_com.github.generic-trust-anchor-api.basic.tls.md) | Alias for com.github.generic-trust-anchor-api.basic.signature |
+| :white_check_mark:| org.opcfoundation.ECC-nistP256 | [Link](https://reference.opcfoundation.org/specs/OPC-30300/6.1) | OPC UA security policy `ECC-nistP256` |
 
 ## Dependencies
 The build and test of the GTA API SW provider depend on the GTA API Core and
