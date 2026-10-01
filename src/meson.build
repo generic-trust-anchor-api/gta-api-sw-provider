@@ -29,11 +29,19 @@ build_dep = [ dep_libcrypto,
               dep_gta_core,
             ]
 
+if enable_tpm2_backend
+    build_dep += [ dep_esys,
+                   dep_tctildr,
+                   dep_tcti,
+                 ]
+endif
+
 gta_sw_provider_static = static_library('gta_sw_provider',
     gta_sw_provider_files,
     dependencies : build_dep,
           c_args : ['-DNDEBUG',
                    ],
+
     install: true
 )
 
