@@ -752,8 +752,19 @@ static void profile_local_data_protection(void ** state)
         protection_properties,
         &errinfo));
     assert_int_equal(GTA_ERROR_NAME_ALREADY_EXISTS, errinfo);
-
     errinfo = 0;
+
+    /* Negative test for context open */
+    h_ctx = gta_context_open(
+        test_params->h_inst,
+        get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_EC),
+        "ch.iec.30168.basic.local_data_protection",
+        &errinfo);
+
+    assert_null(h_ctx);
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+    errinfo = 0;
+
     h_ctx = gta_context_open(
         test_params->h_inst,
         get_personality_name(PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION),
@@ -1551,6 +1562,19 @@ static void profile_jwt(void ** state)
     ostream_null.write = (gtaio_stream_write_t)ostream_null_write;
     ostream_null.finish = (gtaio_stream_finish_t)ostream_finish;
     ostream = &ostream_null;
+#endif
+
+    /* Negative test */
+#ifdef ENABLE_PQC
+    h_ctx = gta_context_open(
+        test_params->h_inst,
+        get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ML_DSA),
+        "com.github.generic-trust-anchor-api.basic.jwt",
+        &errinfo);
+
+    assert_null(h_ctx);
+    assert_int_equal(GTA_ERROR_PROFILE_UNSUPPORTED, errinfo);
+    errinfo = 0;
 #endif
 
     /* This profile is supposed to work with the following creation profiles: todo! */
@@ -3271,6 +3295,24 @@ static void provider_deserialize(void ** state)
         protection_properties,
         &errinfo));
     assert_int_equal(0, errinfo);
+
+    assert_true(gta_instance_final(h_inst, &errinfo));
+
+    /* Manipulate the state and try to deserialize again */
+    remove(DIRECTORY_CLEAN_STATE "/PERS_pers_test_1");
+
+    istream_from_buf_init(&init_config, DIRECTORY_CLEAN_STATE, sizeof(DIRECTORY_CLEAN_STATE) - 1);
+
+    h_inst = gta_instance_init(&inst_params, &errinfo);
+    assert_non_null(h_inst);
+
+    /* register a profile to trigger deserialization */
+    assert_false(gta_sw_provider_gta_register_provider(
+        h_inst,
+        (gtaio_istream_t *)&init_config,
+        supported_profiles[PROF_CH_IEC_30168_BASIC_LOCAL_DATA_PROTECTION],
+        &errinfo));
+    assert_int_equal(GTA_ERROR_PROVIDER_INVALID, errinfo);
 
     assert_true(gta_instance_final(h_inst, &errinfo));
 }
