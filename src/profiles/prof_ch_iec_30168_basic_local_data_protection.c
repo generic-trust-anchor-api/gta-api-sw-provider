@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright 2025 Siemens
+ * SPDX-FileCopyrightText: Copyright 2025-2026 Siemens
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -117,7 +117,7 @@ ASN1_SEQUENCE(ProtectedData) =
 
     /* Read whole input into buffer */
     if (!read_input_buffer(data, &p_buffer_in, &buffer_idx_in, p_errinfo)) {
-        goto err;
+        goto cleanup;
     }
 
     /* Initialize data structure */
@@ -128,8 +128,7 @@ ASN1_SEQUENCE(ProtectedData) =
 
     /* Generate a random input for the key derivation */
     if (1 != RAND_bytes(key_derivation, LOCAL_DATA_PROTECTION_KEY_DERIVATION_LEN)) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
     ASN1_OCTET_STRING_set(p_data.key, key_derivation, LOCAL_DATA_PROTECTION_KEY_DERIVATION_LEN);
 
@@ -141,14 +140,12 @@ ASN1_SEQUENCE(ProtectedData) =
         sizeof(unsigned char),
         p_errinfo);
     if (NULL == key) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     /* Range check on p_personality_content->content_data_size */
     if (p_personality_content->secret_data_size > INT_MAX) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
     /* Derive a key from the personality secret */
     HMAC(
@@ -162,62 +159,53 @@ ASN1_SEQUENCE(ProtectedData) =
 
     /* EVP_CIPHER_get_key_length always >= 0 */
     if (size < (unsigned int)EVP_CIPHER_get_key_length(EVP_aes_256_gcm())) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     /* Generate a random IV */
     if (1 != RAND_bytes(iv, LOCAL_DATA_PROTECTION_IV_LEN)) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
     ASN1_OCTET_STRING_set(p_data.iv, iv, LOCAL_DATA_PROTECTION_IV_LEN);
 
     /* Initialize the cipher context */
     gcmctx = EVP_CIPHER_CTX_new();
     if (1 != EVP_EncryptInit_ex2(gcmctx, EVP_aes_256_gcm(), key, iv, NULL)) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
     EVP_CIPHER_CTX_ctrl(gcmctx, EVP_CTRL_AEAD_SET_IVLEN, LOCAL_DATA_PROTECTION_IV_LEN, NULL);
 
     /* Allocate memory for the encrypted data */
     p_buffer_out = gta_secmem_calloc(p_context_params->h_ctx, buffer_idx_in, sizeof(unsigned char), p_errinfo);
     if (NULL == p_buffer_out) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     /* Range check on buffer_idx_in */
     if (buffer_idx_in > INT_MAX) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
     /* Encrypt input data */
     if (1 != EVP_EncryptUpdate(gcmctx, p_buffer_out, &len, p_buffer_in, (int)buffer_idx_in)) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
     /* len is always >= 0 */
     buffer_idx_out = (size_t)len;
 
     if (1 != EVP_EncryptFinal_ex(gcmctx, p_buffer_out + buffer_idx_out, &len)) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
     /* len is always >= 0 */
     buffer_idx_out += (size_t)len;
 
     /* Check length */
     if (buffer_idx_out != buffer_idx_in) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     /* Range check on buffer_idx_out */
     if (buffer_idx_out > INT_MAX) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
     /* Encode payload */
     ASN1_OCTET_STRING_set(p_data.data, p_buffer_out, (int)buffer_idx_out);
@@ -229,8 +217,7 @@ ASN1_SEQUENCE(ProtectedData) =
     /* Encode the ProtectedData */
     encoded_len = i2d_ProtectedData(&p_data, &encoded_data);
     if (encoded_len <= 0) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     /* Write output stream (encoded_len > 0 already checked) */
@@ -238,8 +225,12 @@ ASN1_SEQUENCE(ProtectedData) =
     protected_data->finish(protected_data, 0, p_errinfo);
 
     ret = true;
+    goto cleanup;
 
-err:
+internal_err:
+    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+
+cleanup:
     EVP_MD_CTX_free(mdctx);
     EVP_PKEY_free(evp_private_key);
     EVP_CIPHER_CTX_free(gcmctx);
@@ -281,28 +272,25 @@ GTA_SWP_DEFINE_FUNCTION(
 
     /* Read whole input into buffer */
     if (!read_input_buffer(protected_data, &p_buffer_in, &buffer_idx_in, p_errinfo)) {
-        goto err;
+        goto cleanup;
     }
 
     /* Range check on buffer_idx_in */
     if (buffer_idx_in > LONG_MAX) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
     /* Decode ProtectedData */
     const unsigned char * p = p_buffer_in;
     p_data = d2i_ProtectedData(NULL, &p, (long)buffer_idx_in);
     if (NULL == p_data) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     /* Check if sizes are supported */
     if ((LOCAL_DATA_PROTECTION_KEY_DERIVATION_LEN != p_data->key->length) ||
         (LOCAL_DATA_PROTECTION_IV_LEN != p_data->iv->length) ||
         (LOCAL_DATA_PROTECTION_TAG_LEN != p_data->tag->length)) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     /* Allocate memory for the key to be derived (return value of
@@ -313,14 +301,12 @@ GTA_SWP_DEFINE_FUNCTION(
         sizeof(unsigned char),
         p_errinfo);
     if (NULL == key) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     /* Range check on p_personality_content->content_data_size */
     if (p_personality_content->secret_data_size > INT_MAX) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
     /* Derive a key from the personality secret */
     HMAC(
@@ -334,15 +320,13 @@ GTA_SWP_DEFINE_FUNCTION(
 
     /* EVP_CIPHER_get_key_length always >= 0 */
     if (size < (unsigned int)EVP_CIPHER_get_key_length(EVP_aes_256_gcm())) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     /* Initialize the cipher context */
     gcmctx = EVP_CIPHER_CTX_new();
     if (1 != EVP_DecryptInit_ex2(gcmctx, EVP_aes_256_gcm(), key, p_data->iv->data, NULL)) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
     EVP_CIPHER_CTX_ctrl(gcmctx, EVP_CTRL_AEAD_SET_IVLEN, LOCAL_DATA_PROTECTION_IV_LEN, NULL);
     EVP_CIPHER_CTX_ctrl(gcmctx, EVP_CTRL_AEAD_SET_TAG, LOCAL_DATA_PROTECTION_TAG_LEN, p_data->tag->data);
@@ -350,41 +334,40 @@ GTA_SWP_DEFINE_FUNCTION(
     /* Allocate memory for the decrypted data */
     p_buffer_out = gta_secmem_calloc(p_context_params->h_ctx, buffer_idx_in, sizeof(unsigned char), p_errinfo);
     if (NULL == p_buffer_out) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     /* Decrypt input data */
     if (1 != EVP_DecryptUpdate(gcmctx, p_buffer_out, &len, p_data->data->data, p_data->data->length)) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
     /* len is always >= 0 */
     buffer_idx_out = (size_t)len;
 
     if (1 != EVP_DecryptFinal_ex(gcmctx, p_buffer_out + buffer_idx_out, &len)) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
     /* len is always >= 0 */
     buffer_idx_out += (size_t)len;
 
     /* Check length */
     if ((p_data->data->length < 0) || (buffer_idx_out != (size_t)p_data->data->length)) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     /* Write output stream */
     if (buffer_idx_out != data->write(data, (char *)p_buffer_out, buffer_idx_out, p_errinfo)) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
     data->finish(data, 0, p_errinfo);
 
     ret = true;
+    goto cleanup;
 
-err:
+internal_err:
+    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+
+cleanup:
     EVP_CIPHER_CTX_free(gcmctx);
     OPENSSL_clear_free(p_buffer_in, buffer_idx_in);
     gta_secmem_free(p_context_params->h_ctx, p_buffer_out, &errinfo_tmp);

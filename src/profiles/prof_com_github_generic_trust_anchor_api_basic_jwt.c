@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright 2025 Siemens
+ * SPDX-FileCopyrightText: Copyright 2025-2026 Siemens
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -68,20 +68,15 @@ GTA_SWP_DEFINE_FUNCTION(
     /* get personality of the context */
     p_personality_content = p_context_params->p_personality_item->p_personality_content;
 
-    if (SECRET_TYPE_DER == p_personality_content->secret_type) {
-        p_key =
-            get_pkey_from_der(p_personality_content->secret_data, p_personality_content->secret_data_size, p_errinfo);
-        if (NULL == p_key) {
-            goto err;
-        }
-        /* get public key in PEM */
-        bio = BIO_new(BIO_s_mem());
-        PEM_write_bio_PUBKEY(bio, p_key);
-        len = BIO_get_mem_data(bio, &pem_data);
-    } else {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    p_key = get_pkey_from_der(p_personality_content->secret_data, p_personality_content->secret_data_size, p_errinfo);
+    if (NULL == p_key) {
         goto err;
     }
+    /* get public key in PEM */
+    bio = BIO_new(BIO_s_mem());
+    PEM_write_bio_PUBKEY(bio, p_key);
+    len = BIO_get_mem_data(bio, &pem_data);
+
     /* len always >= 0 */
     if ((size_t)len !=
         p_personality_enrollment_info->write(p_personality_enrollment_info, pem_data, (size_t)len, p_errinfo)) {
