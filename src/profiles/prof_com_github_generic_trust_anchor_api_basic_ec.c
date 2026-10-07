@@ -29,14 +29,12 @@ GTA_SWP_DEFINE_FUNCTION(
 
     p_key = EVP_PKEY_Q_keygen(NULL, NULL, PERS_PKEY_TYPE, PERS_PKEY_PARAMS);
     if (NULL == p_key) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     length = i2d_PrivateKey(p_key, p_pers_secret_buffer);
     if (0 >= length) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     /* length > 0 checked before */
@@ -55,11 +53,16 @@ GTA_SWP_DEFINE_FUNCTION(
             sizeof(PERS_PKEY_TYPE),
             true,
             p_errinfo)) {
-        goto err;
+        goto cleanup;
     }
 
     ret = true;
-err:
+    goto cleanup;
+
+internal_err:
+    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+
+cleanup:
     EVP_PKEY_free(p_key);
     return ret;
 }

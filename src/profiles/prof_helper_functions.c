@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright 2025 Siemens
+ * SPDX-FileCopyrightText: Copyright 2025-2026 Siemens
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -40,16 +40,19 @@ EVP_PKEY * get_pkey_from_der(unsigned char * p_der_content, const size_t der_siz
     unsigned char * p_secret_buffer = p_der_content;
     /* Range check on p_personality_content->content_data_size */
     if (der_size > LONG_MAX) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        return NULL;
+        goto internal_err;
     }
     evp_private_key = d2i_AutoPrivateKey(NULL, (const unsigned char **)&p_secret_buffer, (long)der_size);
     /* clear pointer */
     p_secret_buffer = NULL;
     if (NULL == evp_private_key) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+        goto internal_err;
     }
     return evp_private_key;
+
+internal_err:
+    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+    return NULL;
 }
 
 /* Helper function to read the whole input from gtaio_istream_t into a buffer */
