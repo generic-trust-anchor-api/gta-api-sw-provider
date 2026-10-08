@@ -112,11 +112,20 @@ GTA_SWP_DEFINE_FUNCTION(
 
     /*
      * Check profile restrictions on personality:
-     * Only RSA 2048 and ECC P-256 are allowed.
+#ifdef ENABLE_PQC
+     * RSA 2048, ECC P-256, and ML-DSA-65 are allowed.
+#else
+       * Only RSA 2048 and ECC P-256 are allowed.
+#endif
      */
+#ifdef ENABLE_PQC
+    if (!(((EVP_PKEY_RSA == key_id) && (2048 == pkey_bits(evp_private_key))) ||
+          ((EVP_PKEY_EC == key_id) && (NID_X9_62_prime256v1 == pkey_ec_nid(evp_private_key))) ||
+          (EVP_PKEY_is_a(evp_private_key, "ML-DSA-65")))) {
+#else
     if (!(((EVP_PKEY_RSA == key_id) && (2048 == pkey_bits(evp_private_key))) ||
           ((EVP_PKEY_EC == key_id) && (NID_X9_62_prime256v1 == pkey_ec_nid(evp_private_key))))) {
-
+#endif
         DEBUG_PRINT(("gta_sw_provider_gta_context_open: Profile requirements not fulfilled \n"));
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
         goto cleanup;
@@ -296,7 +305,14 @@ GTA_SWP_DEFINE_FUNCTION(
     }
 
     // set sign key of x509 req
-    ret_val = X509_REQ_sign(x509_req, p_key, EVP_sha256());
+#ifdef ENABLE_PQC
+    if (EVP_PKEY_is_a(p_key, "ML-DSA-65")) {
+        ret_val = X509_REQ_sign(x509_req, p_key, NULL);
+    } else
+#endif
+    {
+        ret_val = X509_REQ_sign(x509_req, p_key, EVP_sha256());
+    }
     if (0 >= ret_val) {
         goto internal_err;
     }
