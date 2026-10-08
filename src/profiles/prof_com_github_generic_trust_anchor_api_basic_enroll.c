@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright 2025 Siemens
+ * SPDX-FileCopyrightText: Copyright 2025-2026 Siemens
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -111,12 +111,13 @@ GTA_SWP_DEFINE_FUNCTION(
     int key_id = EVP_PKEY_base_id(evp_private_key);
 
     /*
-     * Check profile restrictions on personality:
-     * Only RSA 2048 and ECC P-256 are allowed.
+     * Check profile restrictions on personality (be permissive)
      */
-    if (!(((EVP_PKEY_RSA == key_id) && (2048 == pkey_bits(evp_private_key))) ||
-          ((EVP_PKEY_EC == key_id) && (NID_X9_62_prime256v1 == pkey_ec_nid(evp_private_key))))) {
-
+#ifdef ENABLE_PQC
+    if (!((EVP_PKEY_RSA == key_id) || (EVP_PKEY_EC == key_id) || (EVP_PKEY_is_a(evp_private_key, "ML-DSA-65")))) {
+#else
+    if (!(((EVP_PKEY_RSA == key_id) || (EVP_PKEY_EC == key_id)))) {
+#endif
         DEBUG_PRINT(("gta_sw_provider_gta_context_open: Profile requirements not fulfilled \n"));
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
         goto err;
@@ -296,7 +297,14 @@ GTA_SWP_DEFINE_FUNCTION(
     }
 
     // set sign key of x509 req
-    ret_val = X509_REQ_sign(x509_req, p_key, EVP_sha256());
+#ifdef ENABLE_PQC
+    if (EVP_PKEY_is_a(p_key, "ML-DSA-65")) {
+        ret_val = X509_REQ_sign(x509_req, p_key, NULL);
+    } else
+#endif
+    {
+        ret_val = X509_REQ_sign(x509_req, p_key, EVP_sha256());
+    }
     if (0 >= ret_val) {
         goto internal_err;
     }
