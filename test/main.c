@@ -1529,6 +1529,35 @@ static void profile_enroll(void ** state)
 
     assert_true(gta_context_close(h_ctx, &errinfo));
     assert_int_equal(0, errinfo);
+
+#ifdef ENABLE_PQC
+    /* Test with third personality */
+    DEBUG_PRINT(("\nTest with ML-DSA:\n"));
+    h_ctx = gta_context_open(
+        test_params->h_inst,
+        get_personality_name(PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ML_DSA),
+        supported_profiles[PROF_COM_GITHUB_GENERIC_TRUST_ANCHOR_API_BASIC_ENROLL],
+        &errinfo);
+
+    assert_non_null(h_ctx);
+
+    /* call enroll without additional attributes */
+    DEBUG_PRINT(("\nPKCS#10 without additional attributes:\n"));
+    assert_true(gta_personality_enroll(h_ctx, ostream, &errinfo));
+    assert_int_equal(0, errinfo);
+
+    istream_from_buf_init(&istream, subj_rdn, strlen(subj_rdn) + 1);
+    assert_true(gta_context_set_attribute(
+        h_ctx, "com.github.generic-trust-anchor-api.enroll.subject_rdn", (gtaio_istream_t *)&istream, &errinfo));
+
+    DEBUG_PRINT(("\nPKCS#10 with additional attributes:\n"));
+    assert_true(gta_personality_enroll(h_ctx, ostream, &errinfo));
+    assert_int_equal(0, errinfo);
+    DEBUG_PRINT(("\n\n"));
+
+    assert_true(gta_context_close(h_ctx, &errinfo));
+    assert_int_equal(0, errinfo);
+#endif
 }
 
 static void profile_jwt(void ** state)
