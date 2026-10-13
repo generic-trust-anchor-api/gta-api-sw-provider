@@ -476,8 +476,7 @@ GTA_DEFINE_FUNCTION(
         *pp_params = p_provider_params;
         p_provider_params->p_devicestate_stack = NULL;
     } else {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     /* assign the cleanup function */
@@ -502,8 +501,7 @@ GTA_DEFINE_FUNCTION(
     if (1 != RAND_bytes(
                  (unsigned char *)(p_provider_params->provider_instance_auth_token_info.issuing_token),
                  sizeof(gta_access_token_t))) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     /* configure provider */
@@ -514,13 +512,6 @@ GTA_DEFINE_FUNCTION(
         goto err;
     }
     DEBUG_PRINT(("CONFIG: Serialization path = %s\n", p_provider_params->p_serializ_path));
-
-#if 1 /* internal test */
-    if (gta_context_get_provider_params(h_ctx, p_errinfo) != p_provider_params) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
-    }
-#endif
 
     /* de-serialize the persisted device state */
     if (serialized_file_exists(p_provider_params->p_serializ_path)) {
@@ -538,8 +529,7 @@ GTA_DEFINE_FUNCTION(
         p_provider_params->p_devicestate_stack =
             gta_secmem_calloc(h_ctx, 1, sizeof(struct devicestate_stack_item_t), p_errinfo);
         if (NULL == p_provider_params->p_devicestate_stack) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
+            goto internal_err;
         }
 
         p_provider_params->p_devicestate_stack->p_next = NULL;
@@ -550,13 +540,14 @@ GTA_DEFINE_FUNCTION(
 
         /* Initialize serialization */
         if (!provider_serialize_init(p_provider_params->p_serializ_path, p_provider_params)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
+            goto internal_err;
         }
     }
 
     return &g_my_function_list;
 
+internal_err:
+    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
 err:
     /* clean up */
     if (NULL != p_provider_params) {
@@ -1123,15 +1114,6 @@ GTA_DEFINE_FUNCTION(
     if (!supported_profiles[p_context_params->profile].pFunction->context_open(p_context_params, p_errinfo)) {
         goto err;
     }
-
-#if 0 /* internal test */
-    if (gta_context_get_params(h_ctx, p_errinfo) != p_context_params)
-    {
-        /* p_provider_params is not cleaned up */
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        return false;
-    }
-#endif
 
     /* Increase reference count in personality if not max already */
     if (SIZE_MAX == p_personality_item->refcount) {

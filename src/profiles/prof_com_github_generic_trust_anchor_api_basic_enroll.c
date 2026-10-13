@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright 2025 Siemens
+ * SPDX-FileCopyrightText: Copyright 2025-2026 Siemens
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -88,7 +88,7 @@ GTA_SWP_DEFINE_FUNCTION(
     if (SECRET_TYPE_DER != p_context_params->p_personality_item->p_personality_content->secret_type) {
         DEBUG_PRINT(("gta_sw_provider_gta_context_open: Personality type not as expected\n"));
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
-        goto err;
+        goto cleanup;
     }
 
     /* get the private key from the personality */
@@ -97,7 +97,7 @@ GTA_SWP_DEFINE_FUNCTION(
     /* Range check on p_personality_content->content_data_size */
     if (p_personality_content->secret_data_size > LONG_MAX) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto cleanup;
     }
     evp_private_key = d2i_AutoPrivateKey(
         NULL, (const unsigned char **)&p_secret_buffer, (long)p_personality_content->secret_data_size);
@@ -105,7 +105,7 @@ GTA_SWP_DEFINE_FUNCTION(
     p_secret_buffer = NULL;
     if (NULL == evp_private_key) {
         *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto cleanup;
     }
 
     int key_id = EVP_PKEY_base_id(evp_private_key);
@@ -119,7 +119,7 @@ GTA_SWP_DEFINE_FUNCTION(
 
         DEBUG_PRINT(("gta_sw_provider_gta_context_open: Profile requirements not fulfilled \n"));
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
-        goto err;
+        goto cleanup;
     }
 
     /* Allocate memory for context attributes */
@@ -127,7 +127,7 @@ GTA_SWP_DEFINE_FUNCTION(
         gta_secmem_calloc(p_context_params->h_ctx, 1, sizeof(struct pers_enroll_attributes_t), p_errinfo);
     if (NULL == p_context_params->context_attributes) {
         *p_errinfo = GTA_ERROR_MEMORY;
-        goto err;
+        goto cleanup;
     }
     struct pers_enroll_attributes_t * pers_enroll_attributes =
         (struct pers_enroll_attributes_t *)p_context_params->context_attributes;
@@ -135,7 +135,7 @@ GTA_SWP_DEFINE_FUNCTION(
     pers_enroll_attributes->subject_rdn = NULL;
     ret = true;
 
-err:
+cleanup:
     EVP_PKEY_free(evp_private_key);
     return ret;
 }

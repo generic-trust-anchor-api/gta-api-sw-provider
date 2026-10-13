@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright 2025 Siemens
+ * SPDX-FileCopyrightText: Copyright 2025-2026 Siemens
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -87,8 +87,7 @@ static bool calculate_icv(
     /* Range checks */
     if ((INT_MAX < p_personality_content->secret_data_size) ||
         (LOCAL_DATA_INTEGRITY_ONLY_ICV_LEN > EVP_MD_size(md_type))) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     /* Derive a key from the personality secret */
@@ -101,22 +100,24 @@ static bool calculate_icv(
                      key,
                      &key_len)) ||
         (INT_MAX < key_len) || (EVP_MD_size(md_type) != (int)key_len)) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     /* Calculate ICV over data and the derived HMAC key */
     if ((NULL == HMAC(md_type, key, (int)key_len, data, data_len, md, &md_len)) || (INT_MAX < md_len) ||
         (EVP_MD_size(md_type) != (int)md_len)) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     memcpy(icv, md, LOCAL_DATA_INTEGRITY_ONLY_ICV_LEN);
 
     ret = true;
+    goto cleanup;
 
-err:
+internal_err:
+    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+
+cleanup:
     gta_memset(key, EVP_MD_size(md_type), 0, EVP_MD_size(md_type));
     return ret;
 }
@@ -154,7 +155,7 @@ ASN1_SEQUENCE(IntegrityProtectedData) =
 
     /* Read whole input into buffer */
     if (!read_input_buffer(data, &p_buffer_in, &buffer_idx_in, p_errinfo)) {
-        goto err;
+        goto cleanup;
     }
 
     /* Initialize data structure */
@@ -162,14 +163,12 @@ ASN1_SEQUENCE(IntegrityProtectedData) =
     asn1_data.icv = ASN1_OCTET_STRING_new();
 
     if ((NULL == asn1_data.data) || (NULL == asn1_data.icv)) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     /* Range checks */
     if (INT_MAX < buffer_idx_in) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     /* Encode data */
@@ -177,7 +176,7 @@ ASN1_SEQUENCE(IntegrityProtectedData) =
 
     /* Calculate ICV */
     if (!calculate_icv(p_context_params, p_buffer_in, buffer_idx_in, icv, p_errinfo)) {
-        goto err;
+        goto cleanup;
     }
 
     /* Encode icv */
@@ -186,8 +185,7 @@ ASN1_SEQUENCE(IntegrityProtectedData) =
     /* Encode the ProtectedData */
     encoded_len = i2d_IntegrityProtectedData(&asn1_data, &p_encoded_data);
     if (0 >= encoded_len) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     /* Write output stream (encoded_len > 0 already checked) */
@@ -195,8 +193,12 @@ ASN1_SEQUENCE(IntegrityProtectedData) =
     protected_data->finish(protected_data, 0, p_errinfo);
 
     ret = true;
+    goto cleanup;
 
-err:
+internal_err:
+    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+
+cleanup:
     OPENSSL_free(p_buffer_in);
     ASN1_OCTET_STRING_free(asn1_data.data);
     ASN1_OCTET_STRING_free(asn1_data.icv);
@@ -223,45 +225,46 @@ GTA_SWP_DEFINE_FUNCTION(
 
     /* Read whole input into buffer */
     if (!read_input_buffer(protected_data, &p_buffer_in, &buffer_idx_in, p_errinfo)) {
-        goto err;
+        goto cleanup;
     }
 
     /* Range check on buffer_idx_in */
     if (LONG_MAX < buffer_idx_in) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
     /* Decode IntegrityProtectedData */
     const unsigned char * p = p_buffer_in;
     p_asn1_data = d2i_IntegrityProtectedData(NULL, &p, (long)buffer_idx_in);
     if (NULL == p_asn1_data) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
     /* Calculate ICV */
     if (!calculate_icv(p_context_params, p_asn1_data->data->data, p_asn1_data->data->length, icv, p_errinfo)) {
-        goto err;
+        goto cleanup;
     }
 
     /* Check icv by comparing new calculated icv with reference icv */
     if ((LOCAL_DATA_INTEGRITY_ONLY_ICV_LEN != p_asn1_data->icv->length) ||
         (0 != CRYPTO_memcmp(icv, p_asn1_data->icv->data, LOCAL_DATA_INTEGRITY_ONLY_ICV_LEN))) {
         *p_errinfo = GTA_ERROR_INTEGRITY;
-        goto err;
+        goto cleanup;
     }
 
     /* Write output stream */
     if (p_asn1_data->data->length !=
         (int)data->write(data, (const char *)p_asn1_data->data->data, p_asn1_data->data->length, p_errinfo)) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
     data->finish(data, 0, p_errinfo);
 
     ret = true;
+    goto cleanup;
 
-err:
+internal_err:
+    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+
+cleanup:
     OPENSSL_free(p_buffer_in);
     if (NULL != p_asn1_data) {
         ASN1_OCTET_STRING_free(p_asn1_data->data);
@@ -289,12 +292,12 @@ GTA_SWP_DEFINE_FUNCTION(
 
     /* Read whole input into buffer */
     if (!read_input_buffer(data, &p_buffer_in, &buffer_idx_in, p_errinfo)) {
-        goto err;
+        goto cleanup;
     }
 
     /* Calculate ICV */
     if (!calculate_icv(p_context_params, p_buffer_in, buffer_idx_in, icv, p_errinfo)) {
-        goto err;
+        goto cleanup;
     }
 
     /* Write output stream */
@@ -303,7 +306,7 @@ GTA_SWP_DEFINE_FUNCTION(
 
     ret = true;
 
-err:
+cleanup:
     OPENSSL_free(p_buffer_in);
 
     return ret;
@@ -329,24 +332,24 @@ GTA_SWP_DEFINE_FUNCTION(
     /* Read whole input into buffer */
     if ((!read_input_buffer(data, &p_buffer_in, &buffer_idx_in, p_errinfo)) ||
         (!read_input_buffer(seal, &p_icv_ref, &icv_ref_len, p_errinfo))) {
-        goto err;
+        goto cleanup;
     }
 
     /* Calculate ICV */
     if (!calculate_icv(p_context_params, p_buffer_in, buffer_idx_in, icv, p_errinfo)) {
-        goto err;
+        goto cleanup;
     }
 
     /* Check icv by comparing new calculated icv with reference icv */
     if ((LOCAL_DATA_INTEGRITY_ONLY_ICV_LEN != icv_ref_len) ||
         (0 != CRYPTO_memcmp(icv, p_icv_ref, LOCAL_DATA_INTEGRITY_ONLY_ICV_LEN))) {
         *p_errinfo = GTA_ERROR_INTEGRITY;
-        goto err;
+        goto cleanup;
     }
 
     ret = true;
 
-err:
+cleanup:
     OPENSSL_free(p_buffer_in);
     OPENSSL_free(p_icv_ref);
 

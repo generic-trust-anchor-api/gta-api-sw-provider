@@ -22,7 +22,7 @@ GTA_SWP_DEFINE_FUNCTION(
         evp_private_key =
             get_pkey_from_der(p_personality_content->secret_data, p_personality_content->secret_data_size, p_errinfo);
         if (NULL == evp_private_key) {
-            goto err;
+            goto cleanup;
         }
 
         int key_id = EVP_PKEY_base_id(evp_private_key);
@@ -46,7 +46,7 @@ GTA_SWP_DEFINE_FUNCTION(
 
             DEBUG_PRINT(("gta_sw_provider_gta_context_open: Profile requirements not fulfilled \n"));
             *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
-            goto err;
+            goto cleanup;
         }
         ret = true;
     } else {
@@ -54,7 +54,7 @@ GTA_SWP_DEFINE_FUNCTION(
         *p_errinfo = GTA_ERROR_PROFILE_UNSUPPORTED;
     }
 
-err:
+cleanup:
     EVP_PKEY_free(evp_private_key);
     return ret;
 }
@@ -78,7 +78,7 @@ GTA_SWP_DEFINE_FUNCTION(
 
     p_key = get_pkey_from_der(p_personality_content->secret_data, p_personality_content->secret_data_size, p_errinfo);
     if (NULL == p_key) {
-        goto err;
+        goto cleanup;
     }
 
     /* get public key in PEM */
@@ -89,12 +89,12 @@ GTA_SWP_DEFINE_FUNCTION(
     /* len always >= 0 */
     if ((size_t)len !=
         p_personality_enrollment_info->write(p_personality_enrollment_info, pem_data, (size_t)len, p_errinfo)) {
-        goto err;
+        goto cleanup;
     }
     p_personality_enrollment_info->finish(p_personality_enrollment_info, 0, p_errinfo);
     ret = true;
 
-err:
+cleanup:
     EVP_PKEY_free(p_key);
     if (NULL != bio) {
         BIO_free_all(bio);
@@ -131,57 +131,50 @@ GTA_SWP_DEFINE_FUNCTION(
     evp_private_key =
         get_pkey_from_der(p_personality_content->secret_data, p_personality_content->secret_data_size, p_errinfo);
     if (NULL == evp_private_key) {
-        goto err;
+        goto cleanup;
     }
 
     /* Create the Message Digest Context */
     if (!(mdctx = EVP_MD_CTX_new())) {
-        *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-        goto err;
+        goto internal_err;
     }
 
 #ifdef ENABLE_PQC
     if (EVP_PKEY_is_a(evp_private_key, "ML-DSA-65")) {
         /* ML-DSA requires one-shot EVP_DigestSign (no streaming support) */
         if (1 != EVP_DigestSignInit(mdctx, NULL, NULL, NULL, evp_private_key)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
+            goto internal_err;
         }
 
         if (!read_input_buffer(data, &p_buffer_in, &buffer_idx_in, p_errinfo)) {
-            goto err;
+            goto cleanup;
         }
 
         /* Get signature length */
         if (1 != EVP_DigestSign(mdctx, NULL, &signature_len, p_buffer_in, buffer_idx_in)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
+            goto internal_err;
         }
 
         if (!(signature = OPENSSL_malloc(signature_len))) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
+            goto internal_err;
         }
 
         if (1 != EVP_DigestSign(mdctx, signature, &signature_len, p_buffer_in, buffer_idx_in)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
+            goto internal_err;
         }
     } else
 #endif
     {
         /* RSA/EC: streaming DigestSign with SHA-256 */
         if (1 != EVP_DigestSignInit(mdctx, &pctx, EVP_sha256(), NULL, evp_private_key)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
+            goto internal_err;
         }
 
         /* In case of RSA, we need to set the padding and saltlen */
         if ((EVP_PKEY_RSA == EVP_PKEY_id(evp_private_key)) &&
             ((1 != EVP_PKEY_CTX_set_rsa_padding(pctx, RSA_PKCS1_PSS_PADDING)) ||
              (1 != EVP_PKEY_CTX_set_rsa_pss_saltlen(pctx, RSA_PSS_SALTLEN_DIGEST)))) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
+            goto internal_err;
         }
 
         /* get Data to sign */
@@ -189,27 +182,23 @@ GTA_SWP_DEFINE_FUNCTION(
             size_t read_len = data->read(data, payload_chunk, CHUNK_LEN, p_errinfo);
             /* Update with the data chunck */
             if (1 != EVP_DigestSignUpdate(mdctx, payload_chunk, read_len)) {
-                *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-                goto err;
+                goto internal_err;
             }
         }
 
         /* Obtain the length of the signature before being calculated */
         if (1 != EVP_DigestSignFinal(mdctx, NULL, &signature_len)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
+            goto internal_err;
         }
 
         /* Allocate memory for the signature based on size in signature_len */
         if (!(signature = OPENSSL_malloc(sizeof(unsigned char) * (signature_len)))) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
+            goto internal_err;
         }
 
         /* Obtain the signature */
         if (1 != EVP_DigestSignFinal(mdctx, signature, &signature_len)) {
-            *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
-            goto err;
+            goto internal_err;
         }
     }
 
@@ -217,8 +206,12 @@ GTA_SWP_DEFINE_FUNCTION(
     seal->finish(seal, 0, p_errinfo);
 
     ret = true;
+    goto cleanup;
 
-err:
+internal_err:
+    *p_errinfo = GTA_ERROR_INTERNAL_ERROR;
+
+cleanup:
     OPENSSL_free(signature);
 #ifdef ENABLE_PQC
     OPENSSL_clear_free(p_buffer_in, buffer_idx_in);
