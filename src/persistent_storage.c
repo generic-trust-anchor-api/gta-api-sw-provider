@@ -63,8 +63,13 @@
 #define LABEL_ATTRIBUTE_ACTIVATED "Activated"
 #define LABEL_ATTRIBUTE_TRUSTED "Trusted"
 
-#define ENCODED_DATA_LEN 8192
-#define COSE_DATA_LEN 8192
+/*
+ * The following defines specify tha maximum size of the data model (and personality content).
+ * Todo: This needs to be implemented smarter in the future and more dynamic.
+ */
+#define ENCODED_DATA_LEN 16384
+#define COSE_DATA_LEN 16384
+
 #define TMP_STR_BUF_LEN 256
 #define TMP_SIGN_BUF_LEN 64
 
