@@ -98,7 +98,7 @@ struct gta_sw_provider_params_t {
     } provider_instance_auth_token_info;
 
     /* Path used for Serialization files */
-    char p_serializ_path[SERIALIZE_PATH_LEN_MAX + 2];
+    char p_serializ_path[SERIALIZE_PATH_LEN_MAX + 1];
 
 #ifdef ALLOW_HUK_CACHING
     /* Hardware Unique Key */
