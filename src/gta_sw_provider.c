@@ -505,9 +505,10 @@ GTA_DEFINE_FUNCTION(
     }
 
     /* configure provider */
-    if (provider_init_config->read(
-            provider_init_config, p_provider_params->p_serializ_path, SERIALIZE_PATH_LEN_MAX, p_errinfo) >
-        SERIALIZE_PATH_LEN_MAX) {
+    /* read path to state directory and check that the path isn't too long */
+    if (SERIALIZE_PATH_LEN_MAX <
+        provider_init_config->read(
+            provider_init_config, p_provider_params->p_serializ_path, SERIALIZE_PATH_LEN_MAX + 1, p_errinfo)) {
         *p_errinfo = GTA_ERROR_INVALID_PARAMETER;
         goto err;
     }

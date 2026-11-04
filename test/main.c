@@ -312,10 +312,20 @@ int init_suite_gta_sw_provider_clean_state(void ** state)
     create_folder(DIRECTORY_CLEAN_STATE);
     remove_folder_files(DIRECTORY_CLEAN_STATE);
 
-    istream_from_buf_init(&init_config, DIRECTORY_CLEAN_STATE, sizeof(DIRECTORY_CLEAN_STATE) - 1);
-
     test_params->h_inst = gta_instance_init(&inst_params, &errinfo);
     assert_non_null(test_params->h_inst);
+
+    /* Negative test for too long path (register provider) */
+    char too_long_path[201] = {0};
+    strncpy(too_long_path, DIRECTORY_CLEAN_STATE, sizeof(too_long_path));
+    istream_from_buf_init(&init_config, too_long_path, sizeof(too_long_path));
+    assert_false(gta_sw_provider_gta_register_provider(
+        test_params->h_inst, (gtaio_istream_t *)&init_config, supported_profiles[0], &errinfo));
+    assert_int_equal(GTA_ERROR_PROVIDER_INVALID, errinfo);
+    errinfo = 0;
+
+    /* Register provider (The init_config is only read during the first call) */
+    istream_from_buf_init(&init_config, DIRECTORY_CLEAN_STATE, sizeof(DIRECTORY_CLEAN_STATE) - 1);
 
     /* register profiles for provider */
     for (size_t i = 1; i < NUM_PROFILES; ++i) {
